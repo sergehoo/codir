@@ -1,0 +1,9 @@
+{% extends "notifications/emails/base.html" %}
+
+{% block content %}
+<p style="font-family:Georgia,serif;font-size:18px;margin:0 0 8px 0;">
+  Bonjour {{ recipient_name }},
+</p>
+<div style="font-size:14px;line-height:1.6;color:#1a1614;white-space:pre-line;margin:0 0 20px 0;">{{ body }}</div>
+{% include "notifications/emails/_button.html" %}
+{% endblock %}

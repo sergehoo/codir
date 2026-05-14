@@ -1,0 +1,30 @@
+{% extends "notifications/emails/base.html" %}
+
+{% block content %}
+<p style="font-family:Georgia,serif;font-size:18px;color:#1a1614;margin:0 0 8px 0;">
+  Bonjour {{ recipient_name }},
+</p>
+<p style="color:#1a1614;font-size:14px;line-height:1.6;margin:0 0 20px 0;">
+  Une nouvelle tâche vous a été assignée
+  {% if assigned_by %} par <strong>{{ assigned_by }}</strong>{% endif %}.
+</p>
+
+<div style="background:#fbf6ef;border-left:3px solid #B8693C;padding:16px 20px;margin:0 0 20px 0;">
+  <div style="font-family:Georgia,serif;font-size:18px;color:#1a1614;margin-bottom:8px;">
+    {{ task.title }}
+  </div>
+  <table cellpadding="4" cellspacing="0" style="width:100%;font-size:13px;color:#3a2f25;">
+    <tr><td style="width:120px;color:#6b5d4f;">Priorité</td><td><strong>{{ task.priority }}</strong></td></tr>
+    {% if task.due_date %}<tr><td style="color:#6b5d4f;">Échéance</td><td><strong>{{ task.due_date }}</strong></td></tr>{% endif %}
+    {% if plan.title %}<tr><td style="color:#6b5d4f;">Plan</td><td>{{ plan.title }}</td></tr>{% endif %}
+    {% if decision %}<tr><td style="color:#6b5d4f;">Décision</td><td>{{ decision.ref }} — {{ decision.title }}</td></tr>{% endif %}
+  </table>
+</div>
+
+{% include "notifications/emails/_button.html" with button_label="Voir la tâche" %}
+
+<p style="font-size:12px;color:#6b5d4f;margin-top:24px;">
+  Cordialement,<br>
+  L'équipe CODIR
+</p>
+{% endblock %}

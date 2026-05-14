@@ -1,0 +1,23 @@
+{% extends "notifications/emails/base.html" %}
+
+{% block content %}
+<p style="font-family:Georgia,serif;font-size:18px;margin:0 0 8px 0;">
+  Bonjour {{ recipient_name }},
+</p>
+<p style="font-size:14px;line-height:1.6;margin:0 0 20px 0;">
+  La tâche suivante arrive bientôt à échéance.
+</p>
+
+<div style="background:#fff8e6;border-left:3px solid #b8810d;padding:16px 20px;margin:0 0 20px 0;">
+  <div style="font-family:Georgia,serif;font-size:18px;margin-bottom:8px;">{{ task.title }}</div>
+  <table cellpadding="4" cellspacing="0" style="width:100%;font-size:13px;color:#3a2f25;">
+    {% if task.due_date %}<tr><td style="width:120px;color:#6b5d4f;">Échéance</td><td><strong>{{ task.due_date }}</strong></td></tr>{% endif %}
+    <tr><td style="color:#6b5d4f;">Priorité</td><td>{{ task.priority }}</td></tr>
+    <tr><td style="color:#6b5d4f;">Statut</td><td>{{ task.status }}</td></tr>
+    <tr><td style="color:#6b5d4f;">Avancement</td><td>{{ task.progress_percent }}%</td></tr>
+    {% if plan.title %}<tr><td style="color:#6b5d4f;">Plan</td><td>{{ plan.title }}</td></tr>{% endif %}
+  </table>
+</div>
+
+{% include "notifications/emails/_button.html" with button_label="Mettre à jour" %}
+{% endblock %}

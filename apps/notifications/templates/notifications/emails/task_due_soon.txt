@@ -1,0 +1,14 @@
+Bonjour {{ recipient_name }},
+
+Échéance proche sur la tâche :
+
+— {{ task.title }}
+  Échéance : {{ task.due_date }}
+  Priorité : {{ task.priority }}
+  Statut : {{ task.status }}
+  Avancement : {{ task.progress_percent }}%
+  {% if plan.title %}Plan : {{ plan.title }}{% endif %}
+
+Ouvrir la tâche : {{ link_url }}
+
+— CODIR Executive

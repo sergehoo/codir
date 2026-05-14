@@ -1,0 +1,16 @@
+Bonjour {{ recipient_name }},
+
+{% if is_recipient_new %}La tâche ci-dessous vous a été déléguée par {{ delegated_by }}.{% else %}La tâche a été transférée à {{ new_assignee }}.{% endif %}
+
+— {{ task.title }}
+  Ancien responsable : {{ old_assignee }}
+  Nouveau responsable : {{ new_assignee }}
+  {% if task.due_date %}Échéance : {{ task.due_date }}{% endif %}
+  Priorité : {{ task.priority }}
+{% if note %}
+  Note : « {{ note }} »
+{% endif %}
+
+Ouvrir la tâche : {{ link_url }}
+
+— CODIR Executive

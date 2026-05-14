@@ -5,7 +5,7 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
-
+/docs
 # ─── Secrets / Env ────────────────────────────────────
 # ATTENTION : .env contient des mots de passe locaux — JAMAIS commit.
 .env
