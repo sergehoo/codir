@@ -76,7 +76,7 @@ x-app-build: &app-build
 
 services:
 
-  postgres:
+  postgres_codir:
     image: postgres:16
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-codir}
@@ -92,7 +92,7 @@ services:
     restart: always
     # En prod réelle on conseille fortement un Postgres managé (RDS, CloudSQL…).
 
-  redis:
+  redis_codir:
     image: redis:7-alpine
     command: [
       "redis-server",
@@ -111,7 +111,7 @@ services:
 
   # ── Application ────────────────────────────────────────────────
 
-  api:
+  api_codir:
     <<: *app-build
     command: ["/app/scripts/docker-entrypoint.sh", "prod"]
     environment:
@@ -178,7 +178,7 @@ services:
 
   # ── Frontend (statique servi par Nginx) ───────────────────────
 
-  web:
+  web_codir:
     image: ${CODIR_WEB_IMAGE:-codir-web:latest}
     build:
       context: ../frontend/web
