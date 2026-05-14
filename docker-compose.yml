@@ -1,198 +1,147 @@
 # ─────────────────────────────────────────────────────────────────
-# docker-compose.yml — environnement de DÉVELOPPEMENT CODIR
+# docker-compose.prod.yml — PRODUCTION CODIR
 #
-# Lance la stack complète : Postgres, Redis, OpenSearch, MinIO,
-# MailHog, Ollama (profil ai), API Django, ASGI Daphne, Celery
-# workers (default/notifications/ai/reports), Celery beat, Flower.
+# Pré-requis : un fichier .env.prod à la racine (jamais commité)
+# contenant DJANGO_SECRET_KEY, POSTGRES_PASSWORD, EMAIL_HOST_PASSWORD,
+# JWT_PRIVATE_KEY, JWT_PUBLIC_KEY, SENTRY_DSN, etc.
 #
-# Lancement minimal :
-#     docker compose up postgres redis api
-# Stack complète :
-#     docker compose up
-# Avec IA locale :
-#     docker compose --profile ai up
-# Pour la prod, voir docker-compose.prod.yml
+# Démarrage :
+#     docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+#
+# Différences vs dev :
+#  - Gunicorn 4 workers (pas runserver)
+#  - DEBUG=False, ALLOWED_HOSTS strictement défini
+#  - Storage volumes externes (montés depuis un disque persistant)
+#  - Healthchecks et restart policies stricts
+#  - Pas de MinIO ni de MailHog (S3 + SMTP externes)
+#  - Pas de partage de code (image builée)
+#  - Nginx en frontal avec TLS
 # ─────────────────────────────────────────────────────────────────
 
-# Ancres réutilisables (définies AVANT usage)
 x-common-env: &common-env
-  DJANGO_SETTINGS_MODULE: config.settings.dev
-  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-dev-insecure-key-CHANGE-ME-in-prod}
-  DJANGO_DEBUG: "True"
-  DJANGO_ALLOWED_HOSTS: "*"
+  DJANGO_SETTINGS_MODULE: config.settings.prod
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?must be set}
+  DJANGO_DEBUG: "False"
+  DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:?must be set}
   # DB
-  POSTGRES_DB: codir
-  POSTGRES_USER: codir
-  POSTGRES_PASSWORD: codir
-  POSTGRES_HOST: postgres
-  POSTGRES_PORT: "5432"
+  POSTGRES_DB: ${POSTGRES_DB:-codir}
+  POSTGRES_USER: ${POSTGRES_USER:-codir}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?must be set}
+  POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+  POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+  PG_SSLMODE: ${PG_SSLMODE:-require}
   # Cache / Queue
-  REDIS_URL: redis://:codir@redis:6379/0
-  CELERY_BROKER_URL: redis://:codir@redis:6379/0
-  CELERY_RESULT_BACKEND: redis://:codir@redis:6379/1
-  # Storage
-  S3_ENDPOINT: http://minio:9000
-  S3_ACCESS_KEY: codir
-  S3_SECRET_KEY: codirminio
-  S3_BUCKET: codir-dev
-  S3_REGION: eu-west-1
-  # Search
-  OPENSEARCH_URL: http://opensearch:9200
+  REDIS_URL: ${REDIS_URL:?must be set}
+  CELERY_BROKER_URL: ${CELERY_BROKER_URL:?must be set}
+  CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
+  # Storage S3 (AWS, GCS-compat, OVH, Scaleway…)
+  S3_ENDPOINT: ${S3_ENDPOINT}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:?must be set}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:?must be set}
+  S3_BUCKET: ${S3_BUCKET:?must be set}
+  S3_REGION: ${S3_REGION:-eu-west-1}
   # Email
-  EMAIL_BACKEND: django.core.mail.backends.smtp.EmailBackend
-  EMAIL_HOST: mailhog
-  EMAIL_PORT: "1025"
-  EMAIL_USE_TLS: "False"
-  DEFAULT_FROM_EMAIL: "CODIR Executive <no-reply@codir.local>"
-  # AI
-  OLLAMA_URL: http://ollama:11434
-  # CORS / TZ
-  CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://127.0.0.1:5173"
-  CELERY_TIMEZONE: Africa/Abidjan
-  FRONTEND_BASE_URL: http://localhost:5173
+  EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
+  EMAIL_HOST: ${EMAIL_HOST:?must be set}
+  EMAIL_PORT: ${EMAIL_PORT:-587}
+  EMAIL_HOST_USER: ${EMAIL_HOST_USER:?must be set}
+  EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:?must be set}
+  EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
+  EMAIL_USE_SSL: ${EMAIL_USE_SSL:-False}
+  DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:?must be set}
+  # JWT RS256
+  JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:?must be set}
+  JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?must be set}
+  # Observability
+  SENTRY_DSN: ${SENTRY_DSN}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+  # Misc
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:?must be set}
+  CELERY_TIMEZONE: ${CELERY_TIMEZONE:-Africa/Abidjan}
+  FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:?must be set}
 
 x-app-build: &app-build
+  image: ${CODIR_IMAGE:-codir-api:latest}
   build:
     context: .
     target: runtime
-  image: codir-api:dev
-  volumes:
-    - .:/app
-  restart: unless-stopped
+  restart: always
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
 
-# ─────────────────────────────────────────────────────────────────
-# Services
 # ─────────────────────────────────────────────────────────────────
 
 services:
 
-  # ── Bases & messaging ──────────────────────────────────────────
-
-  postgres:
+  postgres_codir:
     image: postgres:16
     environment:
-      POSTGRES_DB: codir
-      POSTGRES_USER: codir
-      POSTGRES_PASSWORD: codir
-    ports: ["5432:5432"]
+      POSTGRES_DB: ${POSTGRES_DB:-codir}
+      POSTGRES_USER: ${POSTGRES_USER:-codir}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?must be set}
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U codir -d codir"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-codir} -d ${POSTGRES_DB:-codir}"]
+      interval: 10s
       timeout: 5s
       retries: 10
-    restart: unless-stopped
+    restart: always
+    # En prod réelle on conseille fortement un Postgres managé (RDS, CloudSQL…).
 
-  redis:
+  redis_codir:
     image: redis:7-alpine
     command: [
       "redis-server",
-      "--requirepass", "codir",
-      "--maxmemory", "512mb",
+      "--requirepass", "${REDIS_PASSWORD:?must be set}",
+      "--maxmemory", "1gb",
       "--maxmemory-policy", "allkeys-lru",
       "--appendonly", "yes"
     ]
-    ports: ["6379:6379"]
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "codir", "ping"]
-      interval: 5s
-      timeout: 3s
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
       retries: 5
-    restart: unless-stopped
-
-  opensearch:
-    image: opensearchproject/opensearch:2.16.0
-    environment:
-      - discovery.type=single-node
-      - "OPENSEARCH_INITIAL_ADMIN_PASSWORD=Codir@Search2026!"
-      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
-      - plugins.security.disabled=true
-    ports: ["9200:9200"]
-    volumes:
-      - opensearch-data:/usr/share/opensearch/data
-    ulimits:
-      memlock: { soft: -1, hard: -1 }
-      nofile:  { soft: 65536, hard: 65536 }
-    restart: unless-stopped
-    profiles: ["search"]
-
-  minio:
-    image: minio/minio:RELEASE.2024-09-22T00-33-43Z
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: codir
-      MINIO_ROOT_PASSWORD: codirminio
-    ports: ["9000:9000", "9001:9001"]
-    volumes:
-      - minio-data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    restart: unless-stopped
-
-  # Crée le bucket par défaut au démarrage
-  minio-init:
-    image: minio/mc:RELEASE.2024-09-16T17-43-14Z
-    depends_on:
-      minio: { condition: service_healthy }
-    entrypoint: >
-      sh -c "
-      mc alias set local http://minio:9000 codir codirminio &&
-      mc mb -p local/codir-dev || true &&
-      mc anonymous set download local/codir-dev || true
-      "
-    restart: "no"
-
-  mailhog:
-    image: mailhog/mailhog:v1.0.1
-    ports: ["1025:1025", "8025:8025"]
-    restart: unless-stopped
-
-  ollama:
-    image: ollama/ollama:0.3.13
-    ports: ["11434:11434"]
-    volumes:
-      - ollama-data:/root/.ollama
-    profiles: ["ai"]
-    restart: unless-stopped
+    restart: always
 
   # ── Application ────────────────────────────────────────────────
 
-  api:
+  api_codir:
     <<: *app-build
-    command: ["/app/scripts/docker-entrypoint.sh", "dev"]
+    command: ["/app/scripts/docker-entrypoint.sh", "prod"]
     environment:
       <<: *common-env
-    ports: ["8000:8000"]
     depends_on:
       postgres: { condition: service_healthy }
       redis:    { condition: service_healthy }
-      minio:    { condition: service_healthy }
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health/"]
-      interval: 15s
+      interval: 30s
       timeout: 5s
       retries: 5
-      start_period: 30s
+      start_period: 60s
+    expose: ["8000"]
 
   asgi:
     <<: *app-build
-    command: ["daphne", "-b", "0.0.0.0", "-p", "8001", "config.asgi:application"]
+    command: ["daphne", "-b", "0.0.0.0", "-p", "8001",
+              "--proxy-headers", "config.asgi:application"]
     environment:
       <<: *common-env
-    ports: ["8001:8001"]
     depends_on:
       api: { condition: service_healthy }
+    expose: ["8001"]
 
   worker-default:
     <<: *app-build
-    command: ["celery", "-A", "config", "worker", "-Q", "default,celery", "-l", "info", "-n", "default@%h"]
+    command: ["celery", "-A", "config", "worker",
+              "-Q", "default,celery", "-l", "info",
+              "--concurrency=4", "-n", "default@%h"]
     environment:
       <<: *common-env
     depends_on:
@@ -200,24 +149,19 @@ services:
 
   worker-notifications:
     <<: *app-build
-    command: ["celery", "-A", "config", "worker", "-Q", "notifications", "-l", "info", "-n", "notifications@%h", "--concurrency=2"]
+    command: ["celery", "-A", "config", "worker",
+              "-Q", "notifications", "-l", "info",
+              "--concurrency=4", "-n", "notifications@%h"]
     environment:
       <<: *common-env
     depends_on:
       api: { condition: service_healthy }
-
-  worker-ai:
-    <<: *app-build
-    command: ["celery", "-A", "config", "worker", "-Q", "ai", "-l", "info", "-n", "ai@%h", "--concurrency=2"]
-    environment:
-      <<: *common-env
-    depends_on:
-      api: { condition: service_healthy }
-    profiles: ["ai"]
 
   worker-reports:
     <<: *app-build
-    command: ["celery", "-A", "config", "worker", "-Q", "reports", "-l", "info", "-n", "reports@%h"]
+    command: ["celery", "-A", "config", "worker",
+              "-Q", "reports", "-l", "info",
+              "--concurrency=2", "-n", "reports@%h"]
     environment:
       <<: *common-env
     depends_on:
@@ -225,30 +169,47 @@ services:
 
   beat:
     <<: *app-build
-    command: ["celery", "-A", "config", "beat", "-l", "info", "-S", "django_celery_beat.schedulers:DatabaseScheduler"]
+    command: ["celery", "-A", "config", "beat", "-l", "info",
+              "-S", "django_celery_beat.schedulers:DatabaseScheduler"]
     environment:
       <<: *common-env
     depends_on:
       api: { condition: service_healthy }
 
-  flower:
-    <<: *app-build
-    command: ["celery", "-A", "config", "flower", "--port=5555", "--basic_auth=admin:codir-flower"]
-    environment:
-      <<: *common-env
-    ports: ["5555:5555"]
-    depends_on:
-      worker-default: { condition: service_started }
+  # ── Frontend (statique servi par Nginx) ───────────────────────
+
+  web_codir:
+    image: ${CODIR_WEB_IMAGE:-codir-web:latest}
+    build:
+      context: ../frontend/web
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:?must be set}
+        VITE_FRONTEND_URL: ${FRONTEND_BASE_URL}
+    restart: always
+    expose: ["80"]
+    depends_on: [api]
+
+  # ── Reverse proxy ─────────────────────────────────────────────
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/certs:/etc/nginx/certs:ro
+    depends_on: [api, asgi, web]
+    restart: always
 
 # ─────────────────────────────────────────────────────────────────
 
 volumes:
   postgres-data:
+    driver: local
   redis-data:
-  opensearch-data:
-  minio-data:
-  ollama-data:
+    driver: local
 
 networks:
   default:
-    name: codir-dev
+    name: codir-prod
