@@ -1,0 +1,13 @@
+Bonjour {{ recipient_name }},
+
+Une nouvelle tâche vous a été assignée{% if assigned_by %} par {{ assigned_by }}{% endif %}.
+
+— {{ task.title }}
+  Priorité : {{ task.priority }}
+  {% if task.due_date %}Échéance : {{ task.due_date }}{% endif %}
+  {% if plan.title %}Plan : {{ plan.title }}{% endif %}
+  {% if decision %}Décision : {{ decision.ref }} — {{ decision.title }}{% endif %}
+
+Ouvrir la tâche : {{ link_url }}
+
+— CODIR Executive

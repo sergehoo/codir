@@ -1,0 +1,18 @@
+Bonjour {{ manager }},
+
+Suivi périmètre : {{ label }}
+
+  Ouvertes : {{ open }}
+  En retard : {{ overdue }}
+  Critiques : {{ critical }}
+  Bloquées : {{ blocked }}
+  Avancement moyen : {{ progress_avg }}%
+  Décisions non exécutées : {{ decisions_pending }}
+
+{% if top_tasks %}TOP TÂCHES :{% for t in top_tasks %}
+  · {{ t.title }} — {% if t.assignee__first_name %}{{ t.assignee__first_name }} {{ t.assignee__last_name }} · {% endif %}{% if t.due_date %}{{ t.due_date }} · {% endif %}{{ t.priority }} / {{ t.status }}{% endfor %}
+{% endif %}
+
+Tableau de bord : {{ link_url }}
+
+— CODIR Executive
