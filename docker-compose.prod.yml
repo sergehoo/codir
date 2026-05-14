@@ -127,25 +127,14 @@ services:
       nofile: 65535
 
   # ── API Django (Gunicorn) ─────────────────────────────────────
+  # Le script docker-entrypoint.sh fait : wait DB → migrate → collectstatic → gunicorn
   codirweb:
     build:
       context: ./backend
       dockerfile: Dockerfile
       target: runtime
     image: ${CODIR_IMAGE:-codir-api:latest}
-    command: >
-      gunicorn config.wsgi:application
-      --bind 0.0.0.0:8000
-      --workers ${GUNICORN_WORKERS:-3}
-      --threads ${GUNICORN_THREADS:-4}
-      --worker-tmp-dir /dev/shm
-      --max-requests 10000 --max-requests-jitter 500
-      --timeout 120 --graceful-timeout 30
-      --keep-alive 5
-      --log-level info
-      --access-logfile - --error-logfile -
-      --capture-output
-      --forwarded-allow-ips="*"
+    command: ["/app/scripts/docker-entrypoint.sh", "prod"]
     env_file: [.env.prod]
     environment:
       <<: *common-env
@@ -219,6 +208,7 @@ services:
     mem_reservation: 512m
 
   # ── ASGI / WebSocket (Daphne) ────────────────────────────────
+  # Attend que codirweb soit healthy (= migrations faites)
   codirasgi:
     build:
       context: ./backend
@@ -279,6 +269,8 @@ services:
         condition: service_healthy
       codirredis:
         condition: service_healthy
+      codirweb:
+        condition: service_healthy   # attend migrations
     restart: unless-stopped
     networks: [codir_network]
     healthcheck:
@@ -313,6 +305,8 @@ services:
         condition: service_healthy
       codirredis:
         condition: service_healthy
+      codirweb:
+        condition: service_healthy   # attend migrations
     restart: unless-stopped
     networks: [codir_network]
     tmpfs:
