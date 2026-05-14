@@ -117,8 +117,8 @@ services:
     environment:
       <<: *common-env
     depends_on:
-      postgres: { condition: service_healthy }
-      redis:    { condition: service_healthy }
+      postgres_codir: { condition: service_healthy }
+      redis_codir:    { condition: service_healthy }
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health/"]
       interval: 30s
