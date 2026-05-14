@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>CODIR — Copilote IA</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: 'Inter', system-ui, sans-serif; background: hsl(220 20% 98%); color: hsl(222 47% 11%); }
+  .fade-in { animation: fade-in 500ms ease-out; }
+  @keyframes fade-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .scrollbar::-webkit-scrollbar { width: 6px; }
+  .scrollbar::-webkit-scrollbar-thumb { background: hsl(220 13% 80%); border-radius: 999px; }
+  .typing span { display: inline-block; width: 4px; height: 4px; margin: 0 1px; background: #94a3b8; border-radius: 50%; animation: typing 1.4s infinite ease-in-out; }
+  .typing span:nth-child(2) { animation-delay: 0.2s; }
+  .typing span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes typing { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }
+</style>
+</head>
+<body>
+
+<div class="flex h-screen overflow-hidden">
+
+  <aside class="w-72 shrink-0 bg-white border-r border-slate-200 flex flex-col">
+    <div class="h-14 px-5 flex items-center gap-2 border-b border-slate-200">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 grid place-items-center text-white">✦</div>
+      <span class="font-semibold">Executive Copilot</span>
+    </div>
+    <div class="p-4 border-b border-slate-200">
+      <button class="w-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white text-sm font-semibold py-2 rounded-lg flex items-center justify-center gap-2">
+        + Nouvelle conversation
+      </button>
+    </div>
+    <div class="flex-1 overflow-auto scrollbar p-3 space-y-1 text-sm">
+      <div class="text-xs uppercase font-bold text-slate-500 px-2 py-1.5">Aujourd'hui</div>
+      <a class="block p-2 rounded-lg bg-violet-50 text-violet-700 font-medium cursor-pointer truncate">Préparer mot d'ouverture CODIR</a>
+      <a class="block p-2 rounded-lg hover:bg-slate-100 text-slate-700 cursor-pointer truncate">Synthèse décisions DSI Q1</a>
+      <a class="block p-2 rounded-lg hover:bg-slate-100 text-slate-700 cursor-pointer truncate">Risques cyber émergents</a>
+      <div class="text-xs uppercase font-bold text-slate-500 px-2 py-1.5 mt-3">Cette semaine</div>
+      <a class="block p-2 rounded-lg hover:bg-slate-100 text-slate-700 cursor-pointer truncate">Analyse écart budget Marketing</a>
+      <a class="block p-2 rounded-lg hover:bg-slate-100 text-slate-700 cursor-pointer truncate">PV brouillon — CODIR 6 mai</a>
+      <a class="block p-2 rounded-lg hover:bg-slate-100 text-slate-700 cursor-pointer truncate">Benchmark turnover secteur tech</a>
+      <div class="text-xs uppercase font-bold text-slate-500 px-2 py-1.5 mt-3">Plus ancien</div>
+      <a class="block p-2 rounded-lg hover:bg-slate-100 text-slate-700 cursor-pointer truncate">Note stratégique zone CEMAC</a>
+      <a class="block p-2 rounded-lg hover:bg-slate-100 text-slate-700 cursor-pointer truncate">Évaluation acquisition NovaTech</a>
+    </div>
+    <div class="p-4 border-t border-slate-200 text-xs text-slate-500">
+      <div class="flex items-center justify-between mb-1">
+        <span>Modèle</span>
+        <select class="text-xs bg-transparent font-semibold text-slate-700">
+          <option>GPT-4o</option>
+          <option>Llama 3.3 70B (local)</option>
+        </select>
+      </div>
+      <div class="text-[10px] text-slate-400">3 200 tokens consommés aujourd'hui</div>
+    </div>
+  </aside>
+
+  <main class="flex-1 flex flex-col overflow-hidden">
+
+    <div class="h-14 border-b border-slate-200 px-8 flex items-center gap-3 bg-white">
+      <a href="dashboard_dg.html" class="text-slate-400 hover:text-slate-600">←</a>
+      <div class="flex-1">
+        <div class="text-sm font-semibold">Préparer mot d'ouverture CODIR</div>
+        <div class="text-xs text-slate-500">Conversation contextuelle — Catherine Martin (DG)</div>
+      </div>
+      <button class="text-xs px-3 py-1.5 border border-slate-300 rounded-lg">Exporter</button>
+      <button class="text-xs px-3 py-1.5 border border-slate-300 rounded-lg">Archiver</button>
+    </div>
+
+    <div class="flex-1 overflow-auto scrollbar" id="chat">
+      <div class="max-w-3xl mx-auto p-8 space-y-6">
+
+        <!-- Message user -->
+        <div class="fade-in flex gap-4">
+          <div class="w-9 h-9 rounded-full bg-gradient-to-br from-amber-400 to-rose-500 grid place-items-center text-white text-xs font-bold shrink-0">CM</div>
+          <div class="flex-1">
+            <div class="font-semibold text-sm mb-1">Catherine Martin</div>
+            <div class="text-sm leading-relaxed text-slate-700">
+              Prépare-moi un mot d'introduction de 90 secondes pour le CODIR de lundi.
+              Ton ferme mais positif, focus sur l'exécution. Mentionne le projet Phoenix
+              et la trésorerie sans alarmer.
+            </div>
+          </div>
+        </div>
+
+        <!-- Message assistant -->
+        <div class="fade-in flex gap-4">
+          <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 grid place-items-center text-white text-lg shrink-0">✦</div>
+          <div class="flex-1">
+            <div class="font-semibold text-sm mb-2 flex items-center gap-2">
+              Copilote
+              <span class="text-[10px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded font-bold">GPT-4o</span>
+            </div>
+            <div class="text-sm leading-relaxed text-slate-700 space-y-3 bg-white border border-slate-200 rounded-2xl p-5">
+              <p>Voici une proposition calibrée sur 90 secondes (≈ 240 mots), ton ferme mais constructif&nbsp;:</p>
+              <div class="bg-slate-50 border-l-4 border-violet-500 p-4 rounded-r italic text-slate-700">
+                « Mesdames, Messieurs, bonjour. Avant d'ouvrir l'ordre du jour, je veux saluer
+                la trajectoire de ce premier semestre&nbsp;: chiffre d'affaires en progression de
+                +8,2 %, marge consolidée à 38,2 %. Ce sont les résultats de votre engagement
+                collectif et je tiens à vous en remercier.
+                <br><br>
+                Mais ce momentum doit nous porter encore plus haut. Trois sujets nous attendent
+                aujourd'hui. <strong>Le projet Phoenix</strong> d'abord — c'est la décision la plus
+                structurante des prochaines années. Je compte sur notre alignement pour qu'il
+                avance sans tergiverser. <strong>La trésorerie ensuite</strong> — nous sommes
+                vigilants, le pilotage est resserré, et c'est dans cet état d'esprit que nous
+                regarderons les engagements à valider. Enfin, <strong>notre exposition aux risques
+                cyber</strong>, qui mérite une réponse coordonnée DSI–DAF–Compliance.
+                <br><br>
+                Je suis convaincue que ce CODIR sera fondateur. Soyons précis, ambitieux,
+                et décisifs. Pierre, je te passe la parole sur le sujet finance. »
+              </div>
+              <p class="text-sm text-slate-600">
+                <strong>Sources utilisées</strong>&nbsp;:
+              </p>
+              <div class="flex flex-wrap gap-2 text-xs">
+                <a class="bg-violet-50 text-violet-700 px-2.5 py-1 rounded-full border border-violet-200 hover:bg-violet-100">📊 KPI CA YTD</a>
+                <a class="bg-violet-50 text-violet-700 px-2.5 py-1 rounded-full border border-violet-200 hover:bg-violet-100">⚖️ DEC-2026-0042 Phoenix</a>
+                <a class="bg-violet-50 text-violet-700 px-2.5 py-1 rounded-full border border-violet-200 hover:bg-violet-100">📈 Snapshot trésorerie 13/05</a>
+                <a class="bg-violet-50 text-violet-700 px-2.5 py-1 rounded-full border border-violet-200 hover:bg-violet-100">⚠ RSK-2026-0017 Cyber</a>
+                <a class="bg-violet-50 text-violet-700 px-2.5 py-1 rounded-full border border-violet-200 hover:bg-violet-100">📄 PV CODIR 6 mai</a>
+              </div>
+              <div class="flex gap-2 pt-2">
+                <button class="text-xs px-3 py-1.5 border border-slate-300 rounded-lg flex items-center gap-1">📋 Copier</button>
+                <button class="text-xs px-3 py-1.5 border border-slate-300 rounded-lg flex items-center gap-1">💾 Enregistrer dans CODIR</button>
+                <button class="text-xs px-3 py-1.5 border border-slate-300 rounded-lg flex items-center gap-1">🔁 Variante</button>
+                <div class="ml-auto flex items-center gap-1 text-slate-400">
+                  <button class="hover:text-emerald-600 px-1">👍</button>
+                  <button class="hover:text-rose-600 px-1">👎</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Message user 2 -->
+        <div class="fade-in flex gap-4">
+          <div class="w-9 h-9 rounded-full bg-gradient-to-br from-amber-400 to-rose-500 grid place-items-center text-white text-xs font-bold shrink-0">CM</div>
+          <div class="flex-1">
+            <div class="font-semibold text-sm mb-1">Catherine Martin</div>
+            <div class="text-sm leading-relaxed text-slate-700">
+              Très bien. Maintenant, donne-moi les 3 décisions en retard les plus critiques et propose un mail de relance à leurs responsables.
+            </div>
+          </div>
+        </div>
+
+        <!-- Réponse en cours -->
+        <div class="fade-in flex gap-4">
+          <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-violet-600 to-fuchsia-600 grid place-items-center text-white text-lg shrink-0">✦</div>
+          <div class="flex-1">
+            <div class="font-semibold text-sm mb-2">Copilote</div>
+            <div class="bg-white border border-slate-200 rounded-2xl p-5">
+              <div class="text-sm text-slate-600 mb-3">
+                J'interroge la base des décisions en retard… <span class="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono">tool: search_decisions(status=overdue)</span>
+              </div>
+              <div class="bg-slate-50 rounded-lg p-3 text-xs font-mono mb-3 text-slate-600">
+                ✓ 3 résultats — DEC-2026-0038 (J+15), DEC-2026-0034 (J+8), DEC-2026-0029 (J+12)
+              </div>
+              <div class="typing inline-block">
+                <span></span><span></span><span></span>
+              </div>
+              <span class="text-xs text-slate-500 ml-2">Rédaction du mail en cours…</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Input -->
+    <div class="border-t border-slate-200 bg-white p-4">
+      <div class="max-w-3xl mx-auto">
+        <div class="bg-slate-50 border border-slate-300 rounded-2xl p-2 flex items-end gap-2 focus-within:border-violet-500 focus-within:ring-4 focus-within:ring-violet-100 transition">
+          <button class="p-2 text-slate-500 hover:text-slate-700">📎</button>
+          <textarea rows="1" placeholder="Demander au copilote — il connaît votre tenant, vos décisions, vos documents…" class="flex-1 bg-transparent outline-none resize-none text-sm py-2"></textarea>
+          <button class="p-2.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-xl font-semibold text-sm">Envoyer</button>
+        </div>
+        <div class="flex flex-wrap gap-2 mt-3 text-xs">
+          <button class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-full">📅 Préparer prochain CODIR</button>
+          <button class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-full">📊 Synthétiser KPI mensuels</button>
+          <button class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-full">⚖️ Décisions en retard</button>
+          <button class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-full">⚠ Risques émergents</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+</body>
+</html>

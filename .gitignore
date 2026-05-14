@@ -1,0 +1,59 @@
+# ─── OS / Editors ─────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ─── Secrets / Env ────────────────────────────────────
+# ATTENTION : .env contient des mots de passe locaux — JAMAIS commit.
+.env
+.env.*
+!.env.example
+!.env.example.*
+
+# ─── Python ──────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.cover
+.tox/
+.venv/
+venv/
+ENV/
+.python-version
+
+# ─── Django ──────────────────────────────────────────
+db.sqlite3
+db.sqlite3-journal
+/media/
+/staticfiles/
+*.log
+celerybeat-schedule
+celerybeat.pid
+
+# ─── Node / Vite ─────────────────────────────────────
+node_modules/
+dist/
+.vite/
+*.local
+*.tsbuildinfo
+
+# ─── Docker ──────────────────────────────────────────
+.docker/
+docker-compose.override.yml
+
+# ─── Tooling ─────────────────────────────────────────
+.cache/
+.npm/
+.eslintcache
+
+# ─── Outputs Cowork / Claude (si dev local) ──────────
+/outputs/

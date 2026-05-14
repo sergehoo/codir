@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>CODIR — Maquettes interactives</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --primary: 220 90% 56%;
+    --bg: 220 20% 98%;
+    --fg: 222 47% 11%;
+    --muted: 215 16% 47%;
+    --border: 220 13% 91%;
+  }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; background: hsl(var(--bg)); color: hsl(var(--fg)); }
+  .card { background: white; border: 1px solid hsl(var(--border)); border-radius: 12px; transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1); }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 12px 24px -8px rgba(15, 23, 42, 0.20); border-color: hsl(220 90% 56% / 0.4); }
+</style>
+</head>
+<body class="min-h-screen">
+
+<div class="max-w-7xl mx-auto px-8 py-16">
+
+  <header class="mb-16">
+    <div class="flex items-center gap-3 mb-6">
+      <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 flex items-center justify-center text-white font-bold text-xl shadow-lg">
+        C
+      </div>
+      <div>
+        <div class="text-xs font-semibold tracking-wider text-slate-500 uppercase">Executive Operating System</div>
+        <h1 class="text-3xl font-semibold">CODIR — Maquettes interactives</h1>
+      </div>
+    </div>
+    <p class="text-slate-600 text-lg max-w-3xl leading-relaxed">
+      Cinq écrans clés rendus en HTML pour donner vie à la vision produit&nbsp;:
+      cockpit DG, cockpit DAF, mode réunion live avec IA, copilote conversationnel
+      et application mobile exécutive. Chacun est navigable en un clic.
+    </p>
+  </header>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+    <a href="dashboard_dg.html" class="card p-6 block">
+      <div class="aspect-video bg-gradient-to-br from-blue-50 to-indigo-100 rounded-lg mb-4 flex items-center justify-center text-blue-600 font-bold text-5xl">DG</div>
+      <div class="text-xs uppercase tracking-wider text-blue-600 font-semibold mb-1">Cockpit exécutif</div>
+      <h2 class="text-xl font-semibold mb-2">Dashboard DG</h2>
+      <p class="text-sm text-slate-600">
+        Pulse organisationnel, heatmap stratégique, décisions critiques, briefing IA matinal.
+      </p>
+    </a>
+
+    <a href="dashboard_daf.html" class="card p-6 block">
+      <div class="aspect-video bg-gradient-to-br from-emerald-50 to-teal-100 rounded-lg mb-4 flex items-center justify-center text-emerald-700 font-bold text-5xl">DAF</div>
+      <div class="text-xs uppercase tracking-wider text-emerald-700 font-semibold mb-1">Cockpit financier</div>
+      <h2 class="text-xl font-semibold mb-2">Dashboard DAF</h2>
+      <p class="text-sm text-slate-600">
+        CA, marge, trésorerie 90j, budget vs réel, scénarios financiers, engagements à valider.
+      </p>
+    </a>
+
+    <a href="meeting_live.html" class="card p-6 block">
+      <div class="aspect-video bg-gradient-to-br from-rose-50 to-orange-100 rounded-lg mb-4 flex items-center justify-center text-rose-600 font-bold text-5xl">●&nbsp;LIVE</div>
+      <div class="text-xs uppercase tracking-wider text-rose-600 font-semibold mb-1">Mode réunion</div>
+      <h2 class="text-xl font-semibold mb-2">Meeting Live + IA</h2>
+      <p class="text-sm text-slate-600">
+        Transcription temps réel, décisions extraites, votes live, suggestions IA, plan d'action.
+      </p>
+    </a>
+
+    <a href="ai_assistant.html" class="card p-6 block">
+      <div class="aspect-video bg-gradient-to-br from-violet-50 to-purple-100 rounded-lg mb-4 flex items-center justify-center text-violet-600 font-bold text-5xl">✦&nbsp;IA</div>
+      <div class="text-xs uppercase tracking-wider text-violet-600 font-semibold mb-1">Copilote conversationnel</div>
+      <h2 class="text-xl font-semibold mb-2">AI Executive Copilot</h2>
+      <p class="text-sm text-slate-600">
+        Q&amp;A sur décisions, KPI, documents. Réponses sourcées avec citations cliquables.
+      </p>
+    </a>
+
+    <a href="mobile_executive.html" class="card p-6 block">
+      <div class="aspect-video bg-gradient-to-br from-slate-800 to-slate-950 rounded-lg mb-4 flex items-center justify-center text-white font-bold text-5xl">📱</div>
+      <div class="text-xs uppercase tracking-wider text-slate-700 font-semibold mb-1">Mobile Flutter</div>
+      <h2 class="text-xl font-semibold mb-2">Executive Mobile</h2>
+      <p class="text-sm text-slate-600">
+        App iOS/Android — vote rapide, KPI swipeable, mode réunion, notifications actionnables.
+      </p>
+    </a>
+
+    <div class="card p-6 flex flex-col justify-between bg-gradient-to-br from-slate-900 to-slate-800 text-white">
+      <div>
+        <div class="text-xs uppercase tracking-wider text-cyan-400 font-semibold mb-1">Documentation</div>
+        <h2 class="text-xl font-semibold mb-2">Architecture complète</h2>
+        <p class="text-sm text-slate-300 mb-4">
+          25 documents techniques, modèles Django exécutables, diagrammes Mermaid,
+          roadmap produit et technique.
+        </p>
+      </div>
+      <a href="../../docs/01_vision_produit.md" class="inline-flex items-center gap-2 text-cyan-400 text-sm font-semibold hover:text-cyan-300">
+        Ouvrir les docs →
+      </a>
+    </div>
+
+  </div>
+
+  <footer class="mt-16 text-center text-sm text-slate-400">
+    CODIR — Executive Operating System — Maquettes v1.0
+  </footer>
+
+</div>
+
+</body>
+</html>

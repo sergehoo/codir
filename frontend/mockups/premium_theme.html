@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<title>CODIR — Executive Premium Theme</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --brand-500: 25 100% 50%;
+    --brand-600: 32 100% 50%;
+    --brand-gold: 36 100% 64%;
+    --bg-base: 230 21% 6%;
+    --bg-subtle: 228 18% 10%;
+    --bg-elevated: 224 16% 14%;
+    --fg: 210 40% 96%;
+    --fg-muted: 215 16% 65%;
+    --fg-subtle: 215 16% 45%;
+    --border: 220 14% 18%;
+    --success: 152 70% 50%;
+    --warning: 40 95% 55%;
+    --danger: 0 80% 60%;
+    --ai: 260 80% 65%;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; min-height: 100vh; font-family: 'Inter', system-ui;
+    color: hsl(var(--fg));
+    background:
+      radial-gradient(ellipse at 20% 25%, hsl(var(--brand-500) / 0.18), transparent 50%),
+      radial-gradient(ellipse at 80% 70%, hsl(var(--brand-600) / 0.14), transparent 55%),
+      radial-gradient(ellipse at 50% 0%, hsl(var(--ai) / 0.10), transparent 55%),
+      linear-gradient(135deg, hsl(var(--bg-base)) 0%, hsl(var(--bg-subtle)) 50%, hsl(var(--bg-base)) 100%);
+    -webkit-font-smoothing: antialiased;
+  }
+  .tab { font-variant-numeric: tabular-nums; }
+  .display { font-family: 'Inter', system-ui; letter-spacing: -0.025em; font-weight: 700; }
+  .grid-bg::before {
+    content:""; position: fixed; inset: 0; pointer-events:none; z-index: 0;
+    background-image:
+      linear-gradient(hsl(var(--brand-500) / 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--brand-500) / 0.05) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(ellipse at center, black 25%, transparent 80%);
+    opacity: 0.7;
+  }
+  .orb { position: fixed; border-radius: 50%; pointer-events: none; filter: blur(80px); opacity: 0.45; animation: drift 22s ease-in-out infinite alternate; z-index: 0; }
+  @keyframes drift { 0% { transform: translate(0,0) scale(1); } 50% { transform: translate(50px,-40px) scale(1.18); } 100% { transform: translate(-30px,50px) scale(0.92); } }
+  .scanline { position: fixed; left: 0; right: 0; height: 1px; pointer-events: none; z-index: 1;
+              background: linear-gradient(90deg, transparent, hsl(var(--brand-500)) 50%, transparent);
+              box-shadow: 0 0 14px hsl(var(--brand-500)), 0 0 36px hsl(var(--brand-500) / 0.5);
+              opacity: 0.75; animation: sweep 10s linear infinite; }
+  @keyframes sweep { 0% { top: -4px; } 100% { top: 100%; } }
+  .card-glass { position: relative; isolation: isolate;
+    background: linear-gradient(135deg, hsl(var(--bg-elevated) / 0.88), hsl(var(--bg-subtle) / 0.62));
+    border: 1px solid hsl(var(--brand-500) / 0.20); border-radius: 14px;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 0 0 1px hsl(var(--brand-500) / 0.04) inset, 0 16px 48px -16px rgba(0,0,0,0.7);
+    transition: all 320ms cubic-bezier(0.2, 0.8, 0.2, 1); z-index: 2;
+  }
+  .card-glass::before { content:""; position: absolute; inset: 0; padding: 1px; border-radius: 14px;
+    background: linear-gradient(135deg, hsl(var(--brand-500) / 0.55), transparent 40%, transparent 60%, hsl(var(--brand-gold) / 0.45));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none; }
+  .card-glass::after { content:""; position: absolute; inset: 4px; pointer-events: none;
+    --c: hsl(var(--brand-500) / 0.85);
+    background:
+      linear-gradient(to right,var(--c),var(--c) 14px,transparent 14px) top left/40px 1px no-repeat,
+      linear-gradient(to bottom,var(--c),var(--c) 14px,transparent 14px) top left/1px 40px no-repeat,
+      linear-gradient(to left,var(--c),var(--c) 14px,transparent 14px) top right/40px 1px no-repeat,
+      linear-gradient(to bottom,var(--c),var(--c) 14px,transparent 14px) top right/1px 40px no-repeat,
+      linear-gradient(to right,var(--c),var(--c) 14px,transparent 14px) bottom left/40px 1px no-repeat,
+      linear-gradient(to top,var(--c),var(--c) 14px,transparent 14px) bottom left/1px 40px no-repeat,
+      linear-gradient(to left,var(--c),var(--c) 14px,transparent 14px) bottom right/40px 1px no-repeat,
+      linear-gradient(to top,var(--c),var(--c) 14px,transparent 14px) bottom right/1px 40px no-repeat;
+    opacity: 0.75; }
+  .card-glass:hover { border-color: hsl(var(--brand-500) / 0.55);
+    box-shadow: 0 0 32px -4px hsl(var(--brand-500) / 0.45), 0 16px 48px -16px rgba(0,0,0,0.7);
+    transform: translateY(-2px); }
+  .glow-brand { color: hsl(28 100% 70%); text-shadow: 0 0 12px hsl(var(--brand-500)/0.7), 0 0 28px hsl(var(--brand-600)/0.5); }
+  .glow-success { color: hsl(var(--success)); text-shadow: 0 0 10px hsl(var(--success)/0.6); }
+  .glow-danger { color: hsl(var(--danger)); text-shadow: 0 0 10px hsl(var(--danger)/0.6); }
+  .glow-ai { color: hsl(var(--ai)); text-shadow: 0 0 10px hsl(var(--ai)/0.6); }
+  .pulse { animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.7); } }
+  .rotate-slow { animation: rot 40s linear infinite; transform-origin: center; }
+  .rotate-med { animation: rot 22s linear infinite; transform-origin: center; }
+  .rotate-fast { animation: rot 12s linear infinite reverse; transform-origin: center; }
+  @keyframes rot { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+  .bar { flex: 1; background: linear-gradient(to top, transparent, hsl(var(--brand-600)/0.32), hsl(var(--brand-500)/0.92), hsl(var(--brand-gold)/0.95));
+    border-radius: 1px; transform-origin: bottom; animation: spectrum 1.8s ease-in-out infinite;
+    box-shadow: 0 0 10px hsl(var(--brand-500)/0.5); }
+  @keyframes spectrum { 0%,100% { transform: scaleY(0.22); } 25% { transform: scaleY(0.7); } 50% { transform: scaleY(1); } 75% { transform: scaleY(0.48); } }
+  .badge { display: inline-flex; align-items: center; gap: 4px; font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 16px; border-radius: 8px;
+                 background: linear-gradient(135deg, hsl(var(--brand-500)), hsl(var(--brand-600)) 50%, hsl(var(--brand-gold)));
+                 color: white; font-weight: 600; font-size: 14px; cursor: pointer;
+                 box-shadow: 0 0 0 1px hsl(var(--brand-500) / 0.2) inset, 0 0 24px -8px hsl(var(--brand-500) / 0.45);
+                 transition: all 250ms cubic-bezier(0.2, 0.8, 0.2, 1); border: none; }
+  .btn-primary:hover { filter: brightness(1.15); box-shadow: 0 0 32px -4px hsl(var(--brand-600)); transform: translateY(-1px); }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: hsl(var(--brand-500) / 0.4); border-radius: 999px; }
+</style>
+</head>
+<body class="grid-bg">
+
+<div class="orb" style="width:600px;height:600px;top:-150px;left:-150px;background:hsl(var(--brand-500));"></div>
+<div class="orb" style="width:500px;height:500px;bottom:-100px;right:5%;background:hsl(var(--brand-gold));animation-delay:-10s;"></div>
+<div class="orb" style="width:350px;height:350px;top:40%;right:30%;background:hsl(var(--ai));animation-delay:-16s;opacity:0.3;"></div>
+<div class="scanline"></div>
+
+<!-- TOPBAR -->
+<header class="relative z-10 px-8 py-4 flex items-center gap-6 border-b border-[hsl(var(--brand-500)/0.15)]">
+  <div class="flex items-center gap-3">
+    <div class="relative w-11 h-11">
+      <svg viewBox="0 0 44 44" class="absolute inset-0">
+        <circle cx="22" cy="22" r="20" fill="none" stroke="hsl(var(--brand-500) / 0.3)" stroke-width="1"/>
+        <circle cx="22" cy="22" r="15" fill="none" stroke="hsl(var(--brand-500) / 0.6)" stroke-width="1"
+                stroke-dasharray="22 12" class="rotate-med" style="transform-origin: 22px 22px;"/>
+        <text x="22" y="27" text-anchor="middle" font-size="14" font-weight="800" fill="hsl(28 100% 70%)">C</text>
+      </svg>
+    </div>
+    <div>
+      <div class="text-xs font-bold tracking-[0.3em] glow-brand">CODIR // OPS</div>
+      <div class="text-[10px] uppercase tracking-[0.2em] text-[hsl(var(--fg-subtle))]">Executive Command Center</div>
+    </div>
+  </div>
+  <div class="ml-6 text-[10px] flex items-center gap-5 text-[hsl(var(--fg-muted))]">
+    <span class="flex items-center gap-1.5">
+      <span class="w-1.5 h-1.5 rounded-full pulse" style="background:hsl(var(--success));box-shadow:0 0 8px hsl(var(--success));"></span>
+      SYSTEM ONLINE
+    </span>
+    <span class="font-mono glow-brand" id="clock"></span>
+  </div>
+  <div class="ml-auto flex items-center gap-3 text-xs">
+    <button class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[hsl(var(--ai)/0.1)] border border-[hsl(var(--ai)/0.4)] glow-ai hover:bg-[hsl(var(--ai)/0.2)] transition">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L13.4 8.6L20 10L13.4 11.4L12 18L10.6 11.4L4 10L10.6 8.6Z"/></svg>
+      <span class="text-[10px] uppercase tracking-wider font-semibold">AI Copilot</span>
+    </button>
+    <div class="card-glass !p-0 px-3 py-1.5 flex items-center gap-2 !rounded-lg">
+      <span class="text-[9px] uppercase tracking-wider text-[hsl(var(--fg-subtle))]">User</span>
+      <span class="glow-brand font-bold">C.MARTIN /// DG</span>
+    </div>
+  </div>
+</header>
+
+<!-- MAIN -->
+<main class="relative z-10 p-6 grid grid-cols-12 gap-5 min-h-[calc(100vh-80px)]">
+
+  <!-- LEFT COL : Activity + decisions -->
+  <section class="col-span-12 lg:col-span-3 flex flex-col gap-5">
+    <div class="card-glass p-5 flex-1">
+      <div class="flex items-baseline justify-between mb-3">
+        <div class="text-[10px] uppercase tracking-[0.2em] text-[hsl(var(--fg-muted))] font-semibold">Activity Stream</div>
+        <span class="badge bg-[hsl(var(--brand-500)/0.15)] glow-brand border border-[hsl(var(--brand-500)/0.4)]">LIVE</span>
+      </div>
+      <div class="display text-4xl glow-brand mb-1 tab"><span class="counter" data-target="247">0</span></div>
+      <div class="text-[10px] uppercase tracking-wider text-[hsl(var(--fg-subtle))] mb-3">EVENTS / 24H · +18%</div>
+      <div class="flex items-end gap-1 h-32" id="spectrum"></div>
+    </div>
+
+    <div class="card-glass p-5 flex-1 overflow-hidden">
+      <div class="flex items-baseline justify-between mb-3">
+        <div class="text-[10px] uppercase tracking-[0.2em] text-[hsl(var(--fg-muted))] font-semibold">Recent Decisions</div>
+        <span class="badge bg-[hsl(var(--danger)/0.15)] glow-danger border border-[hsl(var(--danger)/0.4)]">3 LATE</span>
+      </div>
+      <div class="space-y-2 text-xs">
+        <div class="border-l-2 border-[hsl(var(--brand-500))] pl-3 py-1.5 hover:bg-[hsl(var(--brand-500)/0.05)] transition">
+          <div class="flex items-baseline gap-2">
+            <span class="font-mono text-[10px] glow-brand">DEC-26-0042</span>
+            <span class="ml-auto badge bg-[hsl(var(--warning)/0.15)] text-[hsl(var(--warning))] border border-[hsl(var(--warning)/0.4)]">CRIT</span>
+          </div>
+          <div class="text-[hsl(var(--fg))] mt-0.5">Lancement Projet Phoenix</div>
+        </div>
+        <div class="border-l-2 border-[hsl(var(--danger))] pl-3 py-1.5 hover:bg-[hsl(var(--danger)/0.05)] transition">
+          <div class="flex items-baseline gap-2">
+            <span class="font-mono text-[10px] glow-danger">DEC-26-0038</span>
+            <span class="ml-auto badge bg-[hsl(var(--danger)/0.2)] glow-danger border border-[hsl(var(--danger)/0.5)]">OVERDUE</span>
+          </div>
+          <div class="text-[hsl(var(--fg))] mt-0.5">Restructuration CEMAC</div>
+        </div>
+        <div class="border-l-2 border-[hsl(var(--success))] pl-3 py-1.5 hover:bg-[hsl(var(--success)/0.05)] transition">
+          <div class="flex items-baseline gap-2">
+            <span class="font-mono text-[10px] glow-success">DEC-26-0034</span>
+            <span class="ml-auto badge bg-[hsl(var(--success)/0.15)] glow-success border border-[hsl(var(--success)/0.4)]">DONE</span>
+          </div>
+          <div class="text-[hsl(var(--fg))] mt-0.5">Renouvellement AWS</div>
+        </div>
+        <div class="border-l-2 border-[hsl(var(--brand-500))] pl-3 py-1.5 hover:bg-[hsl(var(--brand-500)/0.05)] transition">
+          <div class="flex items-baseline gap-2">
+            <span class="font-mono text-[10px] glow-brand">DEC-26-0029</span>
+            <span class="ml-auto badge bg-[hsl(var(--brand-500)/0.15)] glow-brand border border-[hsl(var(--brand-500)/0.4)]">EXEC</span>
+          </div>
+          <div class="text-[hsl(var(--fg))] mt-0.5">Acquisition NovaTech</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CENTER : KPI + master gauge -->
+  <section class="col-span-12 lg:col-span-6 flex flex-col gap-5">
+    <div class="grid grid-cols-3 gap-5">
+
+      <div class="card-glass p-5 text-center">
+        <div class="text-[9px] uppercase tracking-[0.2em] text-[hsl(var(--fg-muted))] mb-2 font-semibold">Meetings</div>
+        <svg viewBox="0 0 100 100" class="w-24 h-24 mx-auto">
+          <circle cx="50" cy="50" r="42" fill="none" stroke="hsl(var(--brand-500)/0.15)" stroke-width="2"/>
+          <circle cx="50" cy="50" r="42" fill="none" stroke="hsl(var(--brand-500))" stroke-width="2.5"
+                  stroke-dasharray="263" stroke-dashoffset="65" stroke-linecap="round"
+                  transform="rotate(-90 50 50)" style="filter: drop-shadow(0 0 6px hsl(var(--brand-500)));"/>
+          <circle cx="50" cy="50" r="35" fill="none" stroke="hsl(var(--brand-500)/0.4)" stroke-width="0.5"
+                  stroke-dasharray="3 5" class="rotate-med"/>
+        </svg>
+        <div class="-mt-20 mb-9 text-3xl glow-brand tab font-bold counter" data-target="12">0</div>
+        <div class="text-[10px] uppercase tracking-wider text-[hsl(var(--fg-subtle))]">3 UPCOMING · 1 LIVE</div>
+      </div>
+
+      <div class="card-glass p-5 text-center">
+        <div class="text-[9px] uppercase tracking-[0.2em] text-[hsl(var(--fg-muted))] mb-2 font-semibold">Decisions</div>
+        <svg viewBox="0 0 100 100" class="w-24 h-24 mx-auto">
+          <circle cx="50" cy="50" r="42" fill="none" stroke="hsl(var(--success)/0.15)" stroke-width="2"/>
+          <circle cx="50" cy="50" r="42" fill="none" stroke="hsl(var(--success))" stroke-width="2.5"
+                  stroke-dasharray="263" stroke-dashoffset="120" stroke-linecap="round"
+                  transform="rotate(-90 50 50)" style="filter: drop-shadow(0 0 6px hsl(var(--success)));"/>
+          <circle cx="50" cy="50" r="35" fill="none" stroke="hsl(var(--success)/0.4)" stroke-width="0.5"
+                  stroke-dasharray="3 5" class="rotate-slow"/>
+        </svg>
+        <div class="-mt-20 mb-9 text-3xl glow-success tab font-bold counter" data-target="47">0</div>
+        <div class="text-[10px] uppercase tracking-wider text-[hsl(var(--fg-subtle))]">23 PEND · 24 OK</div>
+      </div>
+
+      <div class="card-glass p-5 text-center">
+        <div class="text-[9px] uppercase tracking-[0.2em] text-[hsl(var(--fg-muted))] mb-2 font-semibold">Plans</div>
+        <svg viewBox="0 0 100 100" class="w-24 h-24 mx-auto">
+          <circle cx="50" cy="50" r="42" fill="none" stroke="hsl(var(--warning)/0.15)" stroke-width="2"/>
+          <circle cx="50" cy="50" r="42" fill="none" stroke="hsl(var(--warning))" stroke-width="2.5"
+                  stroke-dasharray="263" stroke-dashoffset="180" stroke-linecap="round"
+                  transform="rotate(-90 50 50)" style="filter: drop-shadow(0 0 6px hsl(var(--warning)));"/>
+          <circle cx="50" cy="50" r="35" fill="none" stroke="hsl(var(--warning)/0.4)" stroke-width="0.5"
+                  stroke-dasharray="3 5" class="rotate-fast"/>
+        </svg>
+        <div class="-mt-20 mb-9 text-3xl tab font-bold counter" data-target="86" style="color:hsl(var(--warning));text-shadow:0 0 12px hsl(var(--warning)/0.6);">0</div>
+        <div class="text-[10px] uppercase tracking-wider text-[hsl(var(--fg-subtle))]">14 LATE · 72 ACTIVE</div>
+      </div>
+
+    </div>
+
+    <!-- Master gauge -->
+    <div class="card-glass p-6 flex-1 grid grid-cols-2 items-center">
+      <div class="relative aspect-square max-w-md mx-auto w-full">
+        <svg viewBox="0 0 320 320" class="w-full h-full">
+          <g class="rotate-slow" style="transform-origin: 160px 160px;">
+            <circle cx="160" cy="160" r="148" fill="none" stroke="hsl(var(--brand-500)/0.15)" stroke-width="1"/>
+            <circle cx="160" cy="160" r="148" fill="none" stroke="hsl(var(--brand-500)/0.7)" stroke-width="1.5" stroke-dasharray="2 16"/>
+            <text x="160" y="20" text-anchor="middle" fill="hsl(28 100% 70%)" font-size="9" letter-spacing="3">EXECUTIVE.PERFORMANCE.INDEX</text>
+          </g>
+          <g class="rotate-med" style="transform-origin: 160px 160px;">
+            <circle cx="160" cy="160" r="125" fill="none" stroke="hsl(var(--brand-gold)/0.4)" stroke-width="1" stroke-dasharray="50 6 2 6"/>
+          </g>
+          <line x1="160" y1="10" x2="160" y2="40" stroke="hsl(var(--brand-500)/0.6)" stroke-width="1"/>
+          <line x1="160" y1="280" x2="160" y2="310" stroke="hsl(var(--brand-500)/0.6)" stroke-width="1"/>
+          <line x1="10" y1="160" x2="40" y2="160" stroke="hsl(var(--brand-500)/0.6)" stroke-width="1"/>
+          <line x1="280" y1="160" x2="310" y2="160" stroke="hsl(var(--brand-500)/0.6)" stroke-width="1"/>
+          <circle cx="160" cy="160" r="100" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="14"/>
+          <circle cx="160" cy="160" r="100" fill="none" stroke="url(#mgGrad)" stroke-width="14"
+                  stroke-dasharray="628" stroke-dashoffset="157" stroke-linecap="round"
+                  transform="rotate(-90 160 160)" style="filter: drop-shadow(0 0 18px hsl(var(--brand-500)));"/>
+          <defs>
+            <linearGradient id="mgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="hsl(var(--brand-500))"/>
+              <stop offset="50%" stop-color="hsl(var(--brand-600))"/>
+              <stop offset="100%" stop-color="hsl(var(--brand-gold))"/>
+            </linearGradient>
+          </defs>
+          <g class="rotate-fast" style="transform-origin: 160px 160px;">
+            <circle cx="160" cy="160" r="75" fill="none" stroke="hsl(var(--brand-500)/0.35)" stroke-width="0.8" stroke-dasharray="120 60"/>
+          </g>
+          <polygon points="160,90 220,125 220,195 160,230 100,195 100,125"
+                   fill="hsl(var(--brand-500)/0.04)" stroke="hsl(var(--brand-500)/0.25)" stroke-width="1"/>
+          <text x="160" y="158" text-anchor="middle" font-size="62" font-weight="800"
+                fill="hsl(28 100% 70%)"
+                style="filter: drop-shadow(0 0 20px hsl(var(--brand-500)));"
+                class="counter-svg" data-target="74">0</text>
+          <text x="160" y="180" text-anchor="middle" fill="hsl(var(--fg-muted))" font-size="10" letter-spacing="3">EPI SCORE</text>
+          <text x="160" y="198" text-anchor="middle" fill="hsl(var(--success))" font-size="9">▲ +6.2 SINCE LAST CYCLE</text>
+        </svg>
+      </div>
+
+      <div class="space-y-5 px-6">
+        <div>
+          <div class="text-[9px] uppercase tracking-[0.2em] text-[hsl(var(--fg-muted))] mb-1 font-semibold">Execution Rate</div>
+          <div class="flex items-baseline gap-2">
+            <span class="display text-4xl glow-success tab counter" data-target="87">0</span>
+            <span class="text-[hsl(var(--fg-muted))] text-sm">%</span>
+            <span class="ml-auto text-[10px] glow-success">▲ 4.1pt</span>
+          </div>
+          <div class="h-1 mt-2 bg-white/5 rounded-full overflow-hidden">
+            <div class="h-full rounded-full" style="width: 87%; background: linear-gradient(to right, hsl(var(--success)), hsl(var(--brand-500))); box-shadow: 0 0 12px hsl(var(--success)/0.5);"></div>
+          </div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase tracking-[0.2em] text-[hsl(var(--fg-muted))] mb-1 font-semibold">Decision Velocity</div>
+          <div class="flex items-baseline gap-2">
+            <span class="display text-4xl glow-brand tab counter" data-target="12">0</span>
+            <span class="text-[hsl(var(--fg-muted))] text-sm">/wk</span>
+            <span class="ml-auto text-[10px] glow-brand">▲ 2</span>
+          </div>
+          <div class="h-1 mt-2 bg-white/5 rounded-full overflow-hidden">
+            <div class="h-full rounded-full" style="width: 68%; background: linear-gradient(to right, hsl(var(--brand-500)), hsl(var(--brand-gold))); box-shadow: 0 0 12px hsl(var(--brand-500)/0.5);"></div>
+          </div>
+        </div>
+        <div>
+          <div class="text-[9px] uppercase tracking-[0.2em] text-[hsl(var(--fg-muted))] mb-1 font-semibold">Active Workload</div>
+          <div class="flex items-baseline gap-2">
+            <span class="display text-4xl tab counter" data-target="32" style="color:hsl(var(--warning));text-shadow:0 0 12px hsl(var(--warning)/0.6);">0</span>
+            <span class="text-[hsl(var(--fg-muted))] text-sm">open</span>
+            <span class="ml-auto text-[10px]" style="color:hsl(var(--warning));">─ stable</span>
+          </div>
+          <div class="h-1 mt-2 bg-white/5 rounded-full overflow-hidden">
+            <div class="h-full rounded-full" style="width: 64%; background: linear-gradient(to right, hsl(var(--warning)), hsl(var(--danger))); box-shadow: 0 0 12px hsl(var(--warning)/0.5);"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RIGHT COL : next session + alerts -->
+  <section class="col-span-12 lg:col-span-3 flex flex-col gap-5">
+
+    <div class="card-glass p-5 flex-1">
+      <div class="flex items-baseline justify-between mb-3">
+        <div class="text-[10px] uppercase tracking-[0.2em] text-[hsl(var(--fg-muted))] font-semibold">Next Session</div>
+        <span class="badge bg-[hsl(var(--brand-500)/0.15)] glow-brand border border-[hsl(var(--brand-500)/0.4)]">SCHEDULED</span>
+      </div>
+      <div class="text-2xl glow-brand font-bold tab uppercase">LUN. 18 MAI</div>
+      <div class="text-[11px] text-[hsl(var(--fg-subtle))] mt-1 uppercase tracking-wider">09:00 — 11:00 · 12 MEMBERS</div>
+      <div class="my-4 h-px bg-gradient-to-r from-transparent via-[hsl(var(--brand-500)/0.5)] to-transparent"></div>
+      <div class="space-y-2.5 text-xs">
+        <div class="flex items-start gap-2">
+          <span class="w-1.5 h-1.5 mt-1.5 rounded-full pulse" style="background: hsl(var(--danger));"></span>
+          <div class="flex-1">
+            <div class="text-[hsl(var(--fg))] font-medium">Revue stratégique T2</div>
+            <div class="text-[10px] text-[hsl(var(--fg-subtle))] uppercase tracking-wider">30 MIN · P. MARTIN</div>
+          </div>
+        </div>
+        <div class="flex items-start gap-2">
+          <span class="w-1.5 h-1.5 mt-1.5 rounded-full" style="background: hsl(var(--warning));"></span>
+          <div class="flex-1">
+            <div class="text-[hsl(var(--fg))] font-medium">Lancement Phoenix</div>
+            <div class="text-[10px] text-[hsl(var(--fg-subtle))] uppercase tracking-wider">25 MIN · C. MARTIN</div>
+          </div>
+        </div>
+        <div class="flex items-start gap-2">
+          <span class="w-1.5 h-1.5 mt-1.5 rounded-full" style="background: hsl(var(--fg-subtle));"></span>
+          <div class="flex-1">
+            <div class="text-[hsl(var(--fg))] font-medium">Budget T3 vs prévisionnel</div>
+            <div class="text-[10px] text-[hsl(var(--fg-subtle))] uppercase tracking-wider">20 MIN · J. ROUX</div>
+          </div>
+        </div>
+      </div>
+      <button class="btn-primary w-full mt-5">
+        ⚡ Initiate Session
+      </button>
+    </div>
+
+    <div class="card-glass p-5 flex-1">
+      <div class="flex items-baseline justify-between mb-3">
+        <div class="text-[10px] uppercase tracking-[0.2em] text-[hsl(var(--fg-muted))] font-semibold">System Alerts</div>
+        <span class="badge bg-[hsl(var(--danger)/0.15)] glow-danger border border-[hsl(var(--danger)/0.4)]">5 ACTIVE</span>
+      </div>
+      <div class="space-y-2 text-xs">
+        <div class="flex items-start gap-2 p-2 rounded bg-[hsl(var(--danger)/0.05)] border border-[hsl(var(--danger)/0.3)]">
+          <span class="glow-danger">▲</span>
+          <div class="flex-1">
+            <div class="glow-danger text-[11px] font-bold tracking-wide">QUORUM BREACH</div>
+            <div class="text-[10px] text-[hsl(var(--fg-subtle))] mt-0.5">M-014 — 3/5 minimum</div>
+          </div>
+        </div>
+        <div class="flex items-start gap-2 p-2 rounded bg-[hsl(var(--warning)/0.05)] border border-[hsl(var(--warning)/0.3)]">
+          <span style="color:hsl(var(--warning));">●</span>
+          <div class="flex-1">
+            <div class="text-[11px] font-bold tracking-wide" style="color:hsl(var(--warning));">DEADLINE PROXIMITY</div>
+            <div class="text-[10px] text-[hsl(var(--fg-subtle))] mt-0.5">2 decisions @ T-72h</div>
+          </div>
+        </div>
+        <div class="flex items-start gap-2 p-2 rounded bg-[hsl(var(--brand-500)/0.05)] border border-[hsl(var(--brand-500)/0.3)]">
+          <span class="glow-brand">◈</span>
+          <div class="flex-1">
+            <div class="glow-brand text-[11px] font-bold tracking-wide">CONSENSUS REACHED</div>
+            <div class="text-[10px] text-[hsl(var(--fg-subtle))] mt-0.5">DEC-26-0034 approved</div>
+          </div>
+        </div>
+        <div class="flex items-start gap-2 p-2 rounded bg-[hsl(var(--success)/0.05)] border border-[hsl(var(--success)/0.3)]">
+          <span class="glow-success">●</span>
+          <div class="flex-1">
+            <div class="glow-success text-[11px] font-bold tracking-wide">EXECUTION COMPLETE</div>
+            <div class="text-[10px] text-[hsl(var(--fg-subtle))] mt-0.5">Plan AP-022 → 100%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+</main>
+
+<script>
+  function tick() {
+    const d = new Date();
+    document.getElementById('clock').textContent = d.toLocaleTimeString('fr-FR') + ' UTC+1';
+  }
+  setInterval(tick, 1000); tick();
+
+  const $sp = document.getElementById('spectrum');
+  for (let i = 0; i < 22; i++) {
+    const b = document.createElement('div');
+    b.className = 'bar';
+    b.style.animationDelay = (-Math.random() * 1.8) + 's';
+    b.style.height = '100%';
+    $sp.appendChild(b);
+  }
+
+  function animate() {
+    document.querySelectorAll('.counter, .counter-svg').forEach(el => {
+      const target = parseFloat(el.dataset.target);
+      const dur = 1400 + Math.random() * 800;
+      const start = performance.now();
+      function step(t) {
+        const p = Math.min(1, (t - start) / dur);
+        const e = 1 - Math.pow(1 - p, 3);
+        el.textContent = Math.round(e * target);
+        if (p < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    });
+  }
+  animate();
+  setInterval(animate, 14000);
+</script>
+
+</body>
+</html>

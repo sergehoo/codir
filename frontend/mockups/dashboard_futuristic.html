@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>CODIR — Master Operations Center</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --bg-deep: #02060f;
+    --bg-mid:  #06122a;
+    --cyan:    #22d3ee;
+    --cyan-dim:#0ea5e9;
+    --green:   #34d399;
+    --amber:   #fbbf24;
+    --rose:    #fb7185;
+    --grid:    rgba(34, 211, 238, 0.06);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; min-height: 100vh; overflow: hidden;
+    font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace;
+    color: #cbd5e1; letter-spacing: 0.02em;
+    background:
+      radial-gradient(ellipse at 25% 30%, rgba(14,165,233,0.18), transparent 50%),
+      radial-gradient(ellipse at 80% 70%, rgba(34,211,238,0.12), transparent 55%),
+      radial-gradient(ellipse at 60% 10%, rgba(99,102,241,0.10), transparent 50%),
+      linear-gradient(135deg, var(--bg-deep) 0%, #04081a 50%, var(--bg-deep) 100%);
+  }
+  /* Grille tactique en fond */
+  .grid-bg {
+    position: fixed; inset: 0; pointer-events: none; opacity: 0.6;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 60px 60px;
+    mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+  }
+  /* Particules / orbes flottants */
+  .orb {
+    position: fixed; border-radius: 50%; pointer-events: none;
+    filter: blur(60px); opacity: 0.4;
+    animation: drift 18s ease-in-out infinite alternate;
+  }
+  @keyframes drift {
+    0%   { transform: translate(0, 0) scale(1); }
+    50%  { transform: translate(40px, -30px) scale(1.15); }
+    100% { transform: translate(-30px, 40px) scale(0.95); }
+  }
+  /* Scanline qui balaye */
+  .scanline {
+    position: fixed; left: 0; right: 0; height: 1px; pointer-events: none;
+    background: linear-gradient(90deg, transparent, var(--cyan) 50%, transparent);
+    box-shadow: 0 0 12px var(--cyan), 0 0 30px rgba(34,211,238,0.5);
+    opacity: 0.7;
+    animation: sweep 9s linear infinite;
+  }
+  @keyframes sweep {
+    0%   { top: -2px; }
+    100% { top: 102vh; }
+  }
+  /* Cartes verre / glow */
+  .hud {
+    position: relative; isolation: isolate;
+    background: linear-gradient(135deg, rgba(8,15,31,0.7) 0%, rgba(2,6,15,0.55) 100%);
+    border: 1px solid rgba(34, 211, 238, 0.20);
+    border-radius: 14px;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 0 0 1px rgba(34,211,238,0.05) inset, 0 12px 40px -12px rgba(0, 0, 0, 0.7);
+    transition: all 300ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .hud::before {
+    content: ""; position: absolute; inset: 0; padding: 1px; border-radius: 14px;
+    background: linear-gradient(135deg, rgba(34,211,238,0.55), transparent 40%, transparent 60%, rgba(52, 211, 153, 0.35));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none;
+  }
+  .hud:hover { border-color: rgba(34,211,238,0.5); box-shadow: 0 0 30px -5px rgba(34,211,238,0.4), 0 12px 40px -12px rgba(0,0,0,0.7); }
+  /* Coin marker (corner cuts) */
+  .hud::after {
+    content: ""; position: absolute; inset: 4px; pointer-events: none;
+    background:
+      linear-gradient(to right, var(--cyan) 0, var(--cyan) 14px, transparent 14px) top left/40px 1px no-repeat,
+      linear-gradient(to bottom, var(--cyan) 0, var(--cyan) 14px, transparent 14px) top left/1px 40px no-repeat,
+      linear-gradient(to left, var(--cyan) 0, var(--cyan) 14px, transparent 14px) top right/40px 1px no-repeat,
+      linear-gradient(to bottom, var(--cyan) 0, var(--cyan) 14px, transparent 14px) top right/1px 40px no-repeat,
+      linear-gradient(to right, var(--cyan) 0, var(--cyan) 14px, transparent 14px) bottom left/40px 1px no-repeat,
+      linear-gradient(to top, var(--cyan) 0, var(--cyan) 14px, transparent 14px) bottom left/1px 40px no-repeat,
+      linear-gradient(to left, var(--cyan) 0, var(--cyan) 14px, transparent 14px) bottom right/40px 1px no-repeat,
+      linear-gradient(to top, var(--cyan) 0, var(--cyan) 14px, transparent 14px) bottom right/1px 40px no-repeat;
+    opacity: 0.75;
+  }
+  .tabular { font-variant-numeric: tabular-nums; }
+  .neon { text-shadow: 0 0 12px currentColor, 0 0 30px currentColor; }
+  .neon-cyan  { color: var(--cyan);  text-shadow: 0 0 8px rgba(34,211,238,0.9), 0 0 20px rgba(34,211,238,0.6); }
+  .neon-green { color: var(--green); text-shadow: 0 0 8px rgba(52,211,153,0.9), 0 0 20px rgba(52,211,153,0.6); }
+  .neon-amber { color: var(--amber); text-shadow: 0 0 8px rgba(251,191,36,0.9),  0 0 20px rgba(251,191,36,0.6); }
+  .neon-rose  { color: var(--rose);  text-shadow: 0 0 8px rgba(251,113,133,0.9), 0 0 20px rgba(251,113,133,0.6); }
+  .pulse-dot { animation: pulse-dot 1.4s ease-in-out infinite; }
+  @keyframes pulse-dot { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.7); } }
+  .rotate-slow      { animation: rotate 30s linear infinite; transform-origin: center; }
+  .rotate-medium    { animation: rotate 18s linear infinite; transform-origin: center; }
+  .rotate-fast      { animation: rotate 10s linear infinite reverse; transform-origin: center; }
+  @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .glitch-line { animation: glitch-line 8s ease-in-out infinite; }
+  @keyframes glitch-line {
+    0%, 100% { opacity: 0; }
+    1%, 4% { opacity: 1; transform: translateX(0); }
+    2% { transform: translateX(-2px); }
+    3% { transform: translateX(2px); }
+  }
+  .scrollbar::-webkit-scrollbar { width: 4px; }
+  .scrollbar::-webkit-scrollbar-thumb { background: rgba(34,211,238,0.4); border-radius: 999px; }
+  /* Spectrum bars */
+  .bar {
+    flex: 1; background: linear-gradient(to top, transparent, rgba(52,211,153,0.3), rgba(52,211,153,0.9), rgba(34,211,238,0.95));
+    border-radius: 1px;
+    transform-origin: bottom; animation: spectrum 1.6s ease-in-out infinite;
+    box-shadow: 0 0 8px rgba(34,211,238,0.4);
+  }
+  @keyframes spectrum {
+    0%, 100% { transform: scaleY(0.25); }
+    25%      { transform: scaleY(0.7); }
+    50%      { transform: scaleY(1); }
+    75%      { transform: scaleY(0.5); }
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px; font-size: 9px;
+    padding: 2px 6px; border-radius: 4px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  /* Counter qui s'incrémente */
+  .counter { display: inline-block; min-width: 2ch; text-align: right; }
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+
+<!-- Orbes glow flottants -->
+<div class="orb" style="width: 500px; height: 500px; top: -100px; left: -100px; background: #06b6d4;"></div>
+<div class="orb" style="width: 400px; height: 400px; bottom: -80px; right: 5%; background: #6366f1; animation-delay: -8s;"></div>
+<div class="orb" style="width: 300px; height: 300px; top: 40%; right: 30%; background: #10b981; animation-delay: -14s; opacity: 0.25;"></div>
+
+<div class="scanline"></div>
+
+<!-- TOPBAR -->
+<header class="relative z-10 px-8 py-4 flex items-center gap-6 border-b border-cyan-500/15">
+  <div class="flex items-center gap-3">
+    <div class="relative w-10 h-10">
+      <svg viewBox="0 0 40 40" class="absolute inset-0">
+        <circle cx="20" cy="20" r="18" fill="none" stroke="rgba(34,211,238,0.3)" stroke-width="1"/>
+        <circle cx="20" cy="20" r="14" fill="none" stroke="rgba(34,211,238,0.6)" stroke-width="1"
+                stroke-dasharray="20 10" class="rotate-medium"/>
+        <text x="20" y="25" text-anchor="middle" font-size="14" font-weight="700" fill="#22d3ee">C</text>
+      </svg>
+    </div>
+    <div>
+      <div class="text-xs neon-cyan font-bold tracking-[0.3em]">CODIR // OPS</div>
+      <div class="text-[10px] text-slate-500 tracking-wider">MASTER COMMAND CENTER</div>
+    </div>
+  </div>
+
+  <div class="ml-6 text-[10px] flex items-center gap-4 text-slate-400">
+    <span class="flex items-center gap-1.5">
+      <span class="w-1.5 h-1.5 rounded-full bg-green-400 pulse-dot shadow-[0_0_8px_#34d399]"></span>
+      SYSTEM ONLINE
+    </span>
+    <span>NODE-01</span>
+    <span>UPTIME 47d 14h</span>
+    <span class="neon-cyan font-mono" id="clock"></span>
+  </div>
+
+  <div class="ml-auto flex items-center gap-3 text-xs">
+    <div class="hud px-3 py-1.5 flex items-center gap-2">
+      <span class="text-[9px] uppercase tracking-wider text-slate-400">Tenant</span>
+      <span class="neon-cyan font-semibold">ACME GROUP</span>
+    </div>
+    <div class="hud px-3 py-1.5 flex items-center gap-2">
+      <span class="text-[9px] uppercase tracking-wider text-slate-400">User</span>
+      <span class="neon-green font-semibold">C.MARTIN /// DG</span>
+    </div>
+  </div>
+</header>
+
+<!-- MAIN GRID -->
+<main class="relative z-10 p-6 grid grid-cols-12 gap-5 h-[calc(100vh-72px)]">
+
+  <!-- COL 1 — Spectrum + decisions list -->
+  <section class="col-span-3 flex flex-col gap-5">
+
+    <!-- Activity spectrum -->
+    <div class="hud p-4 flex-1">
+      <div class="flex items-baseline justify-between mb-3">
+        <div class="text-[10px] uppercase tracking-[0.2em] text-slate-400">Activity Stream</div>
+        <span class="badge bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">LIVE</span>
+      </div>
+      <div class="text-4xl font-bold neon-green tabular mb-1"><span class="counter" data-target="247">0</span></div>
+      <div class="text-[10px] text-slate-500 mb-3">EVENTS / 24H · +18%</div>
+      <div class="flex items-end gap-1 h-32" id="spectrum"></div>
+    </div>
+
+    <!-- Recent decisions -->
+    <div class="hud p-4 flex-1 overflow-hidden">
+      <div class="flex items-baseline justify-between mb-3">
+        <div class="text-[10px] uppercase tracking-[0.2em] text-slate-400">Recent Decisions</div>
+        <span class="badge bg-rose-500/10 text-rose-300 border border-rose-500/30">3 LATE</span>
+      </div>
+      <div class="space-y-2 text-xs scrollbar overflow-auto h-56">
+        <div class="flex items-baseline gap-2 py-1.5 border-l-2 border-cyan-500 pl-3">
+          <span class="neon-cyan font-mono text-[10px]">DEC-26-0042</span>
+          <span class="ml-auto badge bg-amber-500/10 text-amber-300">CRIT</span>
+        </div>
+        <div class="text-slate-300 ml-3 -mt-1 mb-2">Lancement Projet Phoenix</div>
+
+        <div class="flex items-baseline gap-2 py-1.5 border-l-2 border-rose-500 pl-3">
+          <span class="text-rose-300 font-mono text-[10px]">DEC-26-0038</span>
+          <span class="ml-auto badge bg-rose-500/20 text-rose-200">OVERDUE</span>
+        </div>
+        <div class="text-slate-300 ml-3 -mt-1 mb-2">Restructuration CEMAC</div>
+
+        <div class="flex items-baseline gap-2 py-1.5 border-l-2 border-green-500 pl-3">
+          <span class="neon-green font-mono text-[10px]">DEC-26-0034</span>
+          <span class="ml-auto badge bg-green-500/10 text-green-300">DONE</span>
+        </div>
+        <div class="text-slate-300 ml-3 -mt-1 mb-2">Renouvellement AWS</div>
+
+        <div class="flex items-baseline gap-2 py-1.5 border-l-2 border-cyan-500 pl-3">
+          <span class="neon-cyan font-mono text-[10px]">DEC-26-0029</span>
+          <span class="ml-auto badge bg-cyan-500/10 text-cyan-300">EXEC</span>
+        </div>
+        <div class="text-slate-300 ml-3 -mt-1">Acquisition NovaTech LOI</div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- COL 2 — CENTER : Master gauge -->
+  <section class="col-span-6 flex flex-col gap-5">
+
+    <!-- Top : 3 gauges -->
+    <div class="grid grid-cols-3 gap-5">
+
+      <div class="hud p-4 text-center">
+        <div class="text-[9px] uppercase tracking-[0.2em] text-slate-400 mb-2">Meetings</div>
+        <svg viewBox="0 0 100 100" class="w-24 h-24 mx-auto">
+          <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(34,211,238,0.15)" stroke-width="2"/>
+          <circle cx="50" cy="50" r="42" fill="none" stroke="#22d3ee" stroke-width="2.5"
+                  stroke-dasharray="263" stroke-dashoffset="65" stroke-linecap="round"
+                  transform="rotate(-90 50 50)" style="filter: drop-shadow(0 0 6px #22d3ee);"/>
+          <circle cx="50" cy="50" r="35" fill="none" stroke="rgba(34,211,238,0.3)" stroke-width="0.5"
+                  stroke-dasharray="3 5" class="rotate-medium"/>
+        </svg>
+        <div class="-mt-20 mb-9 text-3xl neon-cyan tabular font-bold counter" data-target="12">0</div>
+        <div class="text-[10px] text-slate-500">3 UPCOMING · 1 LIVE</div>
+      </div>
+
+      <div class="hud p-4 text-center">
+        <div class="text-[9px] uppercase tracking-[0.2em] text-slate-400 mb-2">Decisions</div>
+        <svg viewBox="0 0 100 100" class="w-24 h-24 mx-auto">
+          <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(52,211,153,0.15)" stroke-width="2"/>
+          <circle cx="50" cy="50" r="42" fill="none" stroke="#34d399" stroke-width="2.5"
+                  stroke-dasharray="263" stroke-dashoffset="120" stroke-linecap="round"
+                  transform="rotate(-90 50 50)" style="filter: drop-shadow(0 0 6px #34d399);"/>
+          <circle cx="50" cy="50" r="35" fill="none" stroke="rgba(52,211,153,0.3)" stroke-width="0.5"
+                  stroke-dasharray="3 5" class="rotate-slow"/>
+        </svg>
+        <div class="-mt-20 mb-9 text-3xl neon-green tabular font-bold counter" data-target="47">0</div>
+        <div class="text-[10px] text-slate-500">23 PENDING · 24 DONE</div>
+      </div>
+
+      <div class="hud p-4 text-center">
+        <div class="text-[9px] uppercase tracking-[0.2em] text-slate-400 mb-2">Actions</div>
+        <svg viewBox="0 0 100 100" class="w-24 h-24 mx-auto">
+          <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(251,191,36,0.15)" stroke-width="2"/>
+          <circle cx="50" cy="50" r="42" fill="none" stroke="#fbbf24" stroke-width="2.5"
+                  stroke-dasharray="263" stroke-dashoffset="180" stroke-linecap="round"
+                  transform="rotate(-90 50 50)" style="filter: drop-shadow(0 0 6px #fbbf24);"/>
+          <circle cx="50" cy="50" r="35" fill="none" stroke="rgba(251,191,36,0.3)" stroke-width="0.5"
+                  stroke-dasharray="3 5" class="rotate-fast"/>
+        </svg>
+        <div class="-mt-20 mb-9 text-3xl neon-amber tabular font-bold counter" data-target="86">0</div>
+        <div class="text-[10px] text-slate-500">14 LATE · 72 ACTIVE</div>
+      </div>
+
+    </div>
+
+    <!-- Master gauge central -->
+    <div class="hud p-6 flex-1 grid grid-cols-2 items-center">
+      <div class="relative aspect-square max-w-md">
+        <svg viewBox="0 0 320 320" class="w-full h-full">
+          <!-- Outer ring rotating -->
+          <g class="rotate-slow" style="transform-origin: 160px 160px;">
+            <circle cx="160" cy="160" r="148" fill="none" stroke="rgba(34,211,238,0.15)" stroke-width="1"/>
+            <circle cx="160" cy="160" r="148" fill="none" stroke="rgba(34,211,238,0.7)" stroke-width="1.5"
+                    stroke-dasharray="2 16" />
+            <text x="160" y="20" text-anchor="middle" fill="#22d3ee" font-size="9" letter-spacing="3">EXECUTIVE.PERFORMANCE.INDEX</text>
+          </g>
+          <!-- Mid ring counter rotating -->
+          <g class="rotate-medium" style="transform-origin: 160px 160px;">
+            <circle cx="160" cy="160" r="125" fill="none" stroke="rgba(52,211,153,0.4)" stroke-width="1" stroke-dasharray="50 6 2 6"/>
+          </g>
+          <!-- Crosshair static -->
+          <line x1="160" y1="10" x2="160" y2="40" stroke="rgba(34,211,238,0.6)" stroke-width="1"/>
+          <line x1="160" y1="280" x2="160" y2="310" stroke="rgba(34,211,238,0.6)" stroke-width="1"/>
+          <line x1="10" y1="160" x2="40" y2="160" stroke="rgba(34,211,238,0.6)" stroke-width="1"/>
+          <line x1="280" y1="160" x2="310" y2="160" stroke="rgba(34,211,238,0.6)" stroke-width="1"/>
+          <!-- Progress arc -->
+          <circle cx="160" cy="160" r="100" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="14"/>
+          <circle cx="160" cy="160" r="100" fill="none" stroke="url(#mainGrad)" stroke-width="14"
+                  stroke-dasharray="628" stroke-dashoffset="157" stroke-linecap="round"
+                  transform="rotate(-90 160 160)" style="filter: drop-shadow(0 0 16px #22d3ee);"/>
+          <defs>
+            <linearGradient id="mainGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%"   stop-color="#22d3ee"/>
+              <stop offset="50%"  stop-color="#34d399"/>
+              <stop offset="100%" stop-color="#fbbf24"/>
+            </linearGradient>
+          </defs>
+          <!-- Inner ring rotating fast -->
+          <g class="rotate-fast" style="transform-origin: 160px 160px;">
+            <circle cx="160" cy="160" r="75" fill="none" stroke="rgba(34,211,238,0.35)" stroke-width="0.8"
+                    stroke-dasharray="120 60"/>
+          </g>
+          <!-- Inner hexagon-ish -->
+          <polygon points="160,90 220,125 220,195 160,230 100,195 100,125"
+                   fill="rgba(34,211,238,0.04)" stroke="rgba(34,211,238,0.25)" stroke-width="1"/>
+          <!-- Center text -->
+          <text x="160" y="158" text-anchor="middle" fill="#22d3ee" font-size="62" font-weight="800"
+                style="filter: drop-shadow(0 0 18px rgba(34,211,238,0.8));"
+                class="counter-svg" data-target="74">0</text>
+          <text x="160" y="180" text-anchor="middle" fill="#94a3b8" font-size="10" letter-spacing="3">EPI SCORE</text>
+          <text x="160" y="198" text-anchor="middle" fill="#34d399" font-size="9">▲ +6.2 SINCE LAST CYCLE</text>
+        </svg>
+      </div>
+
+      <div class="space-y-5 px-6">
+        <div>
+          <div class="text-[9px] uppercase tracking-[0.2em] text-slate-400 mb-1">Execution Rate</div>
+          <div class="flex items-baseline gap-2">
+            <span class="text-4xl neon-green font-bold tabular counter" data-target="87">0</span>
+            <span class="text-slate-400 text-sm">%</span>
+            <span class="ml-auto text-[10px] text-green-400">▲ 4.1pt</span>
+          </div>
+          <div class="h-1 mt-2 bg-white/5 rounded">
+            <div class="h-full rounded bg-gradient-to-r from-green-400 to-cyan-400" style="width: 87%; box-shadow: 0 0 12px #34d399;"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="text-[9px] uppercase tracking-[0.2em] text-slate-400 mb-1">Decision Velocity</div>
+          <div class="flex items-baseline gap-2">
+            <span class="text-4xl neon-cyan font-bold tabular counter" data-target="12">0</span>
+            <span class="text-slate-400 text-sm">/wk</span>
+            <span class="ml-auto text-[10px] text-cyan-300">▲ 2</span>
+          </div>
+          <div class="h-1 mt-2 bg-white/5 rounded">
+            <div class="h-full rounded bg-gradient-to-r from-cyan-400 to-blue-400" style="width: 68%; box-shadow: 0 0 12px #22d3ee;"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="text-[9px] uppercase tracking-[0.2em] text-slate-400 mb-1">Quorum Health</div>
+          <div class="flex items-baseline gap-2">
+            <span class="text-4xl neon-amber font-bold tabular counter" data-target="92">0</span>
+            <span class="text-slate-400 text-sm">%</span>
+            <span class="ml-auto text-[10px] text-amber-300">─ stable</span>
+          </div>
+          <div class="h-1 mt-2 bg-white/5 rounded">
+            <div class="h-full rounded bg-gradient-to-r from-amber-400 to-rose-400" style="width: 92%; box-shadow: 0 0 12px #fbbf24;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- COL 3 — Next meeting + alerts -->
+  <section class="col-span-3 flex flex-col gap-5">
+
+    <div class="hud p-4 flex-1">
+      <div class="flex items-baseline justify-between mb-3">
+        <div class="text-[10px] uppercase tracking-[0.2em] text-slate-400">Next Session</div>
+        <span class="badge bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">SCHEDULED</span>
+      </div>
+      <div class="text-2xl neon-cyan font-bold tabular">LUN. 18 MAI</div>
+      <div class="text-[11px] text-slate-400 mt-1">09:00 — 11:00 · 12 MEMBERS</div>
+
+      <div class="my-4 h-px bg-gradient-to-r from-transparent via-cyan-400/50 to-transparent"></div>
+
+      <div class="space-y-2.5 text-xs">
+        <div class="flex items-start gap-2">
+          <span class="w-1.5 h-1.5 mt-1.5 rounded-full bg-rose-500 pulse-dot"></span>
+          <div class="flex-1">
+            <div class="text-slate-300 font-medium">Revue stratégique T2</div>
+            <div class="text-[10px] text-slate-500">30 min · P. MARTIN</div>
+          </div>
+        </div>
+        <div class="flex items-start gap-2">
+          <span class="w-1.5 h-1.5 mt-1.5 rounded-full bg-amber-500"></span>
+          <div class="flex-1">
+            <div class="text-slate-300 font-medium">Lancement Phoenix</div>
+            <div class="text-[10px] text-slate-500">25 min · C. MARTIN</div>
+          </div>
+        </div>
+        <div class="flex items-start gap-2">
+          <span class="w-1.5 h-1.5 mt-1.5 rounded-full bg-slate-500"></span>
+          <div class="flex-1">
+            <div class="text-slate-300 font-medium">Budget T3 vs prévisionnel</div>
+            <div class="text-[10px] text-slate-500">20 min · J. ROUX</div>
+          </div>
+        </div>
+        <div class="flex items-start gap-2">
+          <span class="w-1.5 h-1.5 mt-1.5 rounded-full bg-slate-500"></span>
+          <div class="flex-1">
+            <div class="text-slate-300 font-medium">Plan de continuité</div>
+            <div class="text-[10px] text-slate-500">15 min · S. KLEIN</div>
+          </div>
+        </div>
+      </div>
+
+      <button class="mt-5 w-full py-2 rounded text-xs uppercase tracking-[0.2em] font-semibold
+                     bg-gradient-to-r from-cyan-500/20 to-green-500/20
+                     border border-cyan-500/40 text-cyan-300 hover:from-cyan-500/40 hover:to-green-500/40
+                     transition shadow-[0_0_18px_rgba(34,211,238,0.25)]">
+        ▶ Initiate Session
+      </button>
+    </div>
+
+    <div class="hud p-4 flex-1 overflow-hidden">
+      <div class="flex items-baseline justify-between mb-3">
+        <div class="text-[10px] uppercase tracking-[0.2em] text-slate-400">System Alerts</div>
+        <span class="badge bg-rose-500/10 text-rose-300 border border-rose-500/30">5 ACTIVE</span>
+      </div>
+      <div class="space-y-2 text-xs scrollbar overflow-auto h-56">
+        <div class="flex items-start gap-2 p-2 rounded bg-rose-500/5 border border-rose-500/20">
+          <span class="text-rose-400">⚠</span>
+          <div class="flex-1">
+            <div class="neon-rose text-[11px] font-semibold">QUORUM BREACH</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">Meeting M-014 — 3/5 minimum</div>
+          </div>
+        </div>
+        <div class="flex items-start gap-2 p-2 rounded bg-amber-500/5 border border-amber-500/20">
+          <span class="text-amber-400">▲</span>
+          <div class="flex-1">
+            <div class="neon-amber text-[11px] font-semibold">DEADLINE PROXIMITY</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">2 decisions @ T-72h</div>
+          </div>
+        </div>
+        <div class="flex items-start gap-2 p-2 rounded bg-cyan-500/5 border border-cyan-500/20">
+          <span class="text-cyan-400">◈</span>
+          <div class="flex-1">
+            <div class="neon-cyan text-[11px] font-semibold">CONSENSUS REACHED</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">DEC-26-0034 approved</div>
+          </div>
+        </div>
+        <div class="flex items-start gap-2 p-2 rounded bg-green-500/5 border border-green-500/20">
+          <span class="text-green-400">●</span>
+          <div class="flex-1">
+            <div class="neon-green text-[11px] font-semibold">EXECUTION COMPLETE</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">Plan AP-022 → 100%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+</main>
+
+<script>
+  // Horloge
+  function tick() {
+    const d = new Date();
+    const t = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    document.getElementById('clock').textContent = t + ' UTC+1';
+  }
+  setInterval(tick, 1000); tick();
+
+  // Spectrum bars
+  const $sp = document.getElementById('spectrum');
+  for (let i = 0; i < 22; i++) {
+    const b = document.createElement('div');
+    b.className = 'bar';
+    b.style.animationDelay = (-Math.random() * 1.6) + 's';
+    b.style.height = '100%';
+    $sp.appendChild(b);
+  }
+
+  // Counters animés
+  function animateCounters() {
+    document.querySelectorAll('.counter').forEach(el => {
+      const target = parseFloat(el.dataset.target);
+      const dur = 1400 + Math.random() * 800;
+      const start = performance.now();
+      function step(t) {
+        const p = Math.min(1, (t - start) / dur);
+        const eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = Math.round(eased * target);
+        if (p < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    });
+    document.querySelectorAll('.counter-svg').forEach(el => {
+      const target = parseFloat(el.dataset.target);
+      const dur = 2000;
+      const start = performance.now();
+      function step(t) {
+        const p = Math.min(1, (t - start) / dur);
+        const eased = 1 - Math.pow(1 - p, 3);
+        el.textContent = Math.round(eased * target);
+        if (p < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    });
+  }
+  animateCounters();
+  setInterval(animateCounters, 12000);
+</script>
+
+</body>
+</html>

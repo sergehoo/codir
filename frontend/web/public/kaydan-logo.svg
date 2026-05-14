@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 175" fill="none">
+  <!-- Fond noir signature Kaydan -->
+  <rect width="420" height="175" fill="#0A0A0A"/>
+
+  <!-- Bracket orange en L (haut + droite) -->
+  <path d="M 280 10 L 410 10 L 410 80"
+        stroke="#F97316" stroke-width="14" stroke-linecap="square" fill="none"/>
+
+  <!-- KAYDAN -->
+  <text x="20" y="115"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="86" font-weight="900"
+        fill="#FFFFFF" letter-spacing="-2">KAYDAN</text>
+
+  <!-- Tagline GROUPE -->
+  <text x="260" y="160"
+        font-family="Arial, Helvetica, sans-serif"
+        font-size="20" font-weight="700"
+        fill="#F97316" letter-spacing="3.5">GROUPE</text>
+</svg>

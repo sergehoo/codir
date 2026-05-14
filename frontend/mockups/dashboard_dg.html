@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>CODIR — Cockpit DG</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+<style>
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; background: hsl(220 20% 98%); color: hsl(222 47% 11%); }
+  .tabular { font-variant-numeric: tabular-nums; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; letter-spacing: 0.02em; }
+  .scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+  .scrollbar::-webkit-scrollbar-thumb { background: hsl(220 13% 80%); border-radius: 999px; }
+</style>
+</head>
+<body>
+
+<div class="flex h-screen overflow-hidden">
+
+  <!-- Sidebar -->
+  <aside class="w-60 shrink-0 bg-white border-r border-slate-200 flex flex-col">
+    <div class="h-14 px-5 flex items-center gap-2 border-b border-slate-200">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-cyan-500 grid place-items-center text-white font-bold">C</div>
+      <span class="font-semibold">CODIR</span>
+    </div>
+    <nav class="flex-1 px-3 py-4 space-y-1 text-sm">
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 font-semibold">
+        <span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span> Cockpit DG
+      </a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-100 cursor-pointer">📅 Réunions <span class="ml-auto text-xs bg-slate-200 px-2 rounded-full">3</span></a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-100 cursor-pointer">⚖️ Décisions <span class="ml-auto text-xs bg-rose-100 text-rose-700 px-2 rounded-full">7</span></a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-100 cursor-pointer">✓ Plans d'action</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-100 cursor-pointer">📊 KPI</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-100 cursor-pointer">💼 Budgets</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-100 cursor-pointer">⚠ Risques</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-100 cursor-pointer">📄 Documents</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-100 cursor-pointer">📈 Rapports</a>
+      <div class="pt-3 mt-3 border-t border-slate-200">
+        <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-100 cursor-pointer">🛡 Audit</a>
+        <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-100 cursor-pointer">⚙ Paramètres</a>
+      </div>
+    </nav>
+    <div class="p-4 border-t border-slate-200 text-xs text-slate-500">
+      <div class="font-semibold text-slate-700">Catherine Martin</div>
+      <div>DG — Acme Group</div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="flex-1 overflow-auto scrollbar">
+
+    <!-- Topbar -->
+    <div class="h-14 sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-slate-200 px-8 flex items-center gap-4">
+      <h1 class="text-lg font-semibold">Cockpit exécutif</h1>
+      <span class="text-xs text-slate-500">Mercredi 13 mai 2026 — 09:42</span>
+      <div class="ml-auto flex items-center gap-3">
+        <button class="text-xs bg-slate-100 px-3 py-1.5 rounded-lg flex items-center gap-2 hover:bg-slate-200">
+          🔍 <span class="text-slate-500">Rechercher</span> <kbd class="bg-white border border-slate-300 px-1.5 py-0.5 rounded text-[10px]">⌘K</kbd>
+        </button>
+        <button class="text-xs px-3 py-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-semibold flex items-center gap-1.5">
+          ✦ Copilot IA
+        </button>
+        <div class="relative">
+          🔔 <span class="absolute -top-1 -right-1 bg-rose-500 text-white text-[10px] font-bold rounded-full w-4 h-4 grid place-items-center">3</span>
+        </div>
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-rose-500 grid place-items-center text-white text-xs font-bold">CM</div>
+      </div>
+    </div>
+
+    <div class="p-8 space-y-6">
+
+      <!-- Briefing IA -->
+      <div class="bg-gradient-to-r from-violet-50 via-fuchsia-50 to-rose-50 border border-violet-200 rounded-2xl p-5 flex gap-4">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-600 grid place-items-center text-white text-lg shrink-0">✦</div>
+        <div class="flex-1">
+          <div class="text-[11px] uppercase font-bold text-violet-700 tracking-wider mb-1">Briefing exécutif du jour</div>
+          <div class="text-sm text-slate-700 leading-relaxed">
+            Trois points d'attention&nbsp;: <span class="font-semibold">(1)</span> la trésorerie groupe a chuté de 8 % en avril
+            (<a class="text-violet-700 underline">analyse cause racine</a>) ; <span class="font-semibold">(2)</span> deux
+            décisions critiques arrivent à échéance cette semaine
+            (<a class="text-violet-700 underline">DEC-2026-0034, DEC-2026-0038</a>) ; <span class="font-semibold">(3)</span>
+            le NPS clients a progressé de +6 points après la résolution de l'incident
+            <a class="text-violet-700 underline">INC-051</a>. Bonne journée.
+          </div>
+        </div>
+      </div>
+
+      <!-- Pulse Organisationnel : 6 KPI -->
+      <section>
+        <div class="flex items-baseline justify-between mb-3">
+          <h2 class="text-sm uppercase tracking-wider font-bold text-slate-500">Pulse organisationnel</h2>
+          <button class="text-xs text-blue-600 font-semibold">Configurer</button>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4" id="kpi-grid"></div>
+      </section>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- Heatmap stratégique 2/3 -->
+        <section class="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-5">
+          <div class="flex items-baseline justify-between mb-4">
+            <h2 class="text-sm uppercase tracking-wider font-bold text-slate-500">Carte de chaleur stratégique</h2>
+            <span class="text-xs text-slate-400">Direction × Performance</span>
+          </div>
+          <div id="heatmap" style="height: 320px;"></div>
+        </section>
+
+        <!-- Risques rouges 1/3 -->
+        <section class="bg-white border border-slate-200 rounded-2xl p-5">
+          <h2 class="text-sm uppercase tracking-wider font-bold text-slate-500 mb-4">Risques actifs</h2>
+          <div id="risk-radar" style="height: 200px;"></div>
+          <div class="space-y-2 mt-4">
+            <div class="flex items-center gap-2 p-2 bg-rose-50 rounded-lg border border-rose-100 text-sm">
+              <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+              <span class="font-medium">Cyber attack surface</span>
+              <span class="ml-auto text-xs text-slate-500">DSI</span>
+            </div>
+            <div class="flex items-center gap-2 p-2 bg-amber-50 rounded-lg border border-amber-100 text-sm">
+              <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+              <span class="font-medium">Concentration fournisseurs</span>
+              <span class="ml-auto text-xs text-slate-500">DAF</span>
+            </div>
+            <div class="flex items-center gap-2 p-2 bg-amber-50 rounded-lg border border-amber-100 text-sm">
+              <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+              <span class="font-medium">Turnover clé tech</span>
+              <span class="ml-auto text-xs text-slate-500">DRH</span>
+            </div>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- Décisions critiques en cours + Prochain CODIR -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <section class="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-5">
+          <div class="flex items-baseline justify-between mb-4">
+            <h2 class="text-sm uppercase tracking-wider font-bold text-slate-500">Décisions critiques en cours</h2>
+            <span class="text-xs text-rose-600 font-semibold">7 ouvertes — 3 en retard</span>
+          </div>
+          <div class="space-y-3" id="decision-list"></div>
+        </section>
+
+        <section class="bg-white border border-slate-200 rounded-2xl p-5">
+          <h2 class="text-sm uppercase tracking-wider font-bold text-slate-500 mb-4">Prochain CODIR</h2>
+          <div class="text-3xl font-semibold tabular">Lun. 18 mai</div>
+          <div class="text-sm text-slate-500 mb-4">09:00 — 11:00 · Hybride · 12 membres</div>
+          <div class="space-y-2 mb-4">
+            <div class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Ordre du jour (extrait)</div>
+            <div class="text-sm flex items-start gap-2"><span class="text-rose-500 mt-1">●</span><span><strong>Revue stratégique T2</strong> — 30 min</span></div>
+            <div class="text-sm flex items-start gap-2"><span class="text-amber-500 mt-1">●</span><span>Lancement Projet Phoenix — 25 min</span></div>
+            <div class="text-sm flex items-start gap-2"><span class="text-slate-400 mt-1">●</span><span>Budget T3 vs prévisionnel — 20 min</span></div>
+            <div class="text-sm flex items-start gap-2"><span class="text-slate-400 mt-1">●</span><span>Plan de continuité activité — 15 min</span></div>
+          </div>
+          <button class="w-full text-sm bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white font-semibold py-2 rounded-lg flex items-center justify-center gap-2">
+            ✦ Préparer mon mot d'introduction
+          </button>
+        </section>
+
+      </div>
+
+      <!-- Activité récente -->
+      <section class="bg-white border border-slate-200 rounded-2xl p-5">
+        <h2 class="text-sm uppercase tracking-wider font-bold text-slate-500 mb-4">Activité récente</h2>
+        <div class="space-y-2 text-sm">
+          <div class="flex items-center gap-3 py-1.5">
+            <div class="w-7 h-7 rounded-full bg-emerald-100 grid place-items-center text-emerald-700 text-xs font-bold">PM</div>
+            <span><strong>Pierre Martin</strong> a validé la décision <a class="text-blue-600 underline">DEC-2026-0041</a></span>
+            <span class="ml-auto text-xs text-slate-400">il y a 12 min</span>
+          </div>
+          <div class="flex items-center gap-3 py-1.5">
+            <div class="w-7 h-7 rounded-full bg-violet-100 grid place-items-center text-violet-700 text-xs">✦</div>
+            <span>Le PV de la réunion du 6 mai est <a class="text-blue-600 underline">prêt à valider</a></span>
+            <span class="ml-auto text-xs text-slate-400">il y a 1 h</span>
+          </div>
+          <div class="flex items-center gap-3 py-1.5">
+            <div class="w-7 h-7 rounded-full bg-rose-100 grid place-items-center text-rose-700 text-xs">⚠</div>
+            <span><strong>KPI Trésorerie</strong> a franchi le seuil warning (-8 %)</span>
+            <span class="ml-auto text-xs text-slate-400">il y a 3 h</span>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+
+<script>
+  // ─── KPI Cards ───────────────────────────────────────────────────
+  const KPIS = [
+    { label: "Revenu MTD",   value: "47,3", unit: "M€",  delta: "+12,4%", up: true,  color: "blue",  spark: [42,44,43,45,46,47,46,47,48,47,47,48] },
+    { label: "Marge brute",  value: "38,2", unit: "%",   delta: "+1,1 pt", up: true,  color: "emerald", spark: [36,36,37,37,37,38,38,38,38,38,38,38] },
+    { label: "Trésorerie",   value: "4,2",  unit: "M€",  delta: "-8,0%",  up: false, color: "rose",  spark: [5.0,4.9,4.9,4.6,4.5,4.5,4.3,4.4,4.3,4.2,4.2,4.2] },
+    { label: "Effectif",     value: "2 184", unit: "",   delta: "+11",    up: true,  color: "slate", spark: [2140,2150,2155,2160,2170,2172,2175,2178,2180,2182,2183,2184] },
+    { label: "Décisions ouv.", value: "23", unit: "",   delta: "+3",     up: false, color: "amber", spark: [20,21,21,22,21,22,22,23,23,23,23,23] },
+    { label: "Risques crit.", value: "1",   unit: "",   delta: "0",      up: true,  color: "rose",  spark: [2,2,2,2,1,1,1,1,1,1,1,1] },
+  ];
+  const colorMap = {
+    blue:    { bar: 'bg-blue-500',    text: 'text-blue-600',    line: '#2563eb' },
+    emerald: { bar: 'bg-emerald-500', text: 'text-emerald-600', line: '#059669' },
+    rose:    { bar: 'bg-rose-500',    text: 'text-rose-600',    line: '#e11d48' },
+    amber:   { bar: 'bg-amber-500',   text: 'text-amber-600',   line: '#f59e0b' },
+    slate:   { bar: 'bg-slate-500',   text: 'text-slate-600',   line: '#64748b' },
+  };
+  const $grid = document.getElementById('kpi-grid');
+  KPIS.forEach((k, i) => {
+    const c = colorMap[k.color];
+    const cardId = `spark${i}`;
+    $grid.insertAdjacentHTML('beforeend', `
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 hover:shadow-md transition group cursor-pointer">
+        <div class="text-xs text-slate-500 mb-1">${k.label}</div>
+        <div class="flex items-baseline gap-1 mb-1">
+          <div class="text-3xl font-semibold tabular">${k.value}</div>
+          <div class="text-sm text-slate-500">${k.unit}</div>
+        </div>
+        <div class="flex items-center justify-between mb-2">
+          <div class="${c.text} text-xs font-semibold flex items-center gap-0.5">${k.up ? '▲' : '▼'} ${k.delta}</div>
+          <div class="text-[10px] text-slate-400">vs M-1</div>
+        </div>
+        <div id="${cardId}" style="height: 32px;"></div>
+      </div>
+    `);
+    requestAnimationFrame(() => {
+      const ch = echarts.init(document.getElementById(cardId));
+      ch.setOption({
+        grid: { left: 0, right: 0, top: 2, bottom: 2 },
+        xAxis: { type: 'category', show: false, data: k.spark.map((_, i) => i) },
+        yAxis: { type: 'value', show: false },
+        series: [{ type: 'line', data: k.spark, smooth: true, symbol: 'none', lineStyle: { color: c.line, width: 2 }, areaStyle: { color: c.line, opacity: 0.15 } }],
+      });
+    });
+  });
+
+  // ─── Heatmap directions ──────────────────────────────────────────
+  const directions = ['DAF', 'DRH', 'DSI', 'DT', 'DC', 'Achats'];
+  const kpiAxes = ['Performance', 'Budget', 'Risques', 'KPI cibles', 'Engagement'];
+  const heatData = [];
+  for (let i = 0; i < directions.length; i++) {
+    for (let j = 0; j < kpiAxes.length; j++) {
+      heatData.push([j, i, Math.round(50 + Math.random() * 50)]);
+    }
+  }
+  const hm = echarts.init(document.getElementById('heatmap'));
+  hm.setOption({
+    grid: { left: 80, right: 20, top: 30, bottom: 30 },
+    xAxis: { type: 'category', data: kpiAxes, splitArea: { show: true }, axisLine: { show: false }, axisTick: { show: false } },
+    yAxis: { type: 'category', data: directions, splitArea: { show: true }, axisLine: { show: false }, axisTick: { show: false } },
+    visualMap: { min: 0, max: 100, calculable: true, orient: 'horizontal', left: 'center', bottom: 0,
+      inRange: { color: ['#fecaca', '#fde68a', '#bbf7d0', '#86efac', '#4ade80'] }, show: false },
+    series: [{ name: 'Score', type: 'heatmap', data: heatData,
+      label: { show: true, formatter: (p) => p.value[2] },
+      itemStyle: { borderColor: 'white', borderWidth: 2, borderRadius: 6 } }]
+  });
+
+  // ─── Risk Radar ──────────────────────────────────────────────────
+  const rr = echarts.init(document.getElementById('risk-radar'));
+  rr.setOption({
+    radar: {
+      indicator: [
+        { name: 'Cyber', max: 100 },
+        { name: 'Financier', max: 100 },
+        { name: 'Op.', max: 100 },
+        { name: 'RH', max: 100 },
+        { name: 'Légal', max: 100 },
+        { name: 'Strat.', max: 100 },
+      ],
+      radius: 70, splitArea: { areaStyle: { color: ['#fff', '#fef3c7', '#fee2e2'] } },
+    },
+    series: [{ type: 'radar', data: [{ value: [82, 60, 45, 55, 35, 70], name: 'Actuel',
+      areaStyle: { color: 'rgba(225, 29, 72, 0.25)' }, lineStyle: { color: '#e11d48' } }] }],
+  });
+
+  // ─── Decision list ───────────────────────────────────────────────
+  const DECISIONS = [
+    { ref: 'DEC-2026-0042', title: 'Lancement projet Phoenix', resp: 'Catherine Martin', dir: 'DSI', deadline: '31/12/2026', prio: 'critical', progress: 62 },
+    { ref: 'DEC-2026-0038', title: 'Restructuration zone CEMAC', resp: 'Léa Dupont', dir: 'DRH', deadline: '15/05/2026', prio: 'critical', progress: 85, late: true },
+    { ref: 'DEC-2026-0034', title: 'Renouvellement contrat cloud AWS', resp: 'Pierre Martin', dir: 'DSI', deadline: '20/05/2026', prio: 'high', progress: 40, late: true },
+    { ref: 'DEC-2026-0029', title: 'Acquisition NovaTech (LOI)', resp: 'Comité M&A', dir: 'DG', deadline: '30/06/2026', prio: 'critical', progress: 35 },
+    { ref: 'DEC-2026-0027', title: 'Politique de télétravail Groupe', resp: 'Sophie Klein', dir: 'DRH', deadline: '01/07/2026', prio: 'high', progress: 70 },
+  ];
+  const prioMap = {
+    critical: { dots: '●●●●●', color: 'text-rose-600' },
+    high:     { dots: '●●●●○', color: 'text-amber-600' },
+    medium:   { dots: '●●●○○', color: 'text-slate-500' },
+  };
+  const $dec = document.getElementById('decision-list');
+  DECISIONS.forEach(d => {
+    const p = prioMap[d.prio];
+    $dec.insertAdjacentHTML('beforeend', `
+      <div class="border border-slate-200 rounded-xl p-4 hover:border-blue-300 hover:bg-blue-50/30 transition cursor-pointer">
+        <div class="flex items-start gap-3">
+          <div class="${p.color} font-bold text-xs tabular pt-0.5">${p.dots}</div>
+          <div class="flex-1">
+            <div class="flex items-baseline gap-3">
+              <span class="text-xs text-slate-500 font-mono tabular">${d.ref}</span>
+              <span class="font-semibold text-sm">${d.title}</span>
+              ${d.late ? '<span class="chip bg-rose-100 text-rose-700">EN RETARD</span>' : ''}
+            </div>
+            <div class="text-xs text-slate-500 mt-1">📌 ${d.dir} · ${d.resp} · échéance ${d.deadline}</div>
+            <div class="mt-2 flex items-center gap-2">
+              <div class="flex-1 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                <div class="h-full ${d.late ? 'bg-rose-500' : 'bg-blue-500'}" style="width:${d.progress}%"></div>
+              </div>
+              <span class="text-xs text-slate-500 tabular w-10 text-right">${d.progress}%</span>
+            </div>
+          </div>
+          <button class="text-xs px-3 py-1.5 border border-slate-300 rounded-lg hover:bg-slate-100">Détail</button>
+        </div>
+      </div>
+    `);
+  });
+</script>
+
+</body>
+</html>

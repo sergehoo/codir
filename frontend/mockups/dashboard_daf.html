@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>CODIR — Cockpit DAF</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+<style>
+  body { font-family: 'Inter', system-ui, sans-serif; background: hsl(220 20% 98%); color: hsl(222 47% 11%); }
+  .tabular { font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+
+<div class="flex h-screen overflow-hidden">
+
+  <aside class="w-60 shrink-0 bg-white border-r border-slate-200 flex flex-col">
+    <div class="h-14 px-5 flex items-center gap-2 border-b border-slate-200">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-600 to-teal-500 grid place-items-center text-white font-bold">C</div>
+      <span class="font-semibold">CODIR</span>
+    </div>
+    <nav class="flex-1 px-3 py-4 space-y-1 text-sm">
+      <a href="dashboard_dg.html" class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-100">🏠 Cockpit DG</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 font-semibold">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span> Cockpit DAF
+      </a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-100">📅 Réunions</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-100">⚖️ Décisions</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-100">📊 KPI</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-100">💼 Budgets</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-100">⚠ Risques</a>
+    </nav>
+    <div class="p-4 border-t border-slate-200 text-xs text-slate-500">
+      <div class="font-semibold text-slate-700">Jérémy Roux</div>
+      <div>DAF — Acme Group</div>
+    </div>
+  </aside>
+
+  <main class="flex-1 overflow-auto">
+    <div class="h-14 sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-slate-200 px-8 flex items-center gap-4">
+      <h1 class="text-lg font-semibold">Cockpit financier</h1>
+      <span class="text-xs text-slate-500">Mercredi 13 mai 2026</span>
+      <div class="ml-auto flex items-center gap-3">
+        <select class="text-xs bg-slate-100 px-3 py-1.5 rounded-lg">
+          <option>Groupe consolidé</option>
+          <option>Acme France</option>
+          <option>Acme Côte d'Ivoire</option>
+        </select>
+        <button class="text-xs px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold">Exporter</button>
+      </div>
+    </div>
+
+    <div class="p-8 space-y-6">
+
+      <!-- 6 KPI financiers -->
+      <section class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4" id="fin-kpis"></section>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- Trésorerie 90j -->
+        <section class="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-5">
+          <div class="flex items-baseline justify-between mb-4">
+            <div>
+              <h2 class="text-sm uppercase tracking-wider font-bold text-slate-500">Trésorerie</h2>
+              <div class="text-xs text-slate-400 mt-1">90 jours glissants + prévision 30 j</div>
+            </div>
+            <div class="flex gap-2 text-xs">
+              <button class="px-2 py-1 bg-slate-100 rounded">7j</button>
+              <button class="px-2 py-1 bg-emerald-100 text-emerald-700 font-semibold rounded">90j</button>
+              <button class="px-2 py-1 bg-slate-100 rounded">12m</button>
+            </div>
+          </div>
+          <div id="cash-chart" style="height: 280px;"></div>
+        </section>
+
+        <!-- Réalisé vs Budget -->
+        <section class="bg-white border border-slate-200 rounded-2xl p-5">
+          <h2 class="text-sm uppercase tracking-wider font-bold text-slate-500 mb-4">Réalisé vs Budget</h2>
+          <div id="budget-vs-real" style="height: 280px;"></div>
+        </section>
+
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- Top engagements à valider -->
+        <section class="bg-white border border-slate-200 rounded-2xl p-5">
+          <div class="flex items-baseline justify-between mb-4">
+            <h2 class="text-sm uppercase tracking-wider font-bold text-slate-500">À valider</h2>
+            <span class="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">5</span>
+          </div>
+          <div class="space-y-3 text-sm">
+            <div class="p-3 border border-slate-200 rounded-lg hover:bg-amber-50 cursor-pointer">
+              <div class="flex items-baseline justify-between">
+                <span class="font-semibold">Renouvellement AWS</span>
+                <span class="tabular font-semibold">280 K€</span>
+              </div>
+              <div class="text-xs text-slate-500 mt-0.5">DSI · échéance 20 mai</div>
+            </div>
+            <div class="p-3 border border-slate-200 rounded-lg hover:bg-amber-50 cursor-pointer">
+              <div class="flex items-baseline justify-between">
+                <span class="font-semibold">Campagne LinkedIn Q2</span>
+                <span class="tabular font-semibold">52 K€</span>
+              </div>
+              <div class="text-xs text-slate-500 mt-0.5">Marketing · échéance 18 mai</div>
+            </div>
+            <div class="p-3 border border-slate-200 rounded-lg hover:bg-amber-50 cursor-pointer">
+              <div class="flex items-baseline justify-between">
+                <span class="font-semibold">Audit cyber Praxis</span>
+                <span class="tabular font-semibold">75 K€</span>
+              </div>
+              <div class="text-xs text-slate-500 mt-0.5">DSI · échéance 22 mai</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Scénarios financiers -->
+        <section class="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-5">
+          <div class="flex items-baseline justify-between mb-4">
+            <h2 class="text-sm uppercase tracking-wider font-bold text-slate-500">Atterrissage 2026 — Scénarios</h2>
+            <button class="text-xs px-3 py-1 bg-emerald-100 text-emerald-700 font-semibold rounded">+ Nouveau scénario</button>
+          </div>
+          <div id="scenarios" style="height: 280px;"></div>
+          <div class="grid grid-cols-3 gap-3 mt-4 text-center text-xs">
+            <div class="p-3 bg-rose-50 border border-rose-200 rounded-lg">
+              <div class="font-semibold text-rose-700">Pessimiste</div>
+              <div class="text-2xl font-semibold tabular mt-1">486 M€</div>
+              <div class="text-slate-500 mt-0.5">marge 32%</div>
+            </div>
+            <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div class="font-semibold text-blue-700">Baseline</div>
+              <div class="text-2xl font-semibold tabular mt-1">540 M€</div>
+              <div class="text-slate-500 mt-0.5">marge 38%</div>
+            </div>
+            <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+              <div class="font-semibold text-emerald-700">Optimiste</div>
+              <div class="text-2xl font-semibold tabular mt-1">588 M€</div>
+              <div class="text-slate-500 mt-0.5">marge 41%</div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script>
+  const FIN = [
+    { label: "CA YTD",     value: "204,5", unit: "M€",  delta: "+8,2%",  up: true },
+    { label: "Marge brute", value: "38,2", unit: "%",   delta: "+1,1 pt", up: true },
+    { label: "EBITDA",     value: "42,1",  unit: "M€",  delta: "+12,4%", up: true },
+    { label: "Trésorerie", value: "4,2",   unit: "M€",  delta: "-8,0%",  up: false },
+    { label: "DSO",        value: "56",    unit: "j",   delta: "+3 j",   up: false },
+    { label: "DPO",        value: "42",    unit: "j",   delta: "-1 j",   up: true },
+  ];
+  const $f = document.getElementById('fin-kpis');
+  FIN.forEach(k => {
+    $f.insertAdjacentHTML('beforeend', `
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 hover:shadow-md transition cursor-pointer">
+        <div class="text-xs text-slate-500 mb-1">${k.label}</div>
+        <div class="flex items-baseline gap-1">
+          <div class="text-3xl font-semibold tabular">${k.value}</div>
+          <div class="text-sm text-slate-500">${k.unit}</div>
+        </div>
+        <div class="${k.up ? 'text-emerald-600' : 'text-rose-600'} text-xs font-semibold mt-1">${k.up ? '▲' : '▼'} ${k.delta}</div>
+      </div>
+    `);
+  });
+
+  // Cash chart
+  const cashDays = Array.from({length: 120}, (_, i) => `J-${119 - i}`);
+  const cashHist = [], cashForecast = [];
+  let v = 6.1;
+  for (let i = 0; i < 90; i++) {
+    v += (Math.random() - 0.55) * 0.15;
+    cashHist.push(+v.toFixed(2));
+    cashForecast.push(null);
+  }
+  for (let i = 0; i < 30; i++) {
+    v += (Math.random() - 0.45) * 0.12;
+    cashHist.push(null);
+    cashForecast.push(+v.toFixed(2));
+  }
+  echarts.init(document.getElementById('cash-chart')).setOption({
+    grid: { left: 50, right: 20, top: 20, bottom: 30 },
+    tooltip: { trigger: 'axis' },
+    xAxis: { type: 'category', data: cashDays, axisLine: { lineStyle: { color: '#cbd5e1' } }, axisLabel: { interval: 14, color: '#64748b', fontSize: 10 } },
+    yAxis: { type: 'value', name: 'M€', axisLine: { show: false }, axisLabel: { color: '#64748b', fontSize: 10 }, splitLine: { lineStyle: { color: '#e2e8f0' } } },
+    series: [
+      { name: 'Historique', type: 'line', data: cashHist, smooth: true, symbol: 'none', lineStyle: { color: '#059669', width: 2 }, areaStyle: { color: '#05966915' } },
+      { name: 'Prévision', type: 'line', data: cashForecast, smooth: true, symbol: 'none', lineStyle: { color: '#059669', width: 2, type: 'dashed' }, areaStyle: { color: '#10b98115' } },
+      { type: 'line', markLine: { silent: true, symbol: 'none', label: { formatter: 'Seuil critique 2M€', color: '#dc2626' }, lineStyle: { color: '#dc2626' }, data: [{ yAxis: 2 }] } },
+    ]
+  });
+
+  // Budget vs Réel
+  echarts.init(document.getElementById('budget-vs-real')).setOption({
+    grid: { left: 70, right: 20, top: 20, bottom: 50 },
+    tooltip: { trigger: 'axis' },
+    legend: { bottom: 0, textStyle: { color: '#64748b', fontSize: 11 } },
+    xAxis: { type: 'category', data: ['DAF', 'DRH', 'DSI', 'DT', 'DC', 'Achats'], axisLabel: { color: '#64748b', fontSize: 10 } },
+    yAxis: { type: 'value', name: 'M€', axisLabel: { color: '#64748b', fontSize: 10 } },
+    series: [
+      { name: 'Budget', type: 'bar', data: [12, 38, 28, 65, 22, 18], itemStyle: { color: '#cbd5e1' }, barWidth: 14 },
+      { name: 'Réel YTD', type: 'bar', data: [11.2, 35.1, 30.8, 60.2, 23.5, 17.1], itemStyle: { color: '#10b981' }, barWidth: 14 },
+    ]
+  });
+
+  // Scenarios
+  const months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+  echarts.init(document.getElementById('scenarios')).setOption({
+    grid: { left: 60, right: 20, top: 20, bottom: 50 },
+    tooltip: { trigger: 'axis' },
+    legend: { bottom: 0, textStyle: { color: '#64748b', fontSize: 11 } },
+    xAxis: { type: 'category', data: months, axisLabel: { color: '#64748b', fontSize: 10 } },
+    yAxis: { type: 'value', name: 'M€ cumul', axisLabel: { color: '#64748b', fontSize: 10 } },
+    series: [
+      { name: 'Pessimiste', type: 'line', data: [38, 80, 124, 162, 204, 247, 290, 332, 374, 412, 450, 486], smooth: true, lineStyle: { color: '#e11d48' }, areaStyle: { color: '#e11d4815' } },
+      { name: 'Baseline', type: 'line', data: [42, 88, 138, 184, 228, 274, 322, 370, 415, 458, 500, 540], smooth: true, lineStyle: { color: '#2563eb', width: 3 } },
+      { name: 'Optimiste', type: 'line', data: [44, 92, 145, 195, 244, 295, 348, 402, 452, 498, 545, 588], smooth: true, lineStyle: { color: '#059669' }, areaStyle: { color: '#05966915' } },
+    ]
+  });
+</script>
+
+</body>
+</html>

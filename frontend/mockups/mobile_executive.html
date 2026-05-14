@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>CODIR — Mobile Executive</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+<style>
+  body { font-family: 'Inter', system-ui, sans-serif; background: hsl(220 20% 95%); color: hsl(222 47% 11%); min-height: 100vh; }
+  .tabular { font-variant-numeric: tabular-nums; }
+  .iphone { width: 380px; height: 800px; border-radius: 48px; background: #0f172a; padding: 14px; box-shadow: 0 30px 60px -10px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.05); position: relative; }
+  .iphone-screen { width: 100%; height: 100%; border-radius: 36px; background: #f8fafc; overflow: hidden; position: relative; }
+  .iphone-notch { position: absolute; top: 26px; left: 50%; transform: translateX(-50%); width: 100px; height: 28px; background: #0f172a; border-radius: 999px; z-index: 5; }
+  .scrollbar::-webkit-scrollbar { display: none; }
+</style>
+</head>
+<body class="grid place-items-center p-12 min-h-screen bg-gradient-to-br from-slate-100 to-slate-200">
+
+<div class="flex gap-12 items-start flex-wrap justify-center">
+
+  <!-- iPhone 1 : Dashboard mobile -->
+  <div>
+    <div class="iphone">
+      <div class="iphone-notch"></div>
+      <div class="iphone-screen">
+
+        <!-- Statusbar -->
+        <div class="h-12 flex items-center justify-between px-6 pt-3 text-xs font-semibold">
+          <span>9:42</span>
+          <span class="flex items-center gap-1">●●●●● 5G 100%</span>
+        </div>
+
+        <div class="px-5 pb-24 overflow-auto scrollbar h-full">
+
+          <!-- Header -->
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <div class="text-xs text-slate-500">Bonjour Catherine</div>
+              <div class="text-xl font-semibold">Mercredi 13 mai</div>
+            </div>
+            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-rose-500 grid place-items-center text-white text-xs font-bold">CM</div>
+          </div>
+
+          <!-- Briefing IA Card -->
+          <div class="bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-2xl p-4 mb-4">
+            <div class="flex items-center gap-2 text-xs font-semibold mb-2">
+              <span>✦</span> Briefing du jour
+            </div>
+            <div class="text-sm leading-relaxed">
+              3 points d'attention&nbsp;: trésorerie -8%, deux décisions à échéance cette semaine, NPS +6 pts.
+            </div>
+            <div class="text-xs mt-2 opacity-90">→ Lire la suite</div>
+          </div>
+
+          <!-- KPI swipeable -->
+          <div class="mb-4">
+            <div class="flex items-center justify-between mb-2">
+              <div class="text-xs uppercase font-bold text-slate-500">KPI top</div>
+              <div class="flex gap-1"><span class="w-1.5 h-1.5 rounded-full bg-blue-600"></span><span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span><span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span><span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span></div>
+            </div>
+            <div class="bg-white rounded-2xl p-4 shadow-sm">
+              <div class="text-xs text-slate-500 mb-1">Trésorerie groupe</div>
+              <div class="flex items-baseline gap-1">
+                <span class="text-4xl font-semibold tabular">4,2</span>
+                <span class="text-slate-500">M€</span>
+              </div>
+              <div class="text-rose-600 text-sm font-semibold mt-1">▼ -8,0% vs M-1</div>
+              <div id="mob-spark" style="height: 60px;" class="mt-2"></div>
+              <button class="w-full mt-3 text-xs text-blue-600 font-semibold py-2">Voir détail →</button>
+            </div>
+          </div>
+
+          <!-- Décisions à valider -->
+          <div class="mb-4">
+            <div class="flex items-center justify-between mb-2">
+              <div class="text-xs uppercase font-bold text-slate-500">Décisions à valider</div>
+              <span class="text-xs bg-rose-100 text-rose-700 font-bold px-2 py-0.5 rounded-full">3</span>
+            </div>
+            <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+              <div class="p-3 border-b border-slate-100">
+                <div class="flex items-baseline gap-2 mb-1">
+                  <span class="text-xs font-mono text-slate-500">DEC-2026-0042</span>
+                  <span class="text-[10px] bg-rose-100 text-rose-700 font-bold px-1.5 rounded">CRITIQUE</span>
+                </div>
+                <div class="text-sm font-semibold">Lancement projet Phoenix</div>
+                <div class="text-xs text-slate-500 mt-0.5">Budget 4,2 M€ · échéance 31/12/2026</div>
+                <div class="flex gap-2 mt-2 text-xs">
+                  <button class="flex-1 bg-emerald-600 text-white font-semibold py-2 rounded-lg">✓ Voter OUI</button>
+                  <button class="flex-1 bg-rose-100 text-rose-700 font-semibold py-2 rounded-lg">NON</button>
+                </div>
+              </div>
+              <div class="p-3 flex items-center gap-3">
+                <div>
+                  <div class="text-xs font-mono text-slate-500">DEC-2026-0038</div>
+                  <div class="text-sm font-semibold">Restructuration CEMAC</div>
+                </div>
+                <span class="text-slate-300 ml-auto">›</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Prochaine réunion -->
+          <div class="bg-white rounded-2xl p-4 shadow-sm">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-rose-500">●</span>
+              <span class="text-xs uppercase font-bold text-slate-500">Prochain CODIR</span>
+              <span class="ml-auto text-xs bg-blue-100 text-blue-700 font-semibold px-2 py-0.5 rounded-full">Lun 18 mai</span>
+            </div>
+            <div class="text-sm">
+              <strong>09:00 — 11:00</strong> · Hybride · 12 membres
+            </div>
+            <div class="text-xs text-slate-500 mt-1">5 sujets à l'ordre du jour</div>
+            <button class="w-full mt-3 bg-blue-600 text-white text-sm font-semibold py-2 rounded-lg">Préparer ma session</button>
+          </div>
+
+        </div>
+
+        <!-- Bottom nav -->
+        <div class="absolute bottom-0 left-0 right-0 h-20 bg-white border-t border-slate-200 flex items-center justify-around px-4 pb-4">
+          <div class="flex flex-col items-center gap-1 text-blue-600">
+            <span class="text-xl">🏠</span>
+            <span class="text-[10px] font-semibold">Home</span>
+          </div>
+          <div class="flex flex-col items-center gap-1 text-slate-400">
+            <span class="text-xl">📅</span>
+            <span class="text-[10px]">Réunions</span>
+          </div>
+          <div class="flex flex-col items-center gap-1 text-slate-400 relative">
+            <span class="text-xl">⚖️</span>
+            <span class="text-[10px]">Décisions</span>
+            <span class="absolute -top-1 right-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-bold grid place-items-center">3</span>
+          </div>
+          <div class="flex flex-col items-center gap-1 text-slate-400">
+            <span class="text-xl">✓</span>
+            <span class="text-[10px]">Agenda</span>
+          </div>
+          <div class="flex flex-col items-center gap-1 text-slate-400">
+            <span class="text-xl">···</span>
+            <span class="text-[10px]">Plus</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <div class="text-center text-xs text-slate-500 mt-4 font-semibold">Dashboard exécutif</div>
+  </div>
+
+  <!-- iPhone 2 : Notification push avec action -->
+  <div>
+    <div class="iphone">
+      <div class="iphone-notch"></div>
+      <div class="iphone-screen bg-gradient-to-b from-slate-800 to-slate-950">
+
+        <div class="h-12 flex items-center justify-between px-6 pt-3 text-xs font-semibold text-white">
+          <span>9:42</span>
+          <span>●●●●● 5G 100%</span>
+        </div>
+
+        <div class="px-3 pt-32">
+          <!-- Lock screen wallpaper effect -->
+          <div class="text-center text-white mb-8">
+            <div class="text-6xl font-light tabular">9:42</div>
+            <div class="text-sm opacity-80 mt-1">Mercredi 13 mai</div>
+          </div>
+
+          <!-- Notification CODIR (style iOS lock) -->
+          <div class="bg-white/95 backdrop-blur rounded-3xl p-4 mx-2 mb-3 shadow-2xl">
+            <div class="flex items-start gap-3">
+              <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 grid place-items-center text-white font-bold shrink-0">C</div>
+              <div class="flex-1">
+                <div class="flex items-baseline gap-2">
+                  <span class="font-semibold text-sm">CODIR</span>
+                  <span class="text-[10px] bg-rose-100 text-rose-700 font-bold px-1.5 rounded">CRITIQUE</span>
+                  <span class="text-xs text-slate-400 ml-auto">à l'instant</span>
+                </div>
+                <div class="text-sm font-semibold mt-0.5">Validation requise — DEC-2026-0042</div>
+                <div class="text-sm text-slate-600 mt-1 leading-snug">
+                  Lancement Phoenix — Budget 4,2 M€. Catherine vous demande de voter avant 18 mai.
+                </div>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-200">
+              <button class="bg-emerald-600 text-white text-sm font-semibold py-2.5 rounded-xl flex items-center justify-center gap-1.5">
+                <span>✓</span> Voter OUI
+              </button>
+              <button class="bg-slate-100 text-slate-700 text-sm font-semibold py-2.5 rounded-xl">Voir détails</button>
+            </div>
+            <div class="text-[10px] text-center text-slate-400 mt-2 flex items-center justify-center gap-1">
+              🔒 Authentification biométrique requise
+            </div>
+          </div>
+
+          <div class="bg-white/85 backdrop-blur rounded-2xl p-3 mx-4 mb-3 shadow-xl">
+            <div class="flex items-center gap-2">
+              <div class="w-7 h-7 rounded-lg bg-violet-600 grid place-items-center text-white text-xs">✦</div>
+              <span class="font-semibold text-xs">CODIR</span>
+              <span class="text-[10px] text-slate-400 ml-auto">il y a 1 h</span>
+            </div>
+            <div class="text-xs text-slate-700 mt-1">PV de la réunion du 6 mai prêt à valider</div>
+          </div>
+
+          <div class="bg-white/80 backdrop-blur rounded-2xl p-3 mx-8 shadow-lg">
+            <div class="flex items-center gap-2">
+              <div class="w-7 h-7 rounded-lg bg-amber-500 grid place-items-center text-white text-xs">⚠</div>
+              <span class="font-semibold text-xs">CODIR</span>
+              <span class="text-[10px] text-slate-400 ml-auto">il y a 3 h</span>
+            </div>
+            <div class="text-xs text-slate-700 mt-1">KPI Trésorerie : seuil warning franchi</div>
+          </div>
+
+        </div>
+
+        <div class="absolute bottom-4 left-0 right-0 flex justify-center">
+          <div class="w-32 h-1 bg-white/60 rounded-full"></div>
+        </div>
+
+      </div>
+    </div>
+    <div class="text-center text-xs text-slate-500 mt-4 font-semibold">Notification actionnable</div>
+  </div>
+
+  <!-- iPhone 3 : Mode réunion mobile -->
+  <div>
+    <div class="iphone">
+      <div class="iphone-notch"></div>
+      <div class="iphone-screen bg-slate-900 text-white">
+
+        <div class="h-12 flex items-center justify-between px-6 pt-3 text-xs font-semibold">
+          <span>9:42</span>
+          <span>●●●●● 5G 86%</span>
+        </div>
+
+        <!-- Bandeau réunion -->
+        <div class="px-5 py-3 flex items-center gap-3 border-b border-slate-700">
+          <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+          <div class="flex-1">
+            <div class="text-xs font-semibold">EN COURS</div>
+            <div class="text-[10px] text-slate-400">CODIR Groupe · 42 min</div>
+          </div>
+          <div class="flex -space-x-2">
+            <div class="w-6 h-6 rounded-full bg-blue-500 text-[10px] font-bold grid place-items-center ring-2 ring-slate-900">CM</div>
+            <div class="w-6 h-6 rounded-full bg-emerald-500 text-[10px] font-bold grid place-items-center ring-2 ring-slate-900">PM</div>
+            <div class="w-6 h-6 rounded-full bg-rose-500 text-[10px] font-bold grid place-items-center ring-2 ring-slate-900">+10</div>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="border-b border-slate-700 px-3 py-2 flex gap-1 text-xs">
+          <button class="px-3 py-1.5 rounded-lg bg-blue-600 font-semibold">Live</button>
+          <button class="px-3 py-1.5 rounded-lg text-slate-400">Ordre</button>
+          <button class="px-3 py-1.5 rounded-lg bg-rose-600/30 text-rose-300 font-semibold flex items-center gap-1">Décisions <span class="bg-rose-500 text-white text-[9px] px-1 rounded">1</span></button>
+          <button class="px-3 py-1.5 rounded-lg text-slate-400">Actions</button>
+        </div>
+
+        <!-- Décision en cours -->
+        <div class="p-4">
+          <div class="bg-gradient-to-br from-violet-900/50 to-fuchsia-900/50 border border-violet-700 rounded-2xl p-4">
+            <div class="flex items-baseline gap-2 mb-2">
+              <span class="text-[10px] font-mono text-violet-300">DEC-2026-0042</span>
+              <span class="text-[10px] bg-rose-500 px-1.5 rounded font-bold">CRITIQUE</span>
+            </div>
+            <div class="font-semibold text-sm mb-3">Lancement projet Phoenix — Budget 4,2 M€</div>
+
+            <div class="bg-slate-900/50 rounded-xl p-3 mb-3">
+              <div class="text-[10px] text-slate-400 mb-2 flex items-center justify-between">
+                <span>Vote en cours</span>
+                <span class="text-violet-300 font-semibold">7 / 12</span>
+              </div>
+              <div class="flex gap-1 text-[10px] font-semibold">
+                <div class="flex-1 bg-emerald-500/30 text-emerald-300 text-center py-1.5 rounded">✓ 5</div>
+                <div class="flex-1 bg-rose-500/30 text-rose-300 text-center py-1.5 rounded">✗ 1</div>
+                <div class="flex-1 bg-slate-500/30 text-slate-300 text-center py-1.5 rounded">↺ 1</div>
+              </div>
+            </div>
+
+            <button class="w-full bg-emerald-600 text-white text-sm font-semibold py-3 rounded-xl flex items-center justify-center gap-2 mb-2">
+              ✓ Voter OUI (Face ID)
+            </button>
+            <button class="w-full bg-slate-700/50 border border-slate-600 text-white text-sm py-2 rounded-xl">
+              Voir documents (3)
+            </button>
+          </div>
+
+          <div class="mt-4 text-xs text-slate-400">
+            <div class="font-semibold text-slate-300 mb-1">Live — Pierre Martin (09:32)</div>
+            <div class="leading-relaxed text-slate-400 italic">
+              « Je propose qu'on lance un benchmark formel sur 5 fournisseurs CRM, ça nous donnera des données chiffrées… »
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <div class="text-center text-xs text-slate-500 mt-4 font-semibold">Mode réunion live</div>
+  </div>
+
+</div>
+
+<script>
+  echarts.init(document.getElementById('mob-spark')).setOption({
+    grid: { left: 0, right: 0, top: 4, bottom: 4 },
+    xAxis: { type: 'category', show: false, data: [1,2,3,4,5,6,7,8,9,10,11,12] },
+    yAxis: { type: 'value', show: false },
+    series: [{ type: 'line', data: [5.0,4.9,4.9,4.6,4.5,4.5,4.3,4.4,4.3,4.2,4.2,4.2], smooth: true, symbol: 'none', lineStyle: { color: '#e11d48', width: 2 }, areaStyle: { color: '#e11d4820' } }],
+  });
+</script>
+
+</body>
+</html>
