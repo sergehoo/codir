@@ -7,18 +7,22 @@ ARG VITE_FRONTEND_URL
 ENV VITE_API_BASE=${VITE_API_BASE}
 ENV VITE_FRONTEND_URL=${VITE_FRONTEND_URL}
 
-# Copie package.json et lockfile si présent
+# Outils pour les natives optionnelles (esbuild, etc.)
+RUN apk add --no-cache python3 make g++ git
+
+# Copie tout le manifest + lockfile éventuel
 COPY package.json ./
 COPY package-lock.json* ./
 
-# Utilise `npm ci` si lockfile présent (reproductible), sinon fallback `npm install`
-RUN if [ -f package-lock.json ]; then \
-      npm ci --no-audit --no-fund; \
-    else \
-      echo "WARN: pas de package-lock.json — fallback npm install" && \
-      npm install --no-audit --no-fund; \
-    fi
+# Installation tolérante :
+#  - legacy-peer-deps : ignore les conflits peer (Tiptap, React 18, etc.)
+#  - no-audit / no-fund : pas de bruit
+#  - prefer-offline : si déjà en cache
+RUN npm config set fund false && \
+    npm config set audit false && \
+    npm install --legacy-peer-deps --no-audit --no-fund --prefer-offline
 
+# Build
 COPY . .
 RUN npm run build
 
