@@ -1,0 +1,15 @@
+Bonjour {{ recipient_name }},
+
+⚠ Tâche en retard
+
+— {{ task.title }}
+  Échéance dépassée : {{ task.due_date }}
+  Priorité : {{ task.priority }}
+  Avancement : {{ task.progress_percent }}%
+  {% if plan.title %}Plan : {{ plan.title }}{% endif %}
+
+Merci de mettre à jour le statut ou de réassigner.
+
+Ouvrir la tâche : {{ link_url }}
+
+— CODIR Executive

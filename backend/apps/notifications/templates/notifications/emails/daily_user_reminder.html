@@ -1,0 +1,103 @@
+{% extends "notifications/emails/base.html" %}
+
+{% block content %}
+<p style="font-family:Georgia,serif;font-size:18px;margin:0 0 4px 0;">
+  Bonjour {{ user }},
+</p>
+<p style="font-size:13px;color:#6b5d4f;margin:0 0 24px 0;">
+  Voici vos tâches en cours — {{ today }}
+</p>
+
+<table cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 24px 0;">
+  <tr>
+    <td style="background:#fbf6ef;padding:14px;border:1px solid #e9e2d8;text-align:center;width:25%;">
+      <div style="font-family:Georgia,serif;font-size:28px;color:#B8693C;">{{ total }}</div>
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:2px;color:#6b5d4f;">Total</div>
+    </td>
+    <td style="background:#fff5f1;padding:14px;border:1px solid #e9e2d8;text-align:center;width:25%;">
+      <div style="font-family:Georgia,serif;font-size:28px;color:#c43030;">{{ overdue }}</div>
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:2px;color:#6b5d4f;">En retard</div>
+    </td>
+    <td style="background:#fff8e6;padding:14px;border:1px solid #e9e2d8;text-align:center;width:25%;">
+      <div style="font-family:Georgia,serif;font-size:28px;color:#b8810d;">{{ due_soon }}</div>
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:2px;color:#6b5d4f;">Échéance proche</div>
+    </td>
+    <td style="background:#fbf6ef;padding:14px;border:1px solid #e9e2d8;text-align:center;width:25%;">
+      <div style="font-family:Georgia,serif;font-size:28px;color:#0e0a07;">{{ buckets.in_progress|length }}</div>
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:2px;color:#6b5d4f;">En cours</div>
+    </td>
+  </tr>
+</table>
+
+{% if buckets.overdue %}
+<div style="margin-bottom:20px;">
+  <div style="font-size:11px;text-transform:uppercase;letter-spacing:2px;color:#c43030;font-weight:600;margin-bottom:8px;">
+    En retard ({{ buckets.overdue|length }})
+  </div>
+  {% for t in buckets.overdue %}
+  <div style="padding:10px 14px;border:1px solid #f3d9d4;background:#fff5f1;margin-bottom:6px;">
+    <div style="font-size:14px;color:#1a1614;">{{ t.title }}</div>
+    <div style="font-size:11px;color:#6b5d4f;margin-top:3px;">Échéance : {{ t.due_date }} · {{ t.plan_title }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if buckets.due_soon %}
+<div style="margin-bottom:20px;">
+  <div style="font-size:11px;text-transform:uppercase;letter-spacing:2px;color:#b8810d;font-weight:600;margin-bottom:8px;">
+    Échéance proche ({{ buckets.due_soon|length }})
+  </div>
+  {% for t in buckets.due_soon %}
+  <div style="padding:10px 14px;border:1px solid #f3e7c7;background:#fff8e6;margin-bottom:6px;">
+    <div style="font-size:14px;color:#1a1614;">{{ t.title }}</div>
+    <div style="font-size:11px;color:#6b5d4f;margin-top:3px;">{{ t.due_date }} · {{ t.plan_title }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if buckets.in_progress %}
+<div style="margin-bottom:20px;">
+  <div style="font-size:11px;text-transform:uppercase;letter-spacing:2px;color:#6b5d4f;font-weight:600;margin-bottom:8px;">
+    En cours ({{ buckets.in_progress|length }})
+  </div>
+  {% for t in buckets.in_progress %}
+  <div style="padding:10px 14px;border:1px solid #e9e2d8;margin-bottom:6px;">
+    <div style="font-size:14px;color:#1a1614;">{{ t.title }}</div>
+    <div style="font-size:11px;color:#6b5d4f;margin-top:3px;">{{ t.progress_percent }}% · {{ t.plan_title }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if buckets.blocked %}
+<div style="margin-bottom:20px;">
+  <div style="font-size:11px;text-transform:uppercase;letter-spacing:2px;color:#6b5d4f;font-weight:600;margin-bottom:8px;">
+    Bloquées ({{ buckets.blocked|length }})
+  </div>
+  {% for t in buckets.blocked %}
+  <div style="padding:10px 14px;border:1px solid #e9e2d8;background:#f5f1ec;margin-bottom:6px;">
+    <div style="font-size:14px;color:#1a1614;">{{ t.title }}</div>
+    <div style="font-size:11px;color:#6b5d4f;margin-top:3px;">{{ t.plan_title }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if buckets.todo %}
+<div style="margin-bottom:20px;">
+  <div style="font-size:11px;text-transform:uppercase;letter-spacing:2px;color:#6b5d4f;font-weight:600;margin-bottom:8px;">
+    À faire ({{ buckets.todo|length }})
+  </div>
+  {% for t in buckets.todo %}
+  <div style="padding:10px 14px;border:1px solid #e9e2d8;margin-bottom:6px;">
+    <div style="font-size:14px;color:#1a1614;">{{ t.title }}</div>
+    <div style="font-size:11px;color:#6b5d4f;margin-top:3px;">{% if t.due_date %}Échéance : {{ t.due_date }} · {% endif %}{{ t.plan_title }}</div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% include "notifications/emails/_button.html" with button_label="Ouvrir mon tableau de bord" %}
+{% endblock %}

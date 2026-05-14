@@ -1,0 +1,11 @@
+# ─────────────────────────────────────────────────────────────────
+# Ce fichier est OBSOLÈTE.
+#
+# Le docker-compose CODIR a été déplacé à la racine du repo :
+#   /codir/docker-compose.prod.yml
+#
+# Lancement prod :
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+# ou (via Makefile) :
+#   make prod-up
+# ─────────────────────────────────────────────────────────────────

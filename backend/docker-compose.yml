@@ -1,0 +1,14 @@
+# ─────────────────────────────────────────────────────────────────
+# Ce fichier est OBSOLÈTE.
+#
+# Le docker-compose CODIR a été déplacé à la racine du repo :
+#   /codir/docker-compose.yml         (dev)
+#   /codir/docker-compose.prod.yml    (prod)
+#
+# Toutes les commandes Make passent désormais par la racine :
+#   make up
+#   make prod-up
+#
+# Ne PAS utiliser ce fichier — il est conservé uniquement pour ne pas
+# casser d'anciens scripts qui le référenceraient encore.
+# ─────────────────────────────────────────────────────────────────

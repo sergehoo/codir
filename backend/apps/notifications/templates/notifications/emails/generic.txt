@@ -1,0 +1,7 @@
+Bonjour {{ recipient_name }},
+
+{{ body }}
+
+{% if link_url %}Lien : {{ link_url }}{% endif %}
+
+— CODIR Executive

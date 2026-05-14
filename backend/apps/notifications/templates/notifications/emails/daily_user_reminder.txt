@@ -1,0 +1,24 @@
+Bonjour {{ user }},
+
+Vos tâches en cours — {{ today }}
+Total : {{ total }} · En retard : {{ overdue }} · Échéance proche : {{ due_soon }}
+
+{% if buckets.overdue %}EN RETARD ({{ buckets.overdue|length }}){% for t in buckets.overdue %}
+  · {{ t.title }} — échéance {{ t.due_date }} ({{ t.plan_title }}){% endfor %}
+{% endif %}
+{% if buckets.due_soon %}ÉCHÉANCE PROCHE ({{ buckets.due_soon|length }}){% for t in buckets.due_soon %}
+  · {{ t.title }} — {{ t.due_date }} ({{ t.plan_title }}){% endfor %}
+{% endif %}
+{% if buckets.in_progress %}EN COURS ({{ buckets.in_progress|length }}){% for t in buckets.in_progress %}
+  · {{ t.title }} — {{ t.progress_percent }}% ({{ t.plan_title }}){% endfor %}
+{% endif %}
+{% if buckets.blocked %}BLOQUÉES ({{ buckets.blocked|length }}){% for t in buckets.blocked %}
+  · {{ t.title }} ({{ t.plan_title }}){% endfor %}
+{% endif %}
+{% if buckets.todo %}À FAIRE ({{ buckets.todo|length }}){% for t in buckets.todo %}
+  · {{ t.title }}{% if t.due_date %} — {{ t.due_date }}{% endif %} ({{ t.plan_title }}){% endfor %}
+{% endif %}
+
+Mon tableau de bord : {{ link_url }}
+
+— CODIR Executive

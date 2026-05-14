@@ -1,0 +1,45 @@
+{% load i18n %}<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>{{ title|default:"CODIR Executive" }}</title>
+</head>
+<body style="margin:0;padding:0;background:#f5f1ec;font-family:'Inter Tight',Helvetica,Arial,sans-serif;color:#1a1614;">
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#f5f1ec;padding:32px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" cellpadding="0" cellspacing="0" width="600" style="background:#ffffff;border:1px solid #e9e2d8;border-radius:6px;overflow:hidden;">
+          <!-- Header -->
+          <tr>
+            <td style="background:#0e0a07;padding:24px 32px;border-bottom:3px solid #B8693C;">
+              <div style="color:#f5f1ec;font-family:Georgia,serif;font-size:22px;letter-spacing:1px;">
+                KAYDAN <span style="color:#B8693C;">|</span> CODIR
+              </div>
+              <div style="color:#a89e8e;font-size:11px;text-transform:uppercase;letter-spacing:3px;margin-top:4px;">
+                Executive Platform
+              </div>
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td style="padding:32px;">
+              {% block content %}{% endblock %}
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="background:#f5f1ec;padding:20px 32px;border-top:1px solid #e9e2d8;text-align:center;color:#6b5d4f;font-size:12px;">
+              <div style="margin-bottom:6px;">
+                Notification automatique — {{ site_name|default:"CODIR Executive" }}
+              </div>
+              <div style="color:#a89e8e;font-size:11px;">
+                Pour gérer vos préférences, ouvrez l'application puis « Préférences notifications ».
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

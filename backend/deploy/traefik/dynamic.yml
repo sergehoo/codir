@@ -1,0 +1,61 @@
+# Traefik — configuration dynamique (middlewares partagés).
+# Rechargé automatiquement par le provider file en watch.
+
+http:
+  middlewares:
+
+    # ─── Headers de sécurité ────────────────────────────────
+    secure-headers:
+      headers:
+        sslRedirect: true
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        forceSTSHeader: true
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        permissionsPolicy: "camera=(), microphone=(), geolocation=()"
+        customResponseHeaders:
+          X-Robots-Tag: "noindex, nofollow"
+
+    # ─── Rate limit générique API (30 req/s/IP burst 60) ────
+    api-ratelimit:
+      rateLimit:
+        average: 30
+        period: 1s
+        burst: 60
+        sourceCriterion:
+          ipStrategy:
+            depth: 1
+
+    # ─── Rate limit auth (5 req/s/IP — anti brute-force) ────
+    auth-ratelimit:
+      rateLimit:
+        average: 5
+        period: 1s
+        burst: 10
+        sourceCriterion:
+          ipStrategy:
+            depth: 1
+
+    # ─── Compression ────────────────────────────────────────
+    compression:
+      compress: {}
+
+    # ─── Auth Basic pour le dashboard Traefik ───────────────
+    # Génère le hash : htpasswd -nb admin <password>
+    # puis encode pour YAML (échapper les $)
+    dashboard-auth:
+      basicAuth:
+        users:
+          # Remplacer par votre hash. Exemple admin:codir
+          - "admin:$apr1$f5fM4Ydc$F.l9yzKkE3D6Ze6BqDxw71"
+
+    # ─── Strip prefix /api pour le service Django ───────────
+    # Inutile car Django écoute déjà sur /api/v1/. Conservé en doc.
+    # strip-api:
+    #   stripPrefix:
+    #     prefixes:
+    #       - "/api"
