@@ -151,7 +151,14 @@ services:
     networks: [codir_network, proxy]
     init: true
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health/"]
+      # - Host header → ALLOWED_HOSTS (sinon DisallowedHost)
+      # - X-Forwarded-Proto: https → SECURE_PROXY_SSL_HEADER (sinon 301 vers HTTPS)
+      test: [
+        "CMD", "curl", "-fsS",
+        "-H", "Host: codirweb",
+        "-H", "X-Forwarded-Proto: https",
+        "http://127.0.0.1:8000/health/"
+      ]
       interval: 30s
       timeout: 5s
       retries: 5
