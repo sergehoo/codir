@@ -31,8 +31,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /build
 COPY requirements.txt .
-RUN pip install --prefix=/install --upgrade pip && \
-    pip install --prefix=/install -r requirements.txt
+# Upgrade pip dans le site-packages global du builder (pas dans /install),
+# puis utiliser ce pip pour installer les deps vers /install
+RUN python -m pip install --upgrade pip && \
+    python -m pip install --prefix=/install -r requirements.txt
 
 # ── Runtime ─────────────────────────────────────────────
 FROM base AS runtime
