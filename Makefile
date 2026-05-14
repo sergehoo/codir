@@ -1,5 +1,6 @@
-# CODIR — Makefile
-# Commandes courantes pour dev et prod. `make help` pour la liste.
+# CODIR — Makefile racine
+# Toutes les commandes Docker tournent depuis la racine (le compose y est).
+# Backend Python et Celery local se lancent depuis backend/.
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
@@ -7,64 +8,71 @@ SHELL := /bin/bash
 BACKEND_DIR := backend
 FRONTEND_DIR := frontend/web
 
+# Compose helper (DRY)
+DC_DEV  := docker compose
+DC_PROD := docker compose -f docker-compose.prod.yml --env-file .env.prod
+
 help: ## Liste les commandes disponibles
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
-# ─── Dev environment ────────────────────────────────────
+# ─── Dev environment (Docker, depuis racine) ────────────
 
-up: ## Lance la stack complète (dev)
-	cd $(BACKEND_DIR) && docker compose up -d
+up: ## Lance la stack dev complète (Traefik + DB + API + workers + frontend)
+	$(DC_DEV) up -d
 
-down: ## Arrête la stack
-	cd $(BACKEND_DIR) && docker compose down
+down: ## Arrête la stack dev
+	$(DC_DEV) down
 
-logs: ## Logs en live
-	cd $(BACKEND_DIR) && docker compose logs -f --tail=200
+logs: ## Logs live (200 dernières lignes)
+	$(DC_DEV) logs -f --tail=200
 
 restart-api: ## Redémarre l'API Django (sans toucher DB)
-	cd $(BACKEND_DIR) && docker compose restart api asgi worker-default worker-notifications beat
+	$(DC_DEV) restart api asgi worker-default worker-notifications beat
 
-# ─── Backend ────────────────────────────────────────────
+ps: ## État des conteneurs
+	$(DC_DEV) ps
 
-migrate: ## Applique les migrations
+# ─── Backend (Python local) ─────────────────────────────
+
+migrate: ## Applique les migrations (local)
 	cd $(BACKEND_DIR) && python manage.py migrate
 
-makemigrations: ## Crée les migrations manquantes
+makemigrations: ## Crée les migrations manquantes (local)
 	cd $(BACKEND_DIR) && python manage.py makemigrations
 
 seed: ## Seed la donnée de démo (--reset purge)
 	cd $(BACKEND_DIR) && python manage.py seed_beta --reset
 
-shell: ## Shell Django
+shell: ## Shell Django (local)
 	cd $(BACKEND_DIR) && python manage.py shell
 
-test: ## Lance les tests pytest
+test: ## pytest backend (local)
 	cd $(BACKEND_DIR) && pytest -q
 
-createsuperuser: ## Crée un super-admin
+createsuperuser: ## Crée un super-admin (local)
 	cd $(BACKEND_DIR) && python manage.py createsuperuser
 
 dedupe: ## Nettoie les doublons décisions/tâches
 	cd $(BACKEND_DIR) && python manage.py dedupe_decisions
 
-# ─── Celery (en local sans Docker) ──────────────────────
+# ─── Celery (local sans Docker) ──────────────────────────
 
 worker: ## Lance un worker Celery local
 	cd $(BACKEND_DIR) && celery -A config worker -l info -Q default,notifications
 
-beat: ## Lance Celery beat local
+celery-beat: ## Lance Celery beat local
 	cd $(BACKEND_DIR) && celery -A config beat -l info -S django_celery_beat.schedulers:DatabaseScheduler
 
 # ─── Frontend ──────────────────────────────────────────
 
-front-install: ## npm install du frontend
+front-install: ## npm install
 	cd $(FRONTEND_DIR) && npm install
 
-front-dev: ## Lance Vite dev server
+front-dev: ## Vite dev server (local, hors Docker)
 	cd $(FRONTEND_DIR) && npm run dev
 
-front-build: ## Build de prod
+front-build: ## Build prod
 	cd $(FRONTEND_DIR) && npm run build
 
 front-typecheck: ## Vérification TS
@@ -72,18 +80,37 @@ front-typecheck: ## Vérification TS
 
 # ─── Production ────────────────────────────────────────
 
-prod-build: ## Build des images prod
-	cd $(BACKEND_DIR) && docker compose -f docker-compose.prod.yml --env-file .env.prod build
+prod-build: ## Build des images prod (api + web)
+	$(DC_PROD) build
 
-prod-up: ## Démarre la stack prod
-	cd $(BACKEND_DIR) && docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+prod-up: ## Démarre la stack prod (Traefik + Let's Encrypt)
+	$(DC_PROD) up -d
 
 prod-down: ## Arrête la stack prod
-	cd $(BACKEND_DIR) && docker compose -f docker-compose.prod.yml --env-file .env.prod down
+	$(DC_PROD) down
 
-prod-migrate: ## Migrations en prod
-	cd $(BACKEND_DIR) && docker compose -f docker-compose.prod.yml --env-file .env.prod \
-		run --rm api /app/scripts/docker-entrypoint.sh migrate
+prod-restart: ## Redémarre uniquement l'app (rolling)
+	$(DC_PROD) up -d --no-deps --build api asgi worker-default worker-notifications beat web
+
+prod-migrate: ## Lance les migrations en prod
+	$(DC_PROD) run --rm api /app/scripts/docker-entrypoint.sh migrate
+
+prod-logs: ## Logs prod
+	$(DC_PROD) logs -f --tail=200
+
+prod-superuser: ## Crée un superuser en prod
+	$(DC_PROD) run --rm api python manage.py createsuperuser
+
+prod-shell: ## Shell Django en prod
+	$(DC_PROD) run --rm api python manage.py shell
+
+# ─── Backup Postgres ───────────────────────────────────
+
+prod-backup: ## Dump Postgres prod → ./backups/<date>.sql.gz
+	@mkdir -p backups
+	$(DC_PROD) exec -T postgres pg_dump -U $${POSTGRES_USER:-codir} $${POSTGRES_DB:-codir} \
+		| gzip > backups/codir-$$(date +%Y-%m-%d-%H%M).sql.gz
+	@echo "Backup créé dans backups/"
 
 # ─── Maintenance / cleanup ─────────────────────────────
 
@@ -94,16 +121,19 @@ clean-pyc: ## Supprime les .pyc
 clean-node: ## Supprime node_modules
 	rm -rf $(FRONTEND_DIR)/node_modules
 
-# ─── Génération de clés JWT RSA (prod) ─────────────────
+# ─── Génération clés JWT RSA ───────────────────────────
 
-jwt-keys: ## Génère une paire de clés JWT RSA 2048 dans deploy/
-	mkdir -p $(BACKEND_DIR)/deploy/keys
-	openssl genrsa -out $(BACKEND_DIR)/deploy/keys/jwt-private.pem 2048
-	openssl rsa -in $(BACKEND_DIR)/deploy/keys/jwt-private.pem \
-		-pubout -out $(BACKEND_DIR)/deploy/keys/jwt-public.pem
-	@echo "Clés générées dans backend/deploy/keys/ — à charger dans .env.prod via env vars."
+jwt-keys: ## Génère une paire de clés RSA 2048 pour le JWT prod
+	mkdir -p deploy/keys
+	openssl genrsa -out deploy/keys/jwt-private.pem 2048
+	openssl rsa -in deploy/keys/jwt-private.pem -pubout -out deploy/keys/jwt-public.pem
+	@echo "✓ Clés générées dans deploy/keys/."
+	@echo "  Copier le contenu (avec \\n littéraux) dans .env.prod :"
+	@echo "    JWT_PRIVATE_KEY=\"\$$(cat deploy/keys/jwt-private.pem | sed ':a;N;\$$!ba;s/\\n/\\\\n/g')\""
 
-.PHONY: help up down logs restart-api migrate makemigrations seed shell test \
-        createsuperuser dedupe worker beat front-install front-dev front-build \
-        front-typecheck prod-build prod-up prod-down prod-migrate clean-pyc \
-        clean-node jwt-keys
+# ─── Help & meta ───────────────────────────────────────
+
+.PHONY: help up down logs ps restart-api migrate makemigrations seed shell test \
+        createsuperuser dedupe worker celery-beat front-install front-dev front-build \
+        front-typecheck prod-build prod-up prod-down prod-restart prod-migrate \
+        prod-logs prod-superuser prod-shell prod-backup clean-pyc clean-node jwt-keys

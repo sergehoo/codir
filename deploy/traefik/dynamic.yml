@@ -1,0 +1,48 @@
+# Traefik — middlewares partagés (rechargé à chaud).
+
+http:
+  middlewares:
+
+    secure-headers:
+      headers:
+        sslRedirect: true
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        forceSTSHeader: true
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        permissionsPolicy: "camera=(), microphone=(), geolocation=()"
+        customResponseHeaders:
+          X-Robots-Tag: "noindex, nofollow"
+
+    api-ratelimit:
+      rateLimit:
+        average: 30
+        period: 1s
+        burst: 60
+        sourceCriterion:
+          ipStrategy:
+            depth: 1
+
+    auth-ratelimit:
+      rateLimit:
+        average: 5
+        period: 1s
+        burst: 10
+        sourceCriterion:
+          ipStrategy:
+            depth: 1
+
+    compression:
+      compress: {}
+
+    # Basic-auth pour le dashboard Traefik. Générer le hash :
+    #   htpasswd -nb admin <password>
+    # puis échapper les $ → $$ pour YAML
+    dashboard-auth:
+      basicAuth:
+        users:
+          - "admin:$$apr1$$f5fM4Ydc$$F.l9yzKkE3D6Ze6BqDxw71"
