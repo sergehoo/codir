@@ -165,10 +165,14 @@ def _match_user(name: str, org: Organization, users_cache: dict | None = None) -
     if users_cache is None or "qs" not in users_cache:
         if users_cache is None:
             users_cache = {}
+        # User est lié à Organization via Membership (multi-tenant)
         users_cache["qs"] = list(
-            User.objects.filter(organization=org).only(
-                "id", "first_name", "last_name", "email",
+            User.objects.filter(
+                memberships__organization=org,
+                memberships__is_active=True,
             )
+            .only("id", "first_name", "last_name", "email")
+            .distinct()
         )
         users_cache["lookup"] = {
             u.id: f"{u.first_name} {u.last_name}".strip() or u.email

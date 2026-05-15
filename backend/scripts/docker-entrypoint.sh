@@ -46,7 +46,9 @@ esac
 # ─── Collectstatic en prod ─────────────────────────────────────
 if [ "$MODE" = "prod" ]; then
   echo "[entrypoint] Collecting static files..."
-  python manage.py collectstatic --no-input --clear 2>/dev/null || true
+  if ! python manage.py collectstatic --no-input --clear; then
+    echo "[entrypoint] WARNING: collectstatic failed — admin CSS may not load" >&2
+  fi
 fi
 
 # ─── Dispatch ──────────────────────────────────────────────────
