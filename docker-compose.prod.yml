@@ -338,13 +338,19 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=proxy
+      # Router HTTPS (TLS via Let's Encrypt — peut être rate-limited mais router toujours actif)
       - traefik.http.routers.codir-web.rule=Host(`${CODIR_HOST}`)
       - traefik.http.routers.codir-web.entrypoints=websecure
       - traefik.http.routers.codir-web.tls=true
       - traefik.http.routers.codir-web.tls.certresolver=lets
       - traefik.http.routers.codir-web.service=codir-web-svc
-      - traefik.http.routers.codir-web.middlewares=codir-sec-headers@docker,codir-compress@docker
       - traefik.http.routers.codir-web.priority=1
+      # Router HTTP de secours (pour valider le routage sans dépendre du cert)
+      - traefik.http.routers.codir-web-http.rule=Host(`${CODIR_HOST}`)
+      - traefik.http.routers.codir-web-http.entrypoints=web
+      - traefik.http.routers.codir-web-http.service=codir-web-svc
+      - traefik.http.routers.codir-web-http.priority=1
+      # Service
       - traefik.http.services.codir-web-svc.loadbalancer.server.port=80
       - traefik.http.services.codir-web-svc.loadbalancer.server.scheme=http
     logging: *logging_rotated
