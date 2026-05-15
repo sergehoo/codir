@@ -1,8 +1,13 @@
 """ViewSets DRF — meetings."""
+import tempfile
+from pathlib import Path
+
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
 from apps.common.permissions import CanModifyMeeting, IsOrganizationMember
@@ -20,6 +25,8 @@ from .serializers import (
     MeetingNoteSerializer, MeetingParticipantSerializer,
     RecordAttendanceSerializer,
 )
+from .imports.codir_importer import import_codir_data
+from .imports.codir_pdf_extractor import extract_codir_pdf
 
 
 class MeetingViewSet(viewsets.ModelViewSet):
@@ -84,6 +91,60 @@ class MeetingViewSet(viewsets.ModelViewSet):
         m.status = "scheduled"
         m.save(update_fields=["status", "updated_at"])
         return Response(MeetingDetailSerializer(m).data)
+
+    # ─── Import d'un CR CODIR PDF ──────────────────────────────────
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="import-codir-pdf",
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def import_codir_pdf(self, request):
+        """Upload un PDF de relevé CODIR et crée Meeting + Participants +
+        Decisions + ActionPlans + Tasks de façon idempotente.
+
+        Body (multipart) :
+            file : <fichier PDF>  (obligatoire)
+            dry_run : "true" | "false"  (défaut "false")
+        """
+        upload = request.FILES.get("file")
+        if not upload:
+            raise ValidationError({"file": "Fichier PDF requis."})
+        if not (upload.name or "").lower().endswith(".pdf"):
+            raise ValidationError({"file": "Le fichier doit avoir l'extension .pdf"})
+
+        dry_run = str(request.data.get("dry_run", "")).lower() in {"1", "true", "yes"}
+
+        # Stocke le PDF en temp file (pdfplumber a besoin d'un path)
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            for chunk in upload.chunks():
+                tmp.write(chunk)
+            tmp_path = Path(tmp.name)
+
+        try:
+            data = extract_codir_pdf(tmp_path)
+            report = import_codir_data(
+                data,
+                organization=request.organization,
+                actor=request.user,
+                dry_run=dry_run,
+            )
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
+        return Response({
+            "extraction": {
+                "reference": data["reference"],
+                "date": str(data["date"]),
+                "title": data["title"],
+                "chair": data["chair"],
+                "rapporteur": data["rapporteur"],
+                "participants_total": len(data["participants"]),
+                "actions_total": len(data["actions"]),
+            },
+            "report": report.to_dict(),
+            "dry_run": dry_run,
+        }, status=200 if not dry_run else 202)
 
     # ─── Sous-ressources ───────────────────────────────────────────
     @action(detail=True, methods=["get", "post"])

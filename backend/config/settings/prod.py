@@ -56,8 +56,34 @@ EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.smtp.Ema
 
 # ─── JWT RS256 ───────────────────────────────────────────────
 SIMPLE_JWT["ALGORITHM"] = "RS256"  # noqa: F405
-SIMPLE_JWT["SIGNING_KEY"] = env("JWT_PRIVATE_KEY")  # noqa: F405
-SIMPLE_JWT["VERIFYING_KEY"] = env("JWT_PUBLIC_KEY")  # noqa: F405
+
+
+def _load_pem_key(env_var: str, path_env_var: str) -> str:
+    """
+    Charge une clé PEM depuis :
+      1. un fichier si <PATH_ENV_VAR> est défini (option recommandée)
+      2. sinon depuis <ENV_VAR>, en décodant les ``\\n`` littéraux en vrais newlines
+
+    PyJWT / cryptography requièrent des vrais sauts de ligne dans le PEM.
+    """
+    import os
+    from pathlib import Path
+
+    path = os.environ.get(path_env_var)
+    if path:
+        return Path(path).read_text()
+
+    raw = env(env_var)  # noqa: F405
+    if not raw:
+        raise RuntimeError(f"{env_var} non défini")
+    # Quand la clé vient d'un .env, les retours-ligne sont encodés "\\n"
+    if "\\n" in raw and "\n" not in raw:
+        raw = raw.replace("\\n", "\n")
+    return raw.strip()
+
+
+SIMPLE_JWT["SIGNING_KEY"] = _load_pem_key("JWT_PRIVATE_KEY", "JWT_PRIVATE_KEY_PATH")
+SIMPLE_JWT["VERIFYING_KEY"] = _load_pem_key("JWT_PUBLIC_KEY", "JWT_PUBLIC_KEY_PATH")
 
 # ─── Logging — pas de stack-trace en clair ──────────────────
 # Sentry capte les erreurs ; les logs Django restent en JSON.
