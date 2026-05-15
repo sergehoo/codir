@@ -185,7 +185,8 @@ services:
       - traefik.http.routers.codir-auth.priority=200
 
       # ── Routeur API générique ────────────────────────────────
-      - traefik.http.routers.codir-api.rule=Host(`${CODIR_API_HOST}`) && (PathPrefix(`/api/`) || PathPrefix(`/admin/`) || PathPrefix(`/docs/`) || PathPrefix(`/health/`) || PathPrefix(`/static/`))
+      # NB: PathPrefix `/admin` (sans slash) pour matcher aussi /admin → Django admin
+      - traefik.http.routers.codir-api.rule=Host(`${CODIR_API_HOST}`) && (PathPrefix(`/api`) || PathPrefix(`/admin`) || PathPrefix(`/docs`) || PathPrefix(`/health`) || PathPrefix(`/static`) || PathPrefix(`/media`))
       - traefik.http.routers.codir-api.entrypoints=websecure
       - traefik.http.routers.codir-api.tls=true
       - traefik.http.routers.codir-api.tls.certresolver=lets
