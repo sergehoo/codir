@@ -124,16 +124,15 @@ def _normalize(s: str) -> str:
 def _match_subsidiary(label: str, org: Organization) -> Subsidiary | None:
     """Match Subsidiary par alias ou fuzzy match sur Subsidiary.name."""
     target = _normalize(label)
-    # Recherche directe par alias
-    for slug, aliases in _SUBSIDIARY_ALIASES.items():
+    # ⚠ unscoped pour bypass TenantManager (vide en management command)
+    for _slug, aliases in _SUBSIDIARY_ALIASES.items():
         if any(_normalize(a) == target for a in aliases):
-            sub = Subsidiary.objects.filter(
+            sub = Subsidiary.unscoped.filter(
                 organization=org, name__in=aliases,
             ).first()
             if sub:
                 return sub
-    # Fallback fuzzy
-    subs = list(Subsidiary.objects.filter(organization=org))
+    subs = list(Subsidiary.unscoped.filter(organization=org))
     if not subs:
         return None
     names = {s.id: s.name for s in subs}
@@ -147,7 +146,9 @@ def _match_direction(label: str, org: Organization) -> Direction | None:
     """Match Direction par nom (fuzzy) dans l'organisation."""
     if not label:
         return None
-    dirs = list(Direction.objects.filter(organization=org))
+    # ⚠ unscoped pour bypass TenantManager
+    Direction_mgr = getattr(Direction, "unscoped", Direction.objects)
+    dirs = list(Direction_mgr.filter(organization=org))
     if not dirs:
         return None
     names = {d.id: d.name for d in dirs}
@@ -193,7 +194,7 @@ def _match_user(name: str, org: Organization, users_cache: dict | None = None) -
 # ─── Catégorie + ref auto ───────────────────────────────────────────────
 
 def _get_or_create_codir_category(org: Organization) -> DecisionCategory:
-    cat, _ = DecisionCategory.objects.get_or_create(
+    cat, _ = DecisionCategory.unscoped.get_or_create(
         organization=org,
         name="Action CODIR",
         defaults={"color": "#ea580c", "description": "Action issue d'un relevé de CODIR"},
@@ -202,10 +203,15 @@ def _get_or_create_codir_category(org: Organization) -> DecisionCategory:
 
 
 def _next_decision_ref(org: Organization, when: datetime) -> str:
-    """Génère DEC-YYYY-NNNN avec compteur par organisation."""
+    """Génère DEC-YYYY-NNNN avec compteur par organisation.
+
+    Utilise ``Decision.unscoped`` pour bypasser le TenantManager (sinon
+    en management command sans tenant context, la requête retourne vide
+    et on recompte à partir de 1 → IntegrityError sur ref existant).
+    """
     year = when.year
     last = (
-        Decision.objects.filter(organization=org, ref__startswith=f"DEC-{year}-")
+        Decision.unscoped.filter(organization=org, ref__startswith=f"DEC-{year}-")
         .order_by("-ref")
         .values_list("ref", flat=True)
         .first()
@@ -255,7 +261,7 @@ def import_codir_data(
     chair_user = _match_user(data.get("chair") or "", organization, users_cache)
     secretary_user = _match_user(data.get("rapporteur") or "", organization, users_cache)
 
-    meeting, meeting_created = Meeting.objects.update_or_create(
+    meeting, meeting_created = Meeting.unscoped.update_or_create(
         organization=organization,
         title=title,
         scheduled_start=scheduled_start,
@@ -278,8 +284,8 @@ def import_codir_data(
 
     # ── 2. Participants + attendances ──
     # Nettoie l'existant pour rester idempotent
-    MeetingAttendance.objects.filter(meeting=meeting).delete()
-    MeetingParticipant.objects.filter(meeting=meeting).delete()
+    MeetingAttendance.unscoped.filter(meeting=meeting).delete()
+    MeetingParticipant.unscoped.filter(meeting=meeting).delete()
 
     for p in data["participants"]:
         user = _match_user(p["name"], organization, users_cache)
@@ -289,7 +295,7 @@ def import_codir_data(
         elif user and user == secretary_user:
             role = ParticipantRole.SECRETARY
 
-        participant = MeetingParticipant.objects.create(
+        participant = MeetingParticipant.unscoped.create(
             organization=organization,
             meeting=meeting,
             user=user,
@@ -308,7 +314,7 @@ def import_codir_data(
             AttendanceStatus.PRESENT if p["status"] == "present"
             else AttendanceStatus.ABSENT
         )
-        MeetingAttendance.objects.create(
+        MeetingAttendance.unscoped.create(
             organization=organization,
             meeting=meeting,
             participant=participant,
@@ -329,7 +335,7 @@ def import_codir_data(
 
         # Idempotence : on identifie par (meeting, project) car le project est unique
         # dans un CODIR donné
-        decision = Decision.objects.filter(
+        decision = Decision.unscoped.filter(
             organization=organization,
             meeting=meeting,
             title=dec_title,
@@ -346,7 +352,7 @@ def import_codir_data(
             decision.save()
             report.decisions_updated += 1
         else:
-            decision = Decision.objects.create(
+            decision = Decision.unscoped.create(
                 organization=organization,
                 ref=_next_decision_ref(organization, scheduled_start),
                 title=dec_title,
@@ -364,7 +370,7 @@ def import_codir_data(
             report.decisions_created += 1
 
         # ActionPlan associé (OneToOne avec Decision)
-        plan, _ = ActionPlan.objects.update_or_create(
+        plan, _ = ActionPlan.unscoped.update_or_create(
             decision=decision,
             defaults={
                 "organization": organization,
@@ -391,7 +397,7 @@ def import_codir_data(
                 report.unmatched_assignees.append(assignee_name)
 
             task_title = a["action"][:300] if a["action"] else dec_title
-            task, task_created = ActionTask.objects.update_or_create(
+            task, task_created = ActionTask.unscoped.update_or_create(
                 action_plan=plan,
                 title=task_title,
                 assignee=assignee,
