@@ -344,6 +344,7 @@ services:
       - traefik.http.routers.codir-web.tls.certresolver=lets
       - traefik.http.routers.codir-web.service=codir-web-svc
       - traefik.http.routers.codir-web.middlewares=codir-sec-headers@docker,codir-compress@docker
+      - traefik.http.routers.codir-web.priority=1
       - traefik.http.services.codir-web-svc.loadbalancer.server.port=80
       - traefik.http.services.codir-web-svc.loadbalancer.server.scheme=http
     logging: *logging_rotated
