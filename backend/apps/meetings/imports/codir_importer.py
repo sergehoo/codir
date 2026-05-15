@@ -295,12 +295,16 @@ def import_codir_data(
         elif user and user == secretary_user:
             role = ParticipantRole.SECRETARY
 
+        # NB : external_email reste TOUJOURS NULL (None) — sinon la contrainte
+        # ``uniq_meeting_participant_external_email`` saute au 2e participant
+        # ayant external_email="" (empty string ≠ NULL pour Postgres).
+        # On n'a pas l'email dans le PDF de toute façon.
         participant = MeetingParticipant.unscoped.create(
             organization=organization,
             meeting=meeting,
             user=user,
             external_name=p["name"] if user is None else "",
-            external_email="" if user else None,
+            external_email=None,
             role=role,
             is_required=True,
         )
