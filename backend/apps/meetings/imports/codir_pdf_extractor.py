@@ -80,10 +80,19 @@ _STATUS_NORM = {
 
 
 def _flatten(cell: str | None) -> str:
-    """Remplace `\\n` par espace + trim + collapse spaces."""
+    """Remplace `\\n` par espace + trim + collapse spaces.
+
+    Cas particulier : `Pierre-\\nMichel` (mot coupé par tiret en fin de ligne) →
+    `Pierre-Michel` (sans espace). Idem pour `Jean-\\nBernard`.
+    """
     if not cell:
         return ""
-    return re.sub(r"\s+", " ", cell.replace("\n", " ")).strip()
+    # 1. Recolle les coupes "mot-<EOL>mot" → "mot-mot"
+    s = re.sub(r"-\s*\n\s*", "-", cell)
+    # 2. Remplace les autres \n par espace
+    s = s.replace("\n", " ")
+    # 3. Collapse spaces
+    return re.sub(r"\s+", " ", s).strip()
 
 
 def _parse_fr_date(text: str) -> date | None:
