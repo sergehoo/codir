@@ -19,7 +19,12 @@ class ActionTaskFilter(filters.FilterSet):
     action_plan = filters.UUIDFilter(field_name="action_plan_id")
     priority = filters.CharFilter(field_name="priority")
     due_before = filters.DateFilter(field_name="due_date", lookup_expr="lte")
+    due_after = filters.DateFilter(field_name="due_date", lookup_expr="gte")
     overdue = filters.BooleanFilter(method="filter_overdue")
+    # ─── Live CODIR Mode ───
+    meeting = filters.UUIDFilter(field_name="action_plan__decision__meeting_id")
+    decision = filters.UUIDFilter(field_name="action_plan__decision_id")
+    direction = filters.UUIDFilter(field_name="action_plan__decision__direction_id")
 
     def filter_overdue(self, qs, name, value):
         from django.utils import timezone
@@ -31,4 +36,4 @@ class ActionTaskFilter(filters.FilterSet):
 
     class Meta:
         model = ActionTask
-        fields = ["status", "assignee", "action_plan", "priority"]
+        fields = ["status", "assignee", "action_plan", "priority", "meeting", "decision", "direction"]

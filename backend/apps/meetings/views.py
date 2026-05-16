@@ -93,6 +93,30 @@ class MeetingViewSet(viewsets.ModelViewSet):
         return Response(MeetingDetailSerializer(m).data)
 
     # ─── Import d'un CR CODIR PDF ──────────────────────────────────
+    # ─── Génération du CR (relevé de conclusions) en .docx ─────────
+    @action(detail=True, methods=["get"], url_path="export-cr-docx")
+    def export_cr_docx(self, request, pk=None):
+        """GET /api/v1/meetings/{id}/export-cr-docx/
+
+        Génère un relevé de conclusions Word à partir des décisions et
+        des tâches de la réunion, au format CODIR Kaydan.
+        Retourne le fichier en attachment.
+        """
+        from django.http import HttpResponse
+        from .imports.codir_doc_exporter import build_codir_minutes_docx
+
+        meeting = self.get_object()
+        bytes_io = build_codir_minutes_docx(meeting)
+        filename = f"CR_CODIR_{meeting.scheduled_start:%Y%m%d}.docx"
+        resp = HttpResponse(
+            bytes_io.getvalue(),
+            content_type=(
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            ),
+        )
+        resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return resp
+
     @action(
         detail=False,
         methods=["post"],

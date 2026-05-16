@@ -4,7 +4,7 @@ import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import {
   AlertTriangle, Archive, ArrowUpRight, CheckCircle2, CheckSquare,
-  ChevronDown, ChevronRight, History, Plus,
+  ChevronDown, ChevronRight, History, Plus, Presentation,
 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -20,6 +20,7 @@ import { StatusBadge } from '@/components/widgets/StatusBadge'
 import type { ActionPlan, ActionTask } from '@/types'
 
 import { AddTaskForm } from './AddTaskForm'
+import { LiveCodirMode } from './LiveCodirMode'
 import { actionPlansApi, plansKeys } from './api'
 
 const SUB_LABEL_DEFAULT = 'Sans filiale'
@@ -55,6 +56,7 @@ export function ActionPlansListPage() {
   const showActiveGrouping = activeGroups.length > 1
 
   const [showHistory, setShowHistory] = useState(false)
+  const [liveMode, setLiveMode] = useState(false)
 
   return (
     <div className="min-h-full bg-bg-base">
@@ -66,7 +68,19 @@ export function ActionPlansListPage() {
             ? `${active.length} plan(s) en cours · ${archived.length} archivé(s)`
             : `${archived.length} plan(s) archivé(s)`
         }
+        actions={
+          <button
+            type="button"
+            onClick={() => setLiveMode(true)}
+            className="px-4 py-2 rounded-md bg-copper-500 hover:bg-copper-400 text-white text-sm font-semibold flex items-center gap-2 shadow-sm"
+          >
+            <Presentation size={16} />
+            Live CODIR Mode
+          </button>
+        }
       />
+
+      {liveMode && <LiveCodirMode onClose={() => setLiveMode(false)} />}
 
       <section className="px-10 pt-6 -mt-2">
         <StatsBar items={[

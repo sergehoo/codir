@@ -25,14 +25,32 @@ export function DashboardPage() {
     refetchInterval: 60_000,
     enabled: !!accessToken,
   })
+  const { data: epiData } = useQuery({
+    queryKey: ['dashboard', 'epi-score'],
+    queryFn: () => dashboardApi.epiScore(90),
+    refetchInterval: 5 * 60_000,    // toutes les 5 min
+    enabled: !!accessToken,
+  })
   const k = data?.kpis
 
+  // ── EPI Score : valeur backend si dispo, sinon fallback legacy frontend ──
   const epi = (() => {
+    if (epiData?.current?.overall_score !== undefined) {
+      return epiData.current.overall_score
+    }
     if (!k) return 0
     const open = k.my_tasks_open + k.overdue_tasks + 1
     const ratio = 1 - k.overdue_tasks / open
     return Math.round(60 + ratio * 35)
   })()
+
+  const epiTrend = epiData?.trend
+    ? (epiData.trend.delta >= 0
+        ? `+${epiData.trend.delta} pts sur 90 j`
+        : `${epiData.trend.delta} pts sur 90 j`)
+    : ''
+  const epiSparkline = epiData?.history?.map((h) => h.score) ?? []
+  const epiBreakdown = epiData?.current
 
   const today = new Date()
 
@@ -76,7 +94,13 @@ export function DashboardPage() {
 
           {/* Master gauge */}
           <div className="lg:col-span-4">
-            <MasterGauge value={epi} label="EPI Score" trend="+6.2 points vs cycle précédent" />
+            <MasterGauge
+              value={epi}
+              label="EPI Score"
+              trend={epiTrend || 'Chargement…'}
+              breakdown={epiBreakdown}
+              sparkline={epiSparkline}
+            />
           </div>
 
           {/* Stats column */}

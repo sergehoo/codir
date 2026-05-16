@@ -232,6 +232,91 @@ class ActionTaskViewSet(viewsets.ModelViewSet):
         ser = ActionTaskListSerializer(page or qs, many=True)
         return self.get_paginated_response(ser.data) if page is not None else Response(ser.data)
 
+    # ─── Bulk update — Live CODIR Mode ────────────────────────
+    @action(detail=False, methods=["post"], url_path="bulk-update")
+    def bulk_update(self, request):
+        """POST /api/v1/action-plans/tasks/bulk-update/
+        Body: {
+            "task_ids": ["uuid1", "uuid2", ...],
+            "updates": {
+                "status": "in_progress" | "done" | "blocked" | ...,
+                "due_date": "YYYY-MM-DD" | null,
+                "assignee": "<user_uuid>" | null,
+                "priority": "low|medium|high|critical",
+                "comment": "<note libre — créera un ActionComment sur chaque task>"
+            }
+        }
+        Tous les champs des updates sont optionnels. Bulk update atomique.
+        """
+        from django.contrib.auth import get_user_model
+        from django.db import transaction
+        from django.utils import timezone
+
+        from apps.common.enums import ActionTaskStatus
+
+        User = get_user_model()
+        task_ids = request.data.get("task_ids", [])
+        updates = request.data.get("updates", {})
+        if not task_ids:
+            return Response({"detail": "task_ids requis (liste non vide)"}, status=400)
+        if not isinstance(updates, dict) or not updates:
+            return Response({"detail": "updates requis (dict non vide)"}, status=400)
+
+        # Validation des valeurs reçues
+        allowed_statuses = {s.value for s in ActionTaskStatus}
+        if "status" in updates and updates["status"] not in allowed_statuses:
+            return Response(
+                {"detail": f"status invalide ({updates['status']})"}, status=400,
+            )
+
+        new_assignee = None
+        if updates.get("assignee"):
+            new_assignee = User.objects.filter(id=updates["assignee"]).first()
+            if not new_assignee:
+                return Response({"detail": "assignee introuvable"}, status=404)
+
+        qs = self.get_queryset().filter(id__in=task_ids)
+        if not qs.exists():
+            return Response({"detail": "aucune tâche trouvée"}, status=404)
+
+        comment_text = (updates.get("comment") or "").strip()
+        updated_count = 0
+        with transaction.atomic():
+            for task in qs:
+                changed = []
+                if "status" in updates:
+                    task.status = updates["status"]
+                    changed.append("status")
+                    # Si on passe à done sans completed_at, on le set
+                    if updates["status"] == ActionTaskStatus.DONE and not task.completed_at:
+                        task.completed_at = timezone.now()
+                        changed.append("completed_at")
+                if "due_date" in updates:
+                    task.due_date = updates["due_date"] or None
+                    changed.append("due_date")
+                if new_assignee is not None:
+                    task.assignee = new_assignee
+                    changed.append("assignee")
+                if "priority" in updates:
+                    task.priority = updates["priority"]
+                    changed.append("priority")
+                if changed:
+                    task.save(update_fields=changed + ["updated_at"])
+                    updated_count += 1
+                if comment_text:
+                    ActionComment.objects.create(
+                        organization=request.organization,
+                        task=task,
+                        author=request.user,
+                        body_md=comment_text,
+                    )
+
+        return Response({
+            "updated": updated_count,
+            "total_requested": len(task_ids),
+            "applied": list(updates.keys()),
+        })
+
     # ─── Stats ────────────────────────────────────────────
     @action(detail=False, methods=["get"])
     def stats(self, request):

@@ -1,28 +1,36 @@
 import { cn } from '@/utils/cn'
 
 type Props = {
+  /**
+   * - `full`     : logo officiel Kaydan Groupe (PNG transparent haute qualité)
+   * - `mark`     : carré 1:1 (K orange + bracket) — favicon-ready, SVG
+   * - `wordmark` : ligne texte inline "Kaydan Groupe"
+   */
   variant?: 'full' | 'mark' | 'wordmark'
   className?: string
   label?: string
-  /** Force le fond noir signature Kaydan (sinon transparent — s'adapte au thème). */
+  /**
+   * @deprecated Le logo est désormais toujours transparent.
+   * Cette prop est conservée pour compatibilité mais n'a plus d'effet.
+   */
   filled?: boolean
 }
 
 const ORANGE = '#F97316'
+const LOGO_PNG = '/logo_kaydanG_B.png'
 
 /**
- * Logo officiel Kaydan Groupe.
+ * Logo officiel Kaydan Groupe — toujours fond transparent.
  *
- *   - `full`     : banner "KAYDAN" + bracket + "GROUPE" (viewBox 420×175, ratio 2.4:1)
- *   - `mark`     : carré 1:1 (K + bracket) — favicon-ready
- *   - `wordmark` : ligne texte inline "Kaydan"
+ *   - `full`     : utilise le PNG officiel `/public/logo_kaydanG_B.png` (RGBA transparent)
+ *   - `mark`     : SVG K + bracket (compact, favicon-ready)
+ *   - `wordmark` : pur texte stylé "Kaydan Groupe"
  */
-export function KaydanLogo({ variant = 'full', className, label, filled = false }: Props) {
+export function KaydanLogo({ variant = 'full', className, label }: Props) {
 
   if (variant === 'mark') {
     return (
       <svg viewBox="0 0 64 64" className={cn('h-9 w-9', className)} aria-label="Kaydan">
-        {filled && <rect width="64" height="64" rx="10" fill="#0A0A0A" />}
         <path d="M 36 10 L 54 10 L 54 28"
               stroke={ORANGE} strokeWidth="4" fill="none" strokeLinecap="square" />
         <text
@@ -53,42 +61,15 @@ export function KaydanLogo({ variant = 'full', className, label, filled = false 
     )
   }
 
-  // full — banner officiel, viewBox serré au contenu
+  // full — PNG officiel transparent
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 420 175"
-      fill="none"
-      className={cn(className)}
-      aria-label="Kaydan Groupe"
-    >
-      {filled && <rect width="420" height="175" fill="#0A0A0A" />}
-
-      <path
-        d="M 280 10 L 410 10 L 410 80"
-        stroke="#F97316"
-        strokeWidth="14"
-        strokeLinecap="square"
-        fill="none"
+    <span className={cn('inline-flex items-center', className)}>
+      <img
+        src={LOGO_PNG}
+        alt="Kaydan Groupe"
+        className="h-full w-auto object-contain max-h-full"
+        draggable={false}
       />
-
-      <text
-        x="20" y="115"
-        fontFamily="Arial, Helvetica, sans-serif"
-        fontSize="86"
-        fontWeight="900"
-        fill="#FFFFFF"
-        letterSpacing="-2"
-      >KAYDAN</text>
-
-      <text
-        x="260" y="160"
-        fontFamily="Arial, Helvetica, sans-serif"
-        fontSize="20"
-        fontWeight="700"
-        fill="#F97316"
-        letterSpacing="3.5"
-      >GROUPE</text>
-    </svg>
+    </span>
   )
 }

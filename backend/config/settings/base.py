@@ -7,6 +7,7 @@ from pathlib import Path
 
 import environ
 
+
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 env = environ.Env(DJANGO_DEBUG=(bool, False))
 environ.Env.read_env(BASE_DIR / ".env")
@@ -226,6 +227,11 @@ CELERY_BEAT_SCHEDULE = {
     "send-manager-daily-summaries-afternoon": {
         "task": "apps.notifications.tasks.send_manager_daily_summaries_task",
         "schedule": crontab(minute=15, hour=16),
+    },
+    # ── EPI Score snapshot quotidien — 06h00 (avant tous les autres) ──
+    "snapshot-epi-score-daily": {
+        "task": "apps.dashboards.tasks.snapshot_epi_score_daily",
+        "schedule": crontab(minute=0, hour=6),
     },
 }
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"

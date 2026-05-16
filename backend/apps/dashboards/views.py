@@ -1,4 +1,4 @@
-"""Dashboard bêta — endpoint unique consolidé."""
+"""Dashboard bêta — endpoint unique consolidé + EPI Score."""
 from datetime import timedelta
 
 from django.utils import timezone
@@ -11,6 +11,7 @@ from apps.common.enums import (
     ActionPlanStatus, ActionTaskStatus, DecisionStatus, MeetingStatus,
 )
 from apps.common.permissions import IsOrganizationMember
+from apps.dashboards.services.epi_score import compute_epi_score, get_history
 from apps.decisions.models import Decision
 from apps.meetings.models import Meeting
 from apps.notifications.models import Notification
@@ -89,3 +90,63 @@ class BetaDashboardView(APIView):
             ],
             "recent_notifications": list(recent_notifications),
         })
+
+
+class EpiScoreView(APIView):
+    """GET /api/v1/dashboards/epi-score/
+
+    Retourne le score EPI courant + son historique 90j.
+
+    Query params :
+      - history_days : nombre de jours à inclure (défaut 90, max 365)
+      - recompute    : 'true' pour recalculer en live au lieu de lire le snapshot
+
+    Le score est :
+      - calculé en live et **non persisté** par cet endpoint (lecture pure)
+      - le snapshot quotidien est créé par la tâche Celery ``snapshot_epi_score_daily``
+    """
+    permission_classes = [IsAuthenticated, IsOrganizationMember]
+
+    def get(self, request):
+        organization = request.organization
+        history_days = min(int(request.query_params.get("history_days", 90)), 365)
+        recompute = request.query_params.get("recompute", "").lower() in {"1", "true", "yes"}
+
+        # Score live (transparent — breakdown complet)
+        result = compute_epi_score(organization)
+
+        # Historique depuis snapshots persistés
+        history = get_history(organization, days=history_days)
+
+        # Si pas de snapshot du jour OU recompute demandé, on ajoute le live à la fin
+        today = timezone.localdate().isoformat()
+        if not history or history[-1]["date"] != today or recompute:
+            history.append({
+                "date": today,
+                "score": result.overall_score,
+                "delta": (
+                    result.overall_score - history[-1]["score"] if history else 0
+                ),
+            })
+
+        return Response({
+            "current": result.to_dict(),
+            "history": history,
+            "trend": _compute_trend(history),
+        })
+
+
+def _compute_trend(history: list[dict]) -> dict:
+    """Retourne min/max/delta sur la période, pour la sparkline."""
+    if not history:
+        return {"min": 0, "max": 0, "delta": 0, "direction": "flat"}
+    scores = [h["score"] for h in history]
+    delta = history[-1]["score"] - history[0]["score"]
+    return {
+        "min": min(scores),
+        "max": max(scores),
+        "delta": delta,
+        "direction": "up" if delta > 2 else "down" if delta < -2 else "flat",
+        "first_score": history[0]["score"],
+        "last_score": history[-1]["score"],
+    }

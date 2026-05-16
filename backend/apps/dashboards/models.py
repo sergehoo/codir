@@ -1,7 +1,53 @@
-"""Apps dashboards — configuration, widgets, layout."""
+"""Apps dashboards — configuration, widgets, layout, EPI score."""
 from django.db import models
 
 from core.models import TenantAwareModel
+
+
+class EpiScoreSnapshot(TenantAwareModel):
+    """Snapshot quotidien de l'Executive Performance Index pour une organisation.
+
+    Stocké en daily snapshot pour permettre :
+      - Sparkline d'évolution sur 90 jours
+      - Alerte de chute > N points
+      - Audit du score (transparence : on garde les composantes et les counts bruts)
+
+    Le score global est dans ``overall_score`` (0-100). Les 4 sous-scores
+    composent ce score selon les pondérations définies dans le service.
+    """
+
+    date = models.DateField(db_index=True)
+    overall_score = models.PositiveSmallIntegerField(help_text="EPI final 0-100")
+
+    # ── Sous-scores 0-100 ──
+    completion_score = models.PositiveSmallIntegerField(default=0)
+    punctuality_score = models.PositiveSmallIntegerField(default=0)
+    velocity_score = models.PositiveSmallIntegerField(default=0)
+    quorum_score = models.PositiveSmallIntegerField(default=0)
+    overdue_penalty = models.PositiveSmallIntegerField(default=0, help_text="Points retirés (0-30)")
+
+    # ── Compteurs bruts (transparence + audit) ──
+    tasks_total = models.PositiveIntegerField(default=0)
+    tasks_done = models.PositiveIntegerField(default=0)
+    tasks_done_on_time = models.PositiveIntegerField(default=0)
+    tasks_overdue = models.PositiveIntegerField(default=0)
+    avg_days_to_close = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    meetings_total = models.PositiveIntegerField(default=0)
+    meetings_quorum_reached = models.PositiveIntegerField(default=0)
+
+    # ── Métadonnées d'alerte ──
+    drop_alert_sent = models.BooleanField(default=False, help_text="True si alerte chute envoyée")
+    drop_vs_previous = models.SmallIntegerField(default=0, help_text="Delta vs jour J-1 (peut être négatif)")
+
+    class Meta:
+        unique_together = [("organization", "date")]
+        ordering = ["-date"]
+        indexes = [
+            models.Index(fields=["organization", "-date"]),
+        ]
+
+    def __str__(self):
+        return f"EPI {self.organization.slug} @ {self.date} = {self.overall_score}"
 
 
 class Dashboard(TenantAwareModel):

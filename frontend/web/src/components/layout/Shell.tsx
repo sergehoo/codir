@@ -46,9 +46,9 @@ export function Shell() {
 
         {/* Header sidebar — logo Kaydan en bannière + produit Codir en sous-titre */}
         <div className="px-5 pt-5 pb-4 border-b border-border space-y-4">
-          {/* Logo Kaydan officiel — fond noir conservé pour fidélité brand */}
-          <div className="bg-[#0A0A0A] rounded-lg p-3 flex items-center justify-center">
-            <KaydanLogo variant="full" className="h-14 w-auto text-white" filled={false} />
+          {/* Logo Kaydan officiel — fond transparent */}
+          <div className="flex items-center justify-center">
+            <KaydanLogo variant="full" className="h-14 w-auto" />
           </div>
           {/* Produit */}
           <div className="flex items-center justify-between gap-2">

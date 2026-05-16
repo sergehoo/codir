@@ -51,6 +51,33 @@ export const actionPlansApi = {
 
   myTasks: async () =>
     (await apiClient.get<Paginated<ActionTask> | ActionTask[]>('/action-plans/tasks/my-tasks/')).data,
+
+  // ─── Live CODIR Mode ───────────────────────────────────
+  tasksByMeeting: async (meetingId: string) =>
+    (await apiClient.get<Paginated<ActionTask> | ActionTask[]>(
+      `/action-plans/tasks/?meeting=${meetingId}&page_size=200`,
+    )).data,
+  addTaskComment: async (taskId: string, body_md: string) =>
+    (await apiClient.post(`/action-plans/tasks/${taskId}/comments/`, { body_md })).data,
+  bulkUpdate: async (
+    task_ids: string[],
+    updates: {
+      status?: string
+      due_date?: string | null
+      assignee?: string | null
+      priority?: string
+      comment?: string
+    },
+  ) =>
+    (await apiClient.post<{ updated: number; total_requested: number; applied: string[] }>(
+      '/action-plans/tasks/bulk-update/',
+      { task_ids, updates },
+    )).data,
+}
+
+export const meetingsExportApi = {
+  exportCrDocxUrl: (meetingId: string) =>
+    `/api/v1/meetings/${meetingId}/export-cr-docx/`,
 }
 
 export const plansKeys = {
