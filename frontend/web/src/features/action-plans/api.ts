@@ -55,7 +55,7 @@ export const actionPlansApi = {
   // ─── Live CODIR Mode ───────────────────────────────────
   tasksByMeeting: async (meetingId: string) =>
     (await apiClient.get<Paginated<ActionTask> | ActionTask[]>(
-      `/action-plans/tasks/?meeting=${meetingId}&page_size=200`,
+      `/action-plans/tasks/all/?meeting=${meetingId}&page_size=200`,
     )).data,
   addTaskComment: async (taskId: string, body_md: string) =>
     (await apiClient.post(`/action-plans/tasks/${taskId}/comments/`, { body_md })).data,

@@ -232,6 +232,19 @@ class ActionTaskViewSet(viewsets.ModelViewSet):
         ser = ActionTaskListSerializer(page or qs, many=True)
         return self.get_paginated_response(ser.data) if page is not None else Response(ser.data)
 
+    # ─── Liste TOUTES les tâches — Live CODIR Mode ─────────────
+    @action(detail=False, methods=["get"], url_path="all")
+    def all_tasks(self, request):
+        """GET /api/v1/action-plans/tasks/all/
+        Endpoint alternatif robuste au routage : 2 segments d'URL → ne peut
+        jamais entrer en conflit avec le pattern `<pk>/` du plans_router.
+        Applique les mêmes filtres que la LIST (DjangoFilterBackend).
+        """
+        qs = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(qs)
+        ser = ActionTaskListSerializer(page or qs, many=True)
+        return self.get_paginated_response(ser.data) if page is not None else Response(ser.data)
+
     # ─── Bulk update — Live CODIR Mode ────────────────────────
     @action(detail=False, methods=["post"], url_path="bulk-update")
     def bulk_update(self, request):

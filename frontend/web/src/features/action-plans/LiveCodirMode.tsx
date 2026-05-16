@@ -76,13 +76,15 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
 
   // ── Chargement des tâches : par défaut TOUTES (toutes réunions confondues) ──
   // Si filterMeetingId est défini → restriction à ce meeting via le filterset DRF
+  // NB : on utilise `/tasks/all/` (2 segments) au lieu de `/tasks/` car ce
+  // dernier peut être capté par `<pk>/` du plans_router selon l'ordre des URLs.
   const { data: tasksRaw, isLoading: tasksLoading } = useQuery({
     queryKey: ['live-codir', 'tasks', filterMeetingId, filterScope],
     queryFn: async () => {
       const params = new URLSearchParams({ page_size: '500' })
       if (filterMeetingId) params.set('meeting', filterMeetingId)
       const r = await apiClient.get<Paginated<ActionTask> | ActionTask[]>(
-        `/action-plans/tasks/?${params.toString()}`,
+        `/action-plans/tasks/all/?${params.toString()}`,
       )
       return r.data
     },
