@@ -144,7 +144,11 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.CursorPagination",
+    # ⚠ NE PAS utiliser CursorPagination par défaut : sa propriété par défaut
+    # `ordering = "-created"` plante sur tous les modèles dont le champ est
+    # `created_at` → FieldError 500. PageNumberPagination est compatible avec
+    # `?page=N&page_size=M` que le frontend utilise déjà.
+    "DEFAULT_PAGINATION_CLASS": "core.pagination.StandardPagination",
     "PAGE_SIZE": 50,
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
