@@ -10,9 +10,18 @@ from .models import ActionComment, ActionEvidence, ActionPlan, ActionTask
 
 @transaction.atomic
 def create_task(*, action_plan: ActionPlan, data: dict) -> ActionTask:
+    # M2M fields can't be passed to .create() — extract before, set after.
+    co_assignees = data.pop("co_assignees", None)
+    # Auto-assigne le prochain numéro d'ordre si non fourni ou = 0.
+    if not data.get("order"):
+        from django.db.models import Max
+        max_order = action_plan.tasks.aggregate(m=Max("order"))["m"] or 0
+        data["order"] = max_order + 1
     task = ActionTask.unscoped.create(
         organization=action_plan.organization, action_plan=action_plan, **data,
     )
+    if co_assignees:
+        task.co_assignees.set(co_assignees)
     _recompute_plan_status(action_plan)
     return task
 

@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useParams } from '@tanstack/react-router'
+import { Link, useNavigate, useParams } from '@tanstack/react-router'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import {
   AlertTriangle, ArrowLeft, Bell, CalendarDays, CheckCircle2,
-  Clock, MessageSquare, Send, User as UserIcon, XCircle,
+  Clock, MessageSquare, Pencil, Send, Trash2, User as UserIcon, Users as UsersIcon, XCircle,
 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -21,8 +21,10 @@ import { DelegateButton } from './DelegateTaskModal'
 export function TaskDetailPage() {
   const { id } = useParams({ strict: false }) as { id: string }
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [showPostpone, setShowPostpone] = useState(false)
   const [showCancel, setShowCancel] = useState(false)
+  const [showEdit, setShowEdit] = useState(false)
 
   const { data: t, isLoading } = useQuery({
     queryKey: ['action-tasks', 'detail', id],
@@ -49,6 +51,23 @@ export function TaskDetailPage() {
     onError: () => toast.error('Échec — vérifiez les préférences de l\'assigné'),
   })
 
+  const deleteTask = useMutation({
+    mutationFn: () => actionPlansApi.deleteTask(id),
+    onSuccess: () => {
+      toast.success('Tâche supprimée')
+      qc.invalidateQueries({ queryKey: plansKeys.all })
+      // Navigate back to the parent plan
+      if (t?.action_plan) {
+        navigate({ to: '/action-plans/$id', params: { id: t.action_plan } })
+      } else {
+        navigate({ to: '/action-plans' })
+      }
+    },
+    onError: (e: any) => {
+      toast.error(e?.response?.data?.detail || 'Suppression impossible')
+    },
+  })
+
   if (isLoading) {
     return <div className="p-10 text-fg-subtle">Chargement…</div>
   }
@@ -61,7 +80,7 @@ export function TaskDetailPage() {
   return (
     <div className="min-h-full bg-bg-base">
       <SectionHeader
-        eyebrow="Tâche"
+        eyebrow={`Tâche${t.order ? ` #${t.order.toString().padStart(2, '0')}` : ''}`}
         backTo={`/action-plans/${t.action_plan}`}
         backLabel="Retour au plan"
         title={t.title}
@@ -100,6 +119,34 @@ export function TaskDetailPage() {
                   }
                 >Archiver</PremiumButton>
               </>
+            )}
+            {/* Modifier / Supprimer — protégés par can_modify */}
+            {t.can_modify && (
+              <>
+                <PremiumButton
+                  size="sm" variant="ghost"
+                  iconLeft={<Pencil size={13} />}
+                  onClick={() => setShowEdit(true)}
+                >Modifier</PremiumButton>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`Supprimer la tâche "${t.title}" ?\n\nLes commentaires et preuves associées seront aussi supprimés.\n\nCette action est irréversible.`)) {
+                      deleteTask.mutate()
+                    }
+                  }}
+                  disabled={deleteTask.isPending}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border hover:border-danger/50 text-2xs font-semibold uppercase tracking-wider text-fg-muted hover:text-danger transition disabled:opacity-40"
+                  title="Supprimer cette tâche"
+                >
+                  <Trash2 size={13} /> Supprimer
+                </button>
+              </>
+            )}
+            {t.can_modify === false && closed && (
+              <span className="text-2xs uppercase tracking-wider text-fg-subtle italic">
+                Lecture seule
+              </span>
             )}
           </div>
         }
@@ -143,9 +190,31 @@ export function TaskDetailPage() {
       {/* Méta détaillée */}
       <section className="px-10 py-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <MetaCard
-          icon={<UserIcon size={14} />} label="Assigné"
+          icon={<UserIcon size={14} />} label="Responsable principal (lead)"
           value={t.assignee_detail?.full_name || '—'}
         />
+        {((t.co_assignees_detail?.length ?? 0) > 0) && (
+          <MetaCard
+            icon={<UsersIcon size={14} />}
+            label={`Co-responsables (${t.co_assignees_detail!.length})`}
+            value={
+              <div className="flex flex-wrap gap-1.5">
+                {t.co_assignees_detail!.map((u) => (
+                  <span
+                    key={u.id}
+                    className="inline-flex items-center gap-1.5 chip-quiet"
+                    title={u.email}
+                  >
+                    <span className="w-5 h-5 rounded-full bg-copper-500/20 text-copper-400 inline-flex items-center justify-center text-2xs font-semibold uppercase">
+                      {(u.first_name?.[0] || u.email[0] || '?').toUpperCase()}
+                    </span>
+                    {u.full_name || `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || u.email}
+                  </span>
+                ))}
+              </div>
+            }
+          />
+        )}
         <MetaCard
           icon={<CalendarDays size={14} />} label="Échéance"
           value={t.due_date ? format(new Date(t.due_date), 'd MMMM yyyy', { locale: fr }) : 'Non définie'}
@@ -207,16 +276,7 @@ export function TaskDetailPage() {
             <p className="text-fg-subtle text-sm">Aucun commentaire pour l'instant.</p>
           )}
           {((t as any).comments ?? []).map((c: any) => (
-            <div key={c.id} className="card p-4">
-              <div className="flex items-center gap-2 text-2xs uppercase tracking-wider text-fg-subtle mb-1.5">
-                <span className="font-semibold text-fg-muted">
-                  {c.author_detail?.full_name || c.author_detail?.email || 'Utilisateur'}
-                </span>
-                <span>·</span>
-                <span>{format(new Date(c.created_at), "d MMM 'à' HH:mm", { locale: fr })}</span>
-              </div>
-              <div className="text-sm whitespace-pre-wrap">{c.body_md}</div>
-            </div>
+            <CommentRow key={c.id} comment={c} taskId={t.id} />
           ))}
         </div>
         {!closed && (
@@ -231,7 +291,353 @@ export function TaskDetailPage() {
       <Modal open={showCancel} onClose={() => setShowCancel(false)} title="Annuler la tâche">
         <CancelForm taskId={t.id} onDone={() => setShowCancel(false)} />
       </Modal>
+      <Modal
+        open={showEdit}
+        onClose={() => setShowEdit(false)}
+        title={`Modifier "${t.title}"`}
+        size="lg"
+      >
+        <EditTaskForm
+          task={t as any}
+          onSaved={() => {
+            setShowEdit(false)
+            qc.invalidateQueries({ queryKey: ['action-tasks', 'detail', id] })
+            qc.invalidateQueries({ queryKey: plansKeys.all })
+            toast.success('Tâche mise à jour')
+          }}
+        />
+      </Modal>
     </div>
+  )
+}
+
+// ─── Composant ligne commentaire avec édition/suppression ──────────
+
+function CommentRow({ comment, taskId }: { comment: any; taskId: string }) {
+  const qc = useQueryClient()
+  const [editing, setEditing] = useState(false)
+  const [body, setBody] = useState(comment.body_md)
+
+  const updateMut = useMutation({
+    mutationFn: () => actionPlansApi.updateComment(comment.id, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['action-tasks', 'detail', taskId] })
+      setEditing(false)
+      toast.success('Commentaire modifié')
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.detail || 'Échec'),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: () => actionPlansApi.deleteComment(comment.id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['action-tasks', 'detail', taskId] })
+      toast.success('Commentaire supprimé')
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.detail || 'Échec'),
+  })
+
+  return (
+    <div className="card p-4 group">
+      <div className="flex items-center gap-2 text-2xs uppercase tracking-wider text-fg-subtle mb-1.5">
+        <span className="font-semibold text-fg-muted">
+          {comment.author_detail?.full_name || comment.author_detail?.email || 'Utilisateur'}
+        </span>
+        <span>·</span>
+        <span>{format(new Date(comment.created_at), "d MMM 'à' HH:mm", { locale: fr })}</span>
+        {comment.updated_at && comment.updated_at !== comment.created_at && (
+          <span className="italic">(modifié)</span>
+        )}
+        {comment.can_modify && !editing && (
+          <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+            <button
+              type="button"
+              onClick={() => { setBody(comment.body_md); setEditing(true) }}
+              className="p-1 rounded hover:bg-bg-base text-fg-muted hover:text-copper-400"
+              title="Modifier"
+            >
+              <Pencil size={12} />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm('Supprimer ce commentaire ?')) deleteMut.mutate()
+              }}
+              disabled={deleteMut.isPending}
+              className="p-1 rounded hover:bg-bg-base text-fg-muted hover:text-danger"
+              title="Supprimer"
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {editing ? (
+        <div className="space-y-2">
+          <textarea
+            className="input w-full min-h-[80px] text-sm"
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            autoFocus
+          />
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              className="text-2xs uppercase tracking-wider text-fg-muted px-3 py-1.5 rounded hover:bg-bg-base"
+            >
+              Annuler
+            </button>
+            <button
+              type="button"
+              onClick={() => updateMut.mutate()}
+              disabled={!body.trim() || updateMut.isPending}
+              className="text-2xs uppercase tracking-wider bg-copper-500 hover:bg-copper-400 text-white px-3 py-1.5 rounded font-semibold disabled:opacity-40"
+            >
+              {updateMut.isPending ? 'Sauvegarde…' : 'Enregistrer'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="text-sm whitespace-pre-wrap">{comment.body_md}</div>
+      )}
+    </div>
+  )
+}
+
+// ─── Modal d'édition d'une tâche ─────────────────────────────────────
+
+function EditTaskForm({
+  task, onSaved,
+}: { task: any; onSaved: () => void }) {
+  const [title, setTitle] = useState(task.title ?? '')
+  const [description, setDescription] = useState(task.description_md ?? '')
+  const [priority, setPriority] = useState(task.priority ?? 'medium')
+  const [status, setStatus] = useState(task.status ?? 'todo')
+  const [progress, setProgress] = useState(task.progress_percent ?? 0)
+  const [dueDate, setDueDate] = useState(task.due_date ?? '')
+  const [order, setOrder] = useState<number>(task.order ?? 0)
+  const [assignee, setAssignee] = useState<string>(task.assignee ?? '')
+  const [coAssignees, setCoAssignees] = useState<string[]>(task.co_assignees ?? [])
+
+  // Liste des users de l'org pour les selects
+  const { data: users } = useQuery<any[]>({
+    queryKey: ['users', 'org-mini'],
+    queryFn: async () => {
+      const { apiClient } = await import('@/api/client')
+      const r = await apiClient.get('/auth/users/?page_size=200')
+      const data: any = r.data
+      return Array.isArray(data) ? data : (data?.results ?? [])
+    },
+    staleTime: 5 * 60_000,
+  })
+
+  const saveMut = useMutation({
+    mutationFn: () => actionPlansApi.updateTask(task.id, {
+      title,
+      description_md: description,
+      priority,
+      status,
+      progress_percent: progress,
+      due_date: dueDate || null,
+      order: order > 0 ? order : undefined,
+      assignee: assignee || null,
+      co_assignees: coAssignees,
+    } as any),
+    onSuccess: () => onSaved(),
+    onError: (e: any) => {
+      const msg = e?.response?.data?.detail || 'Échec de la sauvegarde'
+      toast.error(msg)
+    },
+  })
+
+  return (
+    <form
+      onSubmit={(e) => { e.preventDefault(); saveMut.mutate() }}
+      className="space-y-5"
+    >
+      <div className="grid grid-cols-[100px_1fr] gap-3">
+        <div>
+          <label className="label">N° d'ordre</label>
+          <input
+            type="number"
+            min={1}
+            className="input tabular"
+            value={order || ''}
+            onChange={(e) => setOrder(Number(e.target.value) || 0)}
+            placeholder="—"
+            title="Position de la tâche dans le plan d'action (utilisée pour le tri)"
+          />
+        </div>
+        <div>
+          <label className="label">Titre</label>
+          <input
+            className="input"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="label">Description</label>
+        <textarea
+          className="input min-h-[80px]"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Statut</label>
+          <select className="input" value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="todo">Non démarré</option>
+            <option value="in_progress">En cours</option>
+            <option value="blocked">Bloqué</option>
+            <option value="overdue">En retard</option>
+            <option value="done">Terminé</option>
+            <option value="cancelled">Annulé</option>
+          </select>
+        </div>
+        <div>
+          <label className="label">Priorité</label>
+          <select className="input" value={priority} onChange={(e) => setPriority(e.target.value)}>
+            <option value="low">Faible</option>
+            <option value="medium">Moyenne</option>
+            <option value="high">Élevée</option>
+            <option value="critical">Critique</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Avancement ({progress}%)</label>
+          <input
+            type="range" min={0} max={100} step={5}
+            value={progress}
+            onChange={(e) => setProgress(Number(e.target.value))}
+            className="w-full mt-2 accent-copper-500"
+          />
+        </div>
+        <div>
+          <label className="label">Date d'échéance</label>
+          <input
+            type="date" className="input"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {/* ─── Responsable principal ─── */}
+      <div>
+        <label className="label">Responsable principal (lead)</label>
+        <select
+          className="input"
+          value={assignee}
+          onChange={(e) => setAssignee(e.target.value)}
+        >
+          <option value="">— Non assigné —</option>
+          {users?.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.full_name || `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || u.email}
+            </option>
+          ))}
+        </select>
+        <p className="text-2xs text-fg-subtle mt-1">
+          Le lead reçoit les rappels et est affiché en avatar principal.
+        </p>
+      </div>
+
+      {/* ─── Co-responsables ─── */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <label className="label !mb-0">
+            Co-responsables ({coAssignees.length}
+            {users && ` / ${users.length}`})
+          </label>
+          {users && users.length > 0 && (
+            <div className="flex items-center gap-2 text-2xs">
+              <button
+                type="button"
+                onClick={() =>
+                  setCoAssignees(users.map((u: any) => u.id).filter((id: string) => id !== assignee))
+                }
+                disabled={coAssignees.length >= (users.length - (assignee ? 1 : 0))}
+                className="uppercase tracking-wider text-copper-400 hover:underline font-semibold disabled:opacity-40"
+              >
+                Tout sélectionner
+              </button>
+              <span className="text-fg-subtle">·</span>
+              <button
+                type="button"
+                onClick={() => setCoAssignees([])}
+                disabled={coAssignees.length === 0}
+                className="uppercase tracking-wider text-fg-muted hover:text-copper-400 font-semibold disabled:opacity-40"
+              >
+                Tout retirer
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="max-h-56 overflow-y-auto border border-border rounded-md p-2 space-y-0.5 bg-bg-base">
+          {users?.map((u: any) => {
+            const isPrimary = u.id === assignee
+            const checked = coAssignees.includes(u.id)
+            return (
+              <label
+                key={u.id}
+                className={`flex items-center gap-2 text-sm px-2 py-1.5 rounded transition-colors ${
+                  isPrimary ? 'opacity-50 cursor-not-allowed' : checked ? 'bg-copper-500/10 cursor-pointer' : 'hover:bg-bg-elevated cursor-pointer'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={isPrimary}
+                  onChange={(e) =>
+                    setCoAssignees((prev) =>
+                      e.target.checked
+                        ? [...prev, u.id]
+                        : prev.filter((p) => p !== u.id),
+                    )
+                  }
+                  className="shrink-0 accent-copper-500"
+                />
+                <span className="flex-1 truncate">
+                  {u.full_name || `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || u.email}
+                </span>
+                {isPrimary && (
+                  <span className="text-2xs uppercase tracking-wider text-copper-500 font-semibold">
+                    Lead
+                  </span>
+                )}
+              </label>
+            )
+          })}
+        </div>
+        <p className="text-2xs text-fg-subtle mt-1">
+          Tous les co-responsables peuvent modifier la tâche. Pas de rappels automatiques (seul le lead les reçoit).
+        </p>
+      </div>
+
+      <div className="flex justify-end gap-2 pt-4 border-t border-border">
+        <button
+          type="button"
+          onClick={() => onSaved()}
+          className="px-4 py-2 rounded-md border border-border text-sm"
+        >
+          Annuler
+        </button>
+        <PremiumButton type="submit" loading={saveMut.isPending}>
+          Enregistrer
+        </PremiumButton>
+      </div>
+    </form>
   )
 }
 

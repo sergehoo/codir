@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -21,7 +21,20 @@ export function AddTaskForm({
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState('medium')
   const [assignee, setAssignee] = useState<string | null>(null)
+  const [coAssignees, setCoAssignees] = useState<string[]>([])
   const [dueDate, setDueDate] = useState('')
+
+  // Liste des users pour les co-responsables
+  const { data: users } = useQuery<any[]>({
+    queryKey: ['users', 'org-mini'],
+    queryFn: async () => {
+      const { apiClient } = await import('@/api/client')
+      const r = await apiClient.get('/auth/users/?page_size=200')
+      const data: any = r.data
+      return Array.isArray(data) ? data : (data?.results ?? [])
+    },
+    staleTime: 5 * 60_000,
+  })
 
   const add = useMutation({
     mutationFn: () => actionPlansApi.addTask(planId, {
@@ -29,6 +42,7 @@ export function AddTaskForm({
       description_md: description,
       priority: priority as any,
       assignee: assignee as any,
+      co_assignees: coAssignees,
       due_date: (dueDate || null) as any,
     } as any),
     onSuccess: () => {
@@ -92,9 +106,85 @@ export function AddTaskForm({
         </div>
       </div>
       <div>
-        <label className="label">Assigné à</label>
+        <label className="label">Responsable principal (lead)</label>
         <UserSelect value={assignee} onChange={setAssignee} placeholder="Choisir un membre…" />
+        <p className="text-2xs text-fg-subtle mt-1">
+          Le lead reçoit les rappels automatiques.
+        </p>
       </div>
+
+      {/* ─── Co-responsables ─── */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <label className="label !mb-0">
+            Co-responsables ({coAssignees.length}
+            {users && ` / ${users.length}`})
+          </label>
+          {users && users.length > 0 && (
+            <div className="flex items-center gap-2 text-2xs">
+              <button
+                type="button"
+                onClick={() =>
+                  setCoAssignees(users.map((u: any) => u.id).filter((id: string) => id !== assignee))
+                }
+                disabled={coAssignees.length >= (users.length - (assignee ? 1 : 0))}
+                className="uppercase tracking-wider text-copper-400 hover:underline font-semibold disabled:opacity-40"
+              >
+                Tout sélectionner
+              </button>
+              <span className="text-fg-subtle">·</span>
+              <button
+                type="button"
+                onClick={() => setCoAssignees([])}
+                disabled={coAssignees.length === 0}
+                className="uppercase tracking-wider text-fg-muted hover:text-copper-400 font-semibold disabled:opacity-40"
+              >
+                Tout retirer
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="max-h-48 overflow-y-auto border border-border rounded-md p-2 space-y-0.5 bg-bg-base">
+          {users?.map((u: any) => {
+            const isPrimary = u.id === assignee
+            const checked = coAssignees.includes(u.id)
+            return (
+              <label
+                key={u.id}
+                className={`flex items-center gap-2 text-sm px-2 py-1.5 rounded transition-colors ${
+                  isPrimary ? 'opacity-50 cursor-not-allowed' : checked ? 'bg-copper-500/10 cursor-pointer' : 'hover:bg-bg-elevated cursor-pointer'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={isPrimary}
+                  onChange={(e) =>
+                    setCoAssignees((prev) =>
+                      e.target.checked
+                        ? [...prev, u.id]
+                        : prev.filter((p) => p !== u.id),
+                    )
+                  }
+                  className="shrink-0 accent-copper-500"
+                />
+                <span className="flex-1 truncate">
+                  {u.full_name || `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || u.email}
+                </span>
+                {isPrimary && (
+                  <span className="text-2xs uppercase tracking-wider text-copper-500 font-semibold">
+                    Lead
+                  </span>
+                )}
+              </label>
+            )
+          })}
+        </div>
+        <p className="text-2xs text-fg-subtle mt-1">
+          Co-responsables : peuvent modifier la tâche (sans rappels auto).
+        </p>
+      </div>
+
       <div className="flex justify-end gap-2 pt-2">
         <PremiumButton variant="ghost" onClick={onCancel ?? onCreated}>
           Annuler

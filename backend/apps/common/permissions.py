@@ -110,6 +110,83 @@ class CanModifyActionPlan(BasePermission):
         return self._user_can_modify(request, obj)
 
 
+class CanModifyTask(BasePermission):
+    """Permission de modifier/supprimer une ActionTask.
+
+    Règles :
+      - Lecture : tous les membres de l'org
+      - Modification/Suppression :
+          * staff Django
+          * is_executive (membre COMEX)
+          * assignee principal de la tâche
+          * co_assignee (collaborateur additionnel)
+          * owner du plan d'action parent
+          * créateur de la décision liée
+      - Sinon : 403
+    """
+
+    message = "Vous n'avez pas la permission de modifier cette tâche."
+
+    def _user_can_modify(self, request, obj=None) -> bool:
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if user.is_staff or getattr(user, "is_executive", False):
+            return True
+        if obj is None:
+            return False
+        # Assignee principal → peut tout faire sur sa propre tâche
+        if getattr(obj, "assignee_id", None) == user.id:
+            return True
+        # Co-assignee → peut aussi modifier (équipier)
+        try:
+            if obj.co_assignees.filter(id=user.id).exists():
+                return True
+        except (AttributeError, Exception):  # noqa: BLE001 — graceful si M2M pas migré
+            pass
+        # Owner du plan d'action parent
+        plan = getattr(obj, "action_plan", None)
+        if plan and getattr(plan, "owner_id", None) == user.id:
+            return True
+        # Créateur de la décision parente
+        decision = getattr(plan, "decision", None) if plan else None
+        if decision and getattr(decision, "created_by_id", None) == user.id:
+            return True
+        return False
+
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return True
+        # Pour les méthodes write (create) : staff/exec uniquement
+        return self._user_can_modify(request)
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in SAFE_METHODS:
+            return True
+        return self._user_can_modify(request, obj)
+
+
+class CanModifyOwnComment(BasePermission):
+    """Permission éditer/supprimer un commentaire.
+
+    Règles :
+      - Lecture : tous les membres de l'org
+      - Modification/Suppression : auteur uniquement, ou staff/executive
+    """
+
+    message = "Vous ne pouvez modifier que vos propres commentaires."
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in SAFE_METHODS:
+            return True
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if user.is_staff or getattr(user, "is_executive", False):
+            return True
+        return getattr(obj, "author_id", None) == user.id
+
+
 class CanModifyTaskInSubsidiary(BasePermission):
     """⚠ Permission DÉSACTIVÉE par défaut.
 

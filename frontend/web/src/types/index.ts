@@ -124,8 +124,12 @@ export type Decision = {
 export type ActionTaskComment = {
   id: ID
   body_md: string
+  author?: ID
   author_detail?: UserMini
+  /** Permission de modifier/supprimer ce commentaire (auteur ou exec/staff). */
+  can_modify?: boolean
   created_at: string
+  updated_at?: string
 }
 
 export type ActionTask = {
@@ -133,12 +137,18 @@ export type ActionTask = {
   action_plan: ID
   action_plan_title?: string
   parent?: ID | null
+  /** Numéro d'ordre intra-plan (auto-incrémenté à la création). */
+  order?: number
   title: string
   description_md?: string
   priority: Priority
   status: ActionTaskStatus
+  /** Responsable principal (lead) — celui qui reçoit les rappels. */
   assignee?: ID | null
   assignee_detail?: UserMini
+  /** Co-responsables (collaborateurs additionnels). */
+  co_assignees?: ID[]
+  co_assignees_detail?: UserMini[]
   due_date?: string | null
   progress_percent: number
   is_overdue: boolean
@@ -146,6 +156,8 @@ export type ActionTask = {
   completed_at?: string | null
   subsidiary_id?: ID | null
   subsidiary_name?: string | null
+  /** Permission de modifier/supprimer cette tâche. */
+  can_modify?: boolean
   created_at?: string
   updated_at?: string
   /** Présents sur l'endpoint detail uniquement. */

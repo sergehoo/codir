@@ -148,8 +148,8 @@ function TaskRow({
 }: { t: ActionTask; idx: number; onComplete: (id: string) => void }) {
   return (
     <div className="card p-4 flex items-center gap-5 hover:border-border-strong transition">
-      <span className="text-fg-subtle font-mono text-2xs tabular w-6">
-        {(idx + 1).toString().padStart(2, '0')}
+      <span className="text-copper-400 font-mono text-2xs tabular w-8 font-semibold" title="Numéro d'ordre intra-plan">
+        #{((t.order ?? (idx + 1))).toString().padStart(2, '0')}
       </span>
       <Link to="/tasks/$id" params={{ id: t.id }} className="flex-1 min-w-0 group">
         <div className="font-medium text-sm leading-tight group-hover:text-copper-400 transition">{t.title}</div>

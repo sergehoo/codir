@@ -466,6 +466,11 @@ function TaskRow({
 
         <div className="flex-1 min-w-0">
           <div className="font-medium text-base truncate" title={task.title}>
+            {task.order ? (
+              <span className="text-copper-400 font-mono text-sm font-semibold mr-2 tabular">
+                #{task.order.toString().padStart(2, '0')}
+              </span>
+            ) : null}
             {task.title}
           </div>
           {task.description_md && (

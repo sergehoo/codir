@@ -5,7 +5,9 @@ from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.response import Response
 
-from apps.common.permissions import CanModifyActionPlan, IsOrganizationMember
+from apps.common.permissions import (
+    CanModifyActionPlan, CanModifyTask, IsOrganizationMember,
+)
 
 from . import services
 from .filters import ActionPlanFilter, ActionTaskFilter
@@ -86,14 +88,17 @@ class ActionPlanViewSet(viewsets.ModelViewSet):
 class ActionTaskViewSet(viewsets.ModelViewSet):
     """ViewSet des tâches.
 
-    Permission unique : ``IsOrganizationMember`` — tous les membres du CODIR
-    voient et modifient les mêmes tâches, sans cloisonnement par filiale.
+    Permissions :
+      - ``IsOrganizationMember`` : doit appartenir au tenant
+      - ``CanModifyTask`` : update/delete uniquement staff/exec/assignee/owner
     """
-    permission_classes = [IsOrganizationMember]
+    permission_classes = [IsOrganizationMember, CanModifyTask]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = ActionTaskFilter
     search_fields = ["title", "description_md"]
-    ordering = ["due_date"]
+    # Tri par défaut : order intra-plan, puis échéance, puis création.
+    ordering = ["action_plan", "order", "due_date", "created_at"]
+    ordering_fields = ["order", "due_date", "priority", "status", "created_at"]
 
     def get_queryset(self):
         return (
@@ -152,12 +157,49 @@ class ActionTaskViewSet(viewsets.ModelViewSet):
     def comments(self, request, pk=None):
         task = self.get_object()
         if request.method == "GET":
-            return Response(ActionCommentSerializer(task.comments.all(), many=True).data)
+            qs = task.comments.select_related("author").all()
+            return Response(ActionCommentSerializer(qs, many=True, context={"request": request}).data)
         c = ActionComment.objects.create(
             organization=request.organization, task=task,
             author=request.user, body_md=request.data.get("body_md", ""),
         )
-        return Response(ActionCommentSerializer(c).data, status=201)
+        return Response(ActionCommentSerializer(c, context={"request": request}).data, status=201)
+
+    @action(
+        detail=False,
+        methods=["patch", "delete"],
+        url_path="comments/(?P<comment_id>[^/.]+)",
+    )
+    def manage_comment(self, request, comment_id=None):
+        """PATCH/DELETE sur un commentaire individuel.
+
+        URL: /action-plans/tasks/comments/<uuid>/
+        Permission : auteur uniquement (sauf staff/exec).
+        """
+        from apps.common.permissions import CanModifyOwnComment
+
+        comment = ActionComment.objects.select_related("author").filter(id=comment_id).first()
+        if not comment:
+            return Response({"detail": "Commentaire introuvable."}, status=404)
+
+        perm = CanModifyOwnComment()
+        if not perm.has_object_permission(request, self, comment):
+            return Response(
+                {"detail": "Vous ne pouvez modifier que vos propres commentaires."},
+                status=403,
+            )
+
+        if request.method == "DELETE":
+            comment.delete()
+            return Response(status=204)
+
+        # PATCH : seul le champ body_md est modifiable
+        new_body = request.data.get("body_md")
+        if new_body is None:
+            return Response({"detail": "body_md requis."}, status=400)
+        comment.body_md = new_body
+        comment.save(update_fields=["body_md", "updated_at"])
+        return Response(ActionCommentSerializer(comment, context={"request": request}).data)
 
     @action(detail=True, methods=["get", "post"])
     def evidence(self, request, pk=None):

@@ -52,6 +52,24 @@ export const actionPlansApi = {
   myTasks: async () =>
     (await apiClient.get<Paginated<ActionTask> | ActionTask[]>('/action-plans/tasks/my-tasks/')).data,
 
+  // ─── Task CRUD ─────────────────────────────────────────
+  updateTask: async (id: string, payload: Partial<ActionTask>) =>
+    (await apiClient.patch<ActionTask>(`/action-plans/tasks/${id}/`, payload)).data,
+  deleteTask: async (id: string) =>
+    (await apiClient.delete(`/action-plans/tasks/${id}/`)).data,
+
+  // ─── Task comments CRUD ────────────────────────────────
+  listTaskComments: async (taskId: string) =>
+    (await apiClient.get(`/action-plans/tasks/${taskId}/comments/`)).data,
+  addTaskCommentToTask: async (taskId: string, body_md: string) =>
+    (await apiClient.post(`/action-plans/tasks/${taskId}/comments/`, { body_md })).data,
+  updateComment: async (commentId: string, body_md: string) =>
+    (await apiClient.patch(
+      `/action-plans/tasks/comments/${commentId}/`, { body_md },
+    )).data,
+  deleteComment: async (commentId: string) =>
+    (await apiClient.delete(`/action-plans/tasks/comments/${commentId}/`)).data,
+
   // ─── Live CODIR Mode ───────────────────────────────────
   tasksByMeeting: async (meetingId: string) =>
     (await apiClient.get<Paginated<ActionTask> | ActionTask[]>(

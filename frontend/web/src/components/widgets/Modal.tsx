@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 
 import { cn } from '@/utils/cn'
@@ -41,8 +42,11 @@ export function Modal({ open, onClose, title, children, size = 'md' }: Props) {
   }, [open, onClose])
 
   if (!open) return null
+  if (typeof document === 'undefined') return null
 
-  return (
+  // Portal au niveau body : indispensable pour échapper à `overflow-hidden` ou
+  // aux transforms d'un parent (ex. carte accordéon des plans d'action).
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-6 animate-fade-in overflow-y-auto"
       onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}
@@ -71,6 +75,7 @@ export function Modal({ open, onClose, title, children, size = 'md' }: Props) {
         )}
         <div className="p-6 overflow-y-auto flex-1">{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

@@ -372,8 +372,8 @@ function TaskInlineRow({ t, idx, planId }: { t: ActionTask; idx: number; planId:
           ? 'bg-danger/5 border border-danger/20'
           : 'bg-bg-elevated hover:bg-fg/[0.04]'
     }`}>
-      <span className="text-fg-subtle font-mono text-2xs tabular w-6 shrink-0">
-        {(idx + 1).toString().padStart(2, '0')}
+      <span className="text-copper-400 font-mono text-2xs tabular w-8 shrink-0 font-semibold">
+        #{((t.order ?? (idx + 1))).toString().padStart(2, '0')}
       </span>
 
       <Link

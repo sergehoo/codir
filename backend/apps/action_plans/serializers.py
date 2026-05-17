@@ -20,11 +20,23 @@ def _resolve_subsidiary(action_plan):
 
 class ActionCommentSerializer(serializers.ModelSerializer):
     author_detail = UserMiniSerializer(source="author", read_only=True)
+    can_modify = serializers.SerializerMethodField()
 
     class Meta:
         model = ActionComment
-        fields = ["id", "task", "action_plan", "author", "author_detail", "body_md", "created_at"]
-        read_only_fields = ("author", "created_at")
+        fields = [
+            "id", "task", "action_plan", "author", "author_detail",
+            "body_md", "can_modify", "created_at", "updated_at",
+        ]
+        read_only_fields = ("author", "created_at", "updated_at")
+
+    def get_can_modify(self, obj):
+        request = self.context.get("request") if hasattr(self, "context") else None
+        if request is None or not request.user.is_authenticated:
+            return False
+        if request.user.is_staff or getattr(request.user, "is_executive", False):
+            return True
+        return obj.author_id == request.user.id
 
 
 class ActionEvidenceSerializer(serializers.ModelSerializer):
@@ -41,21 +53,25 @@ class ActionEvidenceSerializer(serializers.ModelSerializer):
 
 class ActionTaskListSerializer(serializers.ModelSerializer):
     assignee_detail = UserMiniSerializer(source="assignee", read_only=True)
+    co_assignees_detail = UserMiniSerializer(source="co_assignees", many=True, read_only=True)
     is_overdue = serializers.BooleanField(read_only=True)
     subsidiary_id = serializers.SerializerMethodField()
     subsidiary_name = serializers.SerializerMethodField()
     action_plan_title = serializers.CharField(source="action_plan.title", read_only=True)
+    can_modify = serializers.SerializerMethodField()
 
     class Meta:
         model = ActionTask
         fields = [
             "id", "action_plan", "action_plan_title",
-            "parent", "title", "priority", "status",
+            "parent", "order", "title", "description_md", "priority", "status",
             "assignee", "assignee_detail",
+            "co_assignees", "co_assignees_detail",
             "due_date", "progress_percent",
             "started_at", "completed_at",
             "is_overdue",
             "subsidiary_id", "subsidiary_name",
+            "can_modify",
             "created_at", "updated_at",
         ]
 
@@ -66,6 +82,15 @@ class ActionTaskListSerializer(serializers.ModelSerializer):
     def get_subsidiary_name(self, obj):
         sub = _resolve_subsidiary(obj.action_plan)
         return sub.name if sub else None
+
+    def get_can_modify(self, obj):
+        """True si le user courant peut modifier/supprimer cette tâche."""
+        request = self.context.get("request") if hasattr(self, "context") else None
+        if request is None:
+            return False
+        from apps.common.permissions import CanModifyTask
+        perm = CanModifyTask()
+        return perm.has_object_permission(request, None, obj)
 
 
 class ActionTaskDetailSerializer(ActionTaskListSerializer):
@@ -84,9 +109,13 @@ class ActionTaskCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ActionTask
         fields = [
-            "parent", "title", "description_md", "priority",
-            "assignee", "due_date", "effort_estimate_hours",
+            "parent", "order", "title", "description_md", "priority",
+            "assignee", "co_assignees", "due_date", "effort_estimate_hours",
         ]
+        extra_kwargs = {
+            # `order` est optionnel à la création : auto-incrémenté par create_task() si absent.
+            "order": {"required": False, "allow_null": True},
+        }
 
 
 class ActionPlanListSerializer(serializers.ModelSerializer):

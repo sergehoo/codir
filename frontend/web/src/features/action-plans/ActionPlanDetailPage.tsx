@@ -185,8 +185,8 @@ export function ActionPlanDetailPage() {
               )}
               {tasks.map((t, i) => (
                 <tr key={t.id} className="border-b border-border last:border-0 hover:bg-fg/[0.02]">
-                  <td className="py-4 px-5 text-fg-subtle font-mono text-2xs tabular">
-                    {(i + 1).toString().padStart(2, '0')}
+                  <td className="py-4 px-5 text-copper-400 font-mono text-2xs tabular font-semibold">
+                    #{((t.order ?? (i + 1))).toString().padStart(2, '0')}
                   </td>
                   <td className="py-4 px-5">
                     <Link to="/tasks/$id" params={{ id: t.id }} className="font-medium text-sm hover:text-copper-400 transition">
@@ -195,6 +195,14 @@ export function ActionPlanDetailPage() {
                     {t.assignee_detail && (
                       <div className="text-2xs text-fg-subtle uppercase tracking-wider mt-1">
                         → {t.assignee_detail.full_name}
+                        {(t.co_assignees_detail?.length ?? 0) > 0 && (
+                          <span
+                            className="ml-1.5 inline-flex items-center gap-1 text-copper-400/80 normal-case"
+                            title={t.co_assignees_detail!.map((u) => u.full_name).join(', ')}
+                          >
+                            +{t.co_assignees_detail!.length}
+                          </span>
+                        )}
                       </div>
                     )}
                   </td>
