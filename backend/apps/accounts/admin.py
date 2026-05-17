@@ -34,11 +34,9 @@ class UserAdmin(DjangoUserAdmin):
     )
     list_filter = (
         "is_executive", "is_staff", "is_superuser", "mfa_enabled", "is_active",
-        "memberships__subsidiary",
     )
     search_fields = (
         "email", "first_name", "last_name", "phone_e164",
-        "memberships__subsidiary__name",
     )
     ordering = ("last_name", "first_name")
     readonly_fields = (
@@ -60,19 +58,25 @@ class UserAdmin(DjangoUserAdmin):
     )
 
     def get_queryset(self, request):
-        return (
-            super().get_queryset(request)
-            .prefetch_related("memberships__subsidiary")
-        )
+        qs = super().get_queryset(request)
+        # Prefetch défensif : si Membership.subsidiary n'existe pas encore
+        # (migration pas appliquée), on retombe sur un prefetch simple.
+        try:
+            return qs.prefetch_related("memberships__subsidiary")
+        except Exception:  # noqa: BLE001
+            return qs.prefetch_related("memberships")
 
     @admin.display(description="Filiale(s)")
     def subsidiaries_display(self, obj):
         """Liste des filiales du user (via memberships actifs)."""
-        names = sorted({
-            m.subsidiary.name
-            for m in obj.memberships.all()
-            if m.is_active and m.subsidiary_id
-        })
+        try:
+            from apps.accounts.models import Membership
+            qs = Membership.unscoped.filter(
+                user=obj, is_active=True, subsidiary__isnull=False,
+            ).select_related("subsidiary")
+            names = sorted({m.subsidiary.name for m in qs if m.subsidiary})
+        except Exception:  # noqa: BLE001
+            names = []
         if not names:
             return format_html('<span style="color:#999">— Groupe transverse —</span>')
         return ", ".join(names)
