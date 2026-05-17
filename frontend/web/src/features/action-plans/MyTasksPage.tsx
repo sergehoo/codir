@@ -174,9 +174,17 @@ function TaskRow({
       <PriorityBadge priority={t.priority} />
       <StatusBadge status={t.status} />
       <DelegateButton task={t} />
-      <button onClick={() => onComplete(t.id)}
-              className="text-2xs uppercase tracking-wider text-copper-400 hover:underline font-semibold">
-        Clôturer
+      <button
+        onClick={() => onComplete(t.id)}
+        disabled={(t.progress_percent ?? 0) < 100}
+        title={
+          (t.progress_percent ?? 0) < 100
+            ? `La tâche doit être à 100% (actuellement : ${t.progress_percent ?? 0}%)`
+            : 'Archiver la tâche'
+        }
+        className="text-2xs uppercase tracking-wider text-copper-400 hover:underline font-semibold disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed"
+      >
+        Archiver
       </button>
     </div>
   )

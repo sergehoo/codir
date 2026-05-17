@@ -23,7 +23,7 @@ export function TaskReminderCard() {
       <div className="flex items-baseline justify-between mb-4">
         <div>
           <div className="text-2xs uppercase tracking-widest text-fg-muted font-semibold">Mes rappels</div>
-          <div className="serif text-lg mt-0.5">À traiter aujourd'hui</div>
+          <div className="serif text-lg mt-0.5">Tâches à traiter </div>
         </div>
         <Link to="/my-tasks" className="text-2xs uppercase tracking-wider text-copper-400 hover:underline font-semibold">
           Mes tâches →

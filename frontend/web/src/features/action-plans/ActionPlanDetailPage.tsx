@@ -191,9 +191,17 @@ export function ActionPlanDetailPage() {
                       {t.status !== 'done' && t.status !== 'cancelled' && (
                         <>
                           <DelegateButton task={t} />
-                          <button onClick={() => complete.mutate(t.id)}
-                                  className="text-2xs text-copper-400 hover:underline uppercase tracking-wider font-semibold">
-                            Clôturer
+                          <button
+                            onClick={() => complete.mutate(t.id)}
+                            disabled={(t.progress_percent ?? 0) < 100}
+                            title={
+                              (t.progress_percent ?? 0) < 100
+                                ? `La tâche doit être à 100% (actuellement : ${t.progress_percent ?? 0}%)`
+                                : 'Archiver la tâche'
+                            }
+                            className="text-2xs text-copper-400 hover:underline uppercase tracking-wider font-semibold disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed"
+                          >
+                            Archiver
                           </button>
                         </>
                       )}

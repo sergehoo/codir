@@ -4,7 +4,7 @@ import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import {
   AlertTriangle, Archive, ArrowUpRight, CheckCircle2, CheckSquare,
-  ChevronDown, ChevronRight, History, Plus, Presentation,
+  ChevronDown, ChevronRight, Plus, Presentation,
 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -41,16 +41,29 @@ function groupBySubsidiary(plans: ActionPlan[]) {
 }
 
 const ACTIVE_STATUSES = new Set(['open', 'in_progress', 'blocked'])
-const ARCHIVED_STATUSES = new Set(['completed', 'cancelled'])
+
+/**
+ * Un plan est ARCHIVÉ uniquement s'il est explicitement terminé (status=completed)
+ * ET à 100% de progression. Un plan annulé apparaît à part (non archivé).
+ * Un plan à 100% mais status != completed reste en actif tant que l'archivage
+ * formel n'est pas fait (pour cohérence avec la règle des tâches).
+ */
+function isPlanArchived(p: ActionPlan): boolean {
+  return p.status === 'completed' && (p.progress_percent ?? 0) >= 100
+}
 
 export function ActionPlansListPage() {
   const { data, isLoading } = useQuery({ queryKey: plansKeys.list(), queryFn: () => actionPlansApi.list() })
   const allItems = (Array.isArray(data) ? data : (data?.results ?? [])) as ActionPlan[]
   const { data: stats } = useQuery({ queryKey: plansKeys.stats(), queryFn: () => actionPlansApi.stats() })
 
-  // Séparation actif / historique
-  const active = allItems.filter((p) => ACTIVE_STATUSES.has(p.status) && p.progress_percent < 100)
-  const archived = allItems.filter((p) => ARCHIVED_STATUSES.has(p.status) || p.progress_percent >= 100)
+  // Séparation actif / archives
+  // - Actif : statut open/in_progress/blocked ET pas encore à 100%
+  // - Archives : strictement status=completed ET progress=100%
+  const active = allItems.filter(
+    (p) => ACTIVE_STATUSES.has(p.status) && (p.progress_percent ?? 0) < 100,
+  )
+  const archived = allItems.filter(isPlanArchived)
 
   const activeGroups = groupBySubsidiary(active)
   const showActiveGrouping = activeGroups.length > 1
@@ -132,7 +145,7 @@ export function ActionPlansListPage() {
           </div>
         )}
 
-        {/* ─── Historique (collapsible) ──────────────────────── */}
+        {/* ─── Archives (collapsible) ──────────────────────── */}
         {!isLoading && archived.length > 0 && (
           <div className="mt-10">
             <button
@@ -142,9 +155,9 @@ export function ActionPlansListPage() {
               {showHistory
                 ? <ChevronDown size={16} className="text-fg-muted" />
                 : <ChevronRight size={16} className="text-fg-muted" />}
-              <History size={14} className="text-fg-subtle" />
+              <Archive size={14} className="text-fg-subtle" />
               <span className="text-2xs uppercase tracking-widest text-fg-muted font-semibold flex-1">
-                Historique — plans clôturés
+                Archives — plans terminés à 100%
               </span>
               <span className="chip-quiet">{archived.length}</span>
             </button>
@@ -296,9 +309,15 @@ function TaskInlineRow({ t, idx, planId }: { t: ActionTask; idx: number; planId:
     },
   })
 
+  // Surbrillance verte si tâche Fait à 100%
+  const isDone100 = t.status === 'done' && (t.progress_percent ?? 0) >= 100
   return (
     <div className={`flex items-center gap-3 px-3 py-2.5 rounded transition group ${
-      t.is_overdue ? 'bg-danger/5 border border-danger/20' : 'bg-bg-elevated hover:bg-fg/[0.04]'
+      isDone100
+        ? 'bg-success/10 border border-success/30'
+        : t.is_overdue
+          ? 'bg-danger/5 border border-danger/20'
+          : 'bg-bg-elevated hover:bg-fg/[0.04]'
     }`}>
       <span className="text-fg-subtle font-mono text-2xs tabular w-6 shrink-0">
         {(idx + 1).toString().padStart(2, '0')}
@@ -328,10 +347,15 @@ function TaskInlineRow({ t, idx, planId }: { t: ActionTask; idx: number; planId:
       {t.status !== 'done' && t.status !== 'cancelled' && (
         <button
           onClick={(e) => { e.stopPropagation(); complete.mutate() }}
-          disabled={complete.isPending}
-          className="text-2xs text-copper-400 hover:underline uppercase tracking-wider font-semibold shrink-0"
+          disabled={complete.isPending || (t.progress_percent ?? 0) < 100}
+          title={
+            (t.progress_percent ?? 0) < 100
+              ? `La tâche doit être à 100% (actuellement : ${t.progress_percent ?? 0}%)`
+              : 'Archiver la tâche'
+          }
+          className="text-2xs text-copper-400 hover:underline uppercase tracking-wider font-semibold shrink-0 disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed"
         >
-          Clôturer
+          Archiver
         </button>
       )}
     </div>

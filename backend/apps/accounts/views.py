@@ -41,6 +41,58 @@ class MeView(APIView):
         return Response(out)
 
 
+class ChangePasswordView(APIView):
+    """POST /api/v1/auth/me/change-password/
+
+    Body : { current_password, new_password }
+    Réponse : 200 { detail: 'Mot de passe modifié' } | 400 { current_password: [...] }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        from rest_framework import status as drf_status
+
+        user = request.user
+        current = request.data.get("current_password", "")
+        new = request.data.get("new_password", "")
+
+        if not current or not new:
+            return Response(
+                {"detail": "current_password et new_password requis."},
+                status=drf_status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not user.check_password(current):
+            return Response(
+                {"current_password": ["Mot de passe actuel incorrect."]},
+                status=drf_status.HTTP_400_BAD_REQUEST,
+            )
+
+        if new == current:
+            return Response(
+                {"new_password": ["Le nouveau mot de passe doit être différent de l'ancien."]},
+                status=drf_status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Validation Django (longueur, complexité, etc.)
+        try:
+            validate_password(new, user=user)
+        except DjangoValidationError as e:
+            return Response(
+                {"new_password": list(e.messages)},
+                status=drf_status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.set_password(new)
+        user.must_change_password = False
+        user.save(update_fields=["password", "must_change_password"])
+        log.info("Password changed for user_id=%s", user.id)
+
+        return Response({"detail": "Mot de passe modifié."}, status=drf_status.HTTP_200_OK)
+
+
 class MyMembershipsView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -113,4 +165,9 @@ class MembershipViewSet(viewsets.ModelViewSet):
     serializer_class = MembershipSerializer
 
     def get_queryset(self):
-        return Membership.objects.select_related("user").all()
+        return (
+            Membership.objects
+            .select_related("user", "subsidiary", "organization")
+            .prefetch_related("roles")
+            .all()
+        )

@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
-import { ArrowRight, Eye, EyeOff, Lock, Mail } from 'lucide-react'
+import { ArrowRight, Clock, Eye, EyeOff, Lock, Mail } from 'lucide-react'
 
 import { PremiumButton } from '@/components/widgets/PremiumButton'
 import { KaydanLogo } from '@/components/widgets/KaydanLogo'
@@ -16,6 +16,18 @@ export function LoginPage() {
   const [pwd, setPwd] = useState('')
   const [showPwd, setShowPwd] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [expiredNotice, setExpiredNotice] = useState(false)
+
+  // Affiche un bandeau si on a été redirigé suite à une session expirée
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search)
+    if (sp.get('reason') === 'expired') {
+      setExpiredNotice(true)
+      // Nettoie l'URL pour ne pas réafficher au reload
+      const cleanUrl = window.location.pathname
+      window.history.replaceState({}, '', cleanUrl)
+    }
+  }, [])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -41,40 +53,25 @@ export function LoginPage() {
             C
           </div>
           <div>
-            <div className="serif text-h2 font-semibold leading-none">Codir</div>
+            <div className="serif text-h2 font-semibold leading-none">CODIR</div>
             <div className="text-2xs uppercase tracking-widest text-fg-subtle mt-1">Executive Platform</div>
           </div>
         </div>
 
         <div className="space-y-10 animate-fade-in-up">
-          <div className="flex items-center gap-3 text-2xs uppercase tracking-widest text-fg-muted font-semibold">
-            <span className="divider-accent" />
-            <span>Tuesday · 13 May 2026</span>
-          </div>
+
 
           <h1 className="serif text-hero leading-[1.02] text-fg">
-            Where boards<br />
+            Where leaders<br />
             decide <span className="italic text-copper-400">with clarity.</span>
           </h1>
 
           <p className="text-fg-muted text-lg leading-relaxed max-w-md font-light">
-            CODIR orchestre vos comités de direction, archive chaque décision,
-            et pilote l'exécution stratégique. Une plateforme conçue pour les
-            organisations qui prennent leur gouvernance au sérieux.
+            Cette Platerfome orchestre vos comités de direction, archive chaque décision,
+            et pilote l'exécution des tâches.
           </p>
 
-          <div className="grid grid-cols-3 gap-8 pt-6 border-t border-border">
-            {[
-              { kpi: '87%',  label: 'Décisions exécutées dans les délais' },
-              { kpi: '−60%', label: 'Temps de préparation comité' },
-              { kpi: '< 90s',label: 'Compte rendu généré' },
-            ].map((s) => (
-              <div key={s.label}>
-                <div className="serif text-kpi-sm text-copper-400">{s.kpi}</div>
-                <div className="text-2xs uppercase tracking-wider text-fg-subtle mt-2 leading-relaxed">{s.label}</div>
-              </div>
-            ))}
-          </div>
+
         </div>
 
         <div className="space-y-4">
@@ -93,15 +90,28 @@ export function LoginPage() {
         <div className="w-full max-w-md animate-rise">
           <div className="mb-10">
             <div className="text-2xs uppercase tracking-widest text-copper-400 font-semibold mb-3 flex items-center gap-2">
-              <span className="divider-accent" /> Sign in
+              <span className="divider-accent" />Se connecter
             </div>
             <h2 className="serif text-editorial leading-tight">
-              Bon retour à <span className="italic">l'atelier.</span>
+              Bon retour <span className="italic">!</span>
             </h2>
             <p className="text-fg-muted text-base mt-3">
               Connectez-vous à votre cockpit exécutif.
             </p>
           </div>
+
+          {expiredNotice && (
+            <div className="flex items-start gap-3 rounded-md border border-copper-500/30 bg-copper-500/5 px-4 py-3 text-sm">
+              <Clock size={16} className="text-copper-500 mt-0.5 shrink-0" />
+              <div>
+                <div className="font-semibold text-copper-500">Session expirée</div>
+                <div className="text-fg-muted text-xs mt-0.5">
+                  Pour des raisons de sécurité, votre session a été fermée.
+                  Reconnectez-vous pour continuer.
+                </div>
+              </div>
+            </div>
+          )}
 
           <form onSubmit={submit} className="space-y-6">
             <div>
@@ -158,10 +168,7 @@ export function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-10 pt-6 border-t border-border text-2xs text-fg-subtle uppercase tracking-wider">
-            Identifiants démo : <span className="font-mono text-copper-400">dg@acme.local</span> /{' '}
-            <span className="font-mono">Codir!2026</span>
-          </div>
+
         </div>
       </div>
     </div>

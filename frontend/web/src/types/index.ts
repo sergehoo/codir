@@ -206,6 +206,7 @@ export type BetaDashboard = {
   kpis: {
     upcoming_meetings: number
     in_progress_meetings: number
+    completed_meetings_30d?: number
     pending_decisions: number
     approved_decisions: number
     my_decisions: number
@@ -215,6 +216,16 @@ export type BetaDashboard = {
     my_tasks_overdue: number
   }
   upcoming_meetings: Pick<Meeting, 'id' | 'title' | 'scheduled_start' | 'scheduled_end' | 'status' | 'location' | 'video_url'>[]
+  next_meeting_agenda?: { id: string; title: string }[]
+  top_pending_decisions?: {
+    id: string
+    ref: string
+    title: string
+    deadline: string | null
+    priority: string
+    responsible: string | null
+    meeting_title: string | null
+  }[]
   recent_notifications: Notification[]
 }
 

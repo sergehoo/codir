@@ -36,8 +36,25 @@ def update_progress(*, task: ActionTask, progress_percent: int, status: str | No
     return task
 
 
+class TaskArchiveError(Exception):
+    """Levée quand on tente d'archiver une tâche non terminée à 100%."""
+
+
 @transaction.atomic
-def complete_task(*, task: ActionTask, actor=None) -> ActionTask:
+def complete_task(*, task: ActionTask, actor=None, force: bool = False) -> ActionTask:
+    """Archive (= terminée à 100%) une tâche.
+
+    Une tâche ne peut être archivée que si elle est déjà à 100% de progression.
+    Le flag ``force=True`` (réservé staff/exec) court-circuite cette protection.
+
+    Raises:
+        TaskArchiveError: si progress < 100 et force=False.
+    """
+    if not force and task.progress_percent < 100:
+        raise TaskArchiveError(
+            f"La tâche doit être à 100% pour être archivée "
+            f"(progression actuelle : {task.progress_percent}%)."
+        )
     task.status = ActionTaskStatus.DONE
     task.progress_percent = 100
     task.completed_at = timezone.now()

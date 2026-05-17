@@ -36,7 +36,7 @@ export function NotificationsPage() {
   const [unreadOnly, setUnreadOnly] = useState(false)
 
   const params = { event: event || undefined, channel: channel || undefined, unread: unreadOnly }
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: notificationsKeys.list(params),
     queryFn: () => notificationsApi.list(params),
   })
@@ -111,10 +111,35 @@ export function NotificationsPage() {
 
       <section className="px-10 py-8">
         {isLoading && <SkeletonList rows={4} />}
-        {!isLoading && items.length === 0 && (
+
+        {!isLoading && error && (
+          <div className="card p-12 text-center">
+            <Inbox size={28} className="mx-auto text-danger mb-3" strokeWidth={1.5} />
+            <p className="text-danger text-sm font-medium">Impossible de charger les notifications.</p>
+            <p className="text-fg-muted text-xs mt-2">
+              {(error as any)?.response?.status === 401
+                ? 'Session expirée — reconnectez-vous.'
+                : (error as any)?.message || 'Erreur réseau ou serveur.'}
+            </p>
+          </div>
+        )}
+
+        {!isLoading && !error && items.length === 0 && (
           <div className="card p-12 text-center">
             <Inbox size={28} className="mx-auto text-fg-subtle mb-3" strokeWidth={1.5} />
-            <p className="text-fg-muted text-sm">Boîte vide pour ce filtre.</p>
+            <p className="text-fg-muted text-sm">
+              {(event || channel || unreadOnly)
+                ? 'Aucune notification ne correspond à ces filtres.'
+                : 'Vous n\'avez aucune notification pour le moment.'}
+            </p>
+            {(event || channel || unreadOnly) && (
+              <button
+                onClick={() => { setEvent(''); setChannel(''); setUnreadOnly(false) }}
+                className="mt-3 text-2xs uppercase tracking-wider text-copper-400 hover:underline font-semibold"
+              >
+                Réinitialiser les filtres
+              </button>
+            )}
           </div>
         )}
 

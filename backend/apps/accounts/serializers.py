@@ -42,13 +42,27 @@ class MembershipSerializer(serializers.ModelSerializer):
     role_codes = serializers.SlugRelatedField(
         source="roles", many=True, slug_field="code", read_only=True,
     )
+    subsidiary_name = serializers.SerializerMethodField()
+
+    def get_subsidiary_name(self, obj):
+        """Tolère l'absence du champ `subsidiary` si la migration n'est pas
+        encore appliquée (fail-safe pour les déploiements en cours)."""
+        try:
+            sub = getattr(obj, "subsidiary", None)
+            return sub.name if sub else None
+        except Exception:  # noqa: BLE001
+            return None
 
     class Meta:
         model = Membership
         fields = [
             "id", "user", "user_detail", "is_owner", "is_executive",
             "is_active", "expires_at", "role_codes",
+            "subsidiary", "subsidiary_name",
         ]
+        extra_kwargs = {
+            "subsidiary": {"required": False, "allow_null": True},
+        }
 
 
 class TokenObtainPairWithOrgSerializer(TokenObtainPairSerializer):

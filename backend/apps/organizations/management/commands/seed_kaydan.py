@@ -118,7 +118,7 @@ class Command(BaseCommand):
             defaults={"name": "Membre Comité de Direction"},
         )
 
-        for first, last, email, fn, _entity, is_executive in USERS:
+        for first, last, email, fn, entity, is_executive in USERS:
             user, c = User.objects.get_or_create(
                 email=email,
                 defaults={
@@ -133,11 +133,24 @@ class Command(BaseCommand):
                 user.save()
             self._echo("    User", f"{first} {last} <{email}>", c)
 
-            # Membership
+            # Résolution de la filiale du user à partir du PDF
+            user_subsidiary = subs.get(entity)
+
+            # Membership (avec subsidiary)
             mem, mc = Membership.unscoped.get_or_create(
                 organization=org, user=user,
-                defaults={"is_executive": is_executive, "is_active": True},
+                defaults={
+                    "is_executive": is_executive,
+                    "is_active": True,
+                    "subsidiary": user_subsidiary,
+                },
             )
+            # Si Membership existe déjà mais sans subsidiary → on l'enrichit
+            if not mc and mem.subsidiary_id is None and user_subsidiary:
+                mem.subsidiary = user_subsidiary
+                mem.save(update_fields=["subsidiary"])
+                self._echo("    ↳ Filiale", f"{first} {last} → {user_subsidiary.name}", True)
+
             if mc and is_executive:
                 mem.roles.add(exec_role)
 

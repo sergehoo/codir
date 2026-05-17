@@ -5,7 +5,9 @@ from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.response import Response
 
-from apps.common.permissions import IsOrganizationMember
+from apps.common.permissions import (
+    CanModifyTaskInSubsidiary, IsOrganizationMember,
+)
 
 from . import services
 from .filters import ActionPlanFilter, ActionTaskFilter
@@ -78,7 +80,14 @@ class ActionPlanViewSet(viewsets.ModelViewSet):
 
 
 class ActionTaskViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsOrganizationMember]
+    """ViewSet des tâches.
+
+    Permissions :
+      - `IsOrganizationMember` : doit appartenir au tenant
+      - `CanModifyTaskInSubsidiary` : ne peut modifier qu'une tâche de SA
+        filiale (sauf staff/exec, sauf transverse Groupe sans filiale assignée)
+    """
+    permission_classes = [IsOrganizationMember, CanModifyTaskInSubsidiary]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = ActionTaskFilter
     search_fields = ["title", "description_md"]
@@ -87,7 +96,7 @@ class ActionTaskViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return (
             ActionTask.objects
-            .select_related("assignee", "action_plan")
+            .select_related("assignee", "action_plan__decision__direction__subsidiary")
             .prefetch_related("comments", "evidence", "subtasks")
         )
 
@@ -108,7 +117,33 @@ class ActionTaskViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"])
     def complete(self, request, pk=None):
-        task = services.complete_task(task=self.get_object(), actor=request.user)
+        """Archive une tâche (= passe le statut à DONE).
+
+        Protection : la tâche doit être à 100% de progression. Sauf staff/exec
+        qui peuvent forcer via `?force=true` (ou body `{force: true}`).
+        """
+        task_obj = self.get_object()
+        # Force réservé aux super-users / executives
+        force_param = (
+            str(request.query_params.get("force", "")).lower() in {"1", "true", "yes"}
+            or bool(request.data.get("force"))
+        )
+        force = force_param and (
+            request.user.is_staff or getattr(request.user, "is_executive", False)
+        )
+        try:
+            task = services.complete_task(
+                task=task_obj, actor=request.user, force=force,
+            )
+        except services.TaskArchiveError as e:
+            return Response(
+                {
+                    "detail": str(e),
+                    "progress_percent": task_obj.progress_percent,
+                    "code": "task_not_completed",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         return Response(ActionTaskDetailSerializer(task).data)
 
     @action(detail=True, methods=["get", "post"])
@@ -291,6 +326,23 @@ class ActionTaskViewSet(viewsets.ModelViewSet):
         qs = self.get_queryset().filter(id__in=task_ids)
         if not qs.exists():
             return Response({"detail": "aucune tâche trouvée"}, status=404)
+
+        # Vérifie la permission filiale pour CHAQUE tâche
+        # (DRF n'appelle pas has_object_permission sur les actions custom)
+        from apps.common.permissions import CanModifyTaskInSubsidiary
+        perm = CanModifyTaskInSubsidiary()
+        forbidden = [
+            str(t.id) for t in qs
+            if not perm.has_object_permission(request, self, t)
+        ]
+        if forbidden:
+            return Response(
+                {
+                    "detail": "Certaines tâches ne sont pas dans votre filiale.",
+                    "forbidden_task_ids": forbidden,
+                },
+                status=403,
+            )
 
         comment_text = (updates.get("comment") or "").strip()
         updated_count = 0

@@ -65,10 +65,39 @@ class BetaDashboardView(APIView):
             "id", "event", "level", "title", "link_url", "seen_at", "created_at",
         )
 
+        # ─── Top 5 décisions en attente (réelles, pas du faux) ──
+        top_pending_decisions = (
+            Decision.objects.filter(
+                status__in=[DecisionStatus.PROPOSED, DecisionStatus.APPROVED],
+            )
+            .select_related("responsible", "meeting")
+            .order_by("deadline", "-priority", "-created_at")[:5]
+        )
+
+        # ─── Agenda items du prochain meeting ──
+        next_meeting = upcoming_meetings.first()
+        agenda_items_data = []
+        if next_meeting:
+            try:
+                agenda_items_data = list(
+                    next_meeting.agenda_items.all()
+                    .order_by("order")
+                    .values("id", "title")[:6]
+                )
+            except Exception:  # noqa: BLE001
+                agenda_items_data = []
+
+        # ─── Stats agrégées globales pour l'org (cards exec) ──
+        completed_meetings_30d = Meeting.objects.filter(
+            status=MeetingStatus.COMPLETED,
+            scheduled_start__gte=now - timedelta(days=30),
+        ).count()
+
         return Response({
             "kpis": {
                 "upcoming_meetings": upcoming_meetings.count(),
                 "in_progress_meetings": in_progress_meetings,
+                "completed_meetings_30d": completed_meetings_30d,
                 "pending_decisions": pending_decisions,
                 "approved_decisions": approved_decisions,
                 "my_decisions": my_decisions,
@@ -87,6 +116,23 @@ class BetaDashboardView(APIView):
                     "location": m.location,
                     "video_url": m.video_url,
                 } for m in upcoming_meetings
+            ],
+            "next_meeting_agenda": [
+                {"id": str(a["id"]), "title": a["title"]} for a in agenda_items_data
+            ],
+            "top_pending_decisions": [
+                {
+                    "id": str(d.id),
+                    "ref": d.ref,
+                    "title": d.title,
+                    "deadline": d.deadline,
+                    "priority": d.priority,
+                    "responsible": (
+                        f"{d.responsible.first_name} {d.responsible.last_name}".strip()
+                        if d.responsible else None
+                    ),
+                    "meeting_title": d.meeting.title if d.meeting else None,
+                } for d in top_pending_decisions
             ],
             "recent_notifications": list(recent_notifications),
         })

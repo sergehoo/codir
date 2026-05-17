@@ -5,11 +5,10 @@ import { fr } from 'date-fns/locale'
 import { ArrowUpRight, Calendar, Diamond, Sparkles } from 'lucide-react'
 
 import { AtelierGauge } from '@/components/widgets/AtelierGauge'
-import { KaydanLogo } from '@/components/widgets/KaydanLogo'
+
 import { MasterGauge } from '@/components/widgets/MasterGauge'
 import { NeonNumber } from '@/components/widgets/NeonNumber'
 import { PremiumButton } from '@/components/widgets/PremiumButton'
-import { Sparkline } from '@/components/widgets/Sparkline'
 import { ManagerSummaryWidget } from '@/features/notifications/ManagerSummaryWidget'
 import { TaskReminderCard } from '@/features/notifications/TaskReminderCard'
 import { useAuthStore } from '@/stores/auth'
@@ -63,18 +62,21 @@ export function DashboardPage() {
             <span className="divider-accent" />
             <span>{format(today, "EEEE d MMMM yyyy", { locale: fr })}</span>
             <span className="dot-muted" />
-            <span>Executive Committee</span>
+            <span>Comité de direction</span>
           </div>
           <div className="flex items-end justify-between gap-6 flex-wrap">
             <div>
               <h1 className="serif text-display leading-[1.05] text-fg">
-                Bonjour, <span className="italic text-copper-400">
-                  {user?.first_name || 'Catherine'}.
-                </span>
+                Bonjour
+                {user?.first_name && (
+                  <>
+                    , <span className="italic text-copper-400">{user.first_name}.</span>
+                  </>
+                )}
+                {!user?.first_name && <>.</>}
               </h1>
               <p className="text-fg-muted mt-3 text-base max-w-2xl">
                 Voici la vue consolidée du comité de direction.
-                Trois sujets demandent votre attention ce matin.
               </p>
             </div>
             <PremiumButton variant="secondary" size="md" iconLeft={<Sparkles size={15} />}>
@@ -87,7 +89,7 @@ export function DashboardPage() {
       {/* ─── KPI Strip ────────────────────────────────────── */}
       <section className="px-10 py-10 border-b border-border">
         <div className="text-2xs uppercase tracking-widest text-fg-muted font-semibold mb-6 flex items-center gap-3">
-          <span className="divider-accent" /> Performance Index
+          <span className="divider-accent" /> Indice de Performance
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
@@ -96,7 +98,7 @@ export function DashboardPage() {
           <div className="lg:col-span-4">
             <MasterGauge
               value={epi}
-              label="EPI Score"
+              label="KPI Score"
               trend={epiTrend || 'Chargement…'}
               breakdown={epiBreakdown}
               sparkline={epiSparkline}
@@ -105,30 +107,40 @@ export function DashboardPage() {
 
           {/* Stats column */}
           <div className="lg:col-span-8 grid grid-cols-2 md:grid-cols-4 gap-8">
-            <Stat
-              label="Réunions à venir"
-              value={k?.upcoming_meetings ?? 0}
-              delta={`${k?.in_progress_meetings ?? 0} en cours`}
-              spark={[3, 4, 2, 5, 6, 4, 7, k?.upcoming_meetings ?? 0]}
-            />
+
             <Stat
               label="Décisions ouvertes"
               value={k?.pending_decisions ?? 0}
               delta={`${k?.approved_decisions ?? 0} validées`}
-              spark={[12, 14, 11, 15, 18, 16, 20, k?.pending_decisions ?? 0]}
+              to="/decisions"
             />
             <Stat
-              label="Plans actifs"
+              label="Projets / Dossiers"
               value={k?.active_plans ?? 0}
-              delta="exécution"
-              spark={[5, 6, 6, 7, 8, 7, 9, k?.active_plans ?? 0]}
+              delta={
+                (k?.in_progress_meetings ?? 0) > 0
+                  ? `${k?.in_progress_meetings} CODIR en cours`
+                  : 'en exécution'
+              }
+              to="/action-plans"
             />
             <Stat
-              label="Tâches en retard"
-              value={k?.overdue_tasks ?? 0}
+              label="Mes tâches en retard"
+              value={k?.my_tasks_overdue ?? 0}
               delta={`${k?.my_tasks_open ?? 0} en cours`}
               warning
-              spark={[1, 2, 0, 3, 2, 4, 2, k?.overdue_tasks ?? 0]}
+              to="/my-tasks"
+            />
+            <Stat
+              label="Retards organisation"
+              value={k?.overdue_tasks ?? 0}
+              delta={
+                (k?.overdue_tasks ?? 0) > 0
+                  ? `vue consolidée`
+                  : 'aucun retard'
+              }
+              warning
+              to="/live-codir"
             />
           </div>
         </div>
@@ -164,18 +176,22 @@ export function DashboardPage() {
 
               <div className="divider mb-5" />
 
-              <ul className="space-y-3 mb-6">
-                {[
-                  'Revue stratégique T2',
-                  'Lancement Phoenix',
-                  'Budget T3 vs prévisionnel',
-                ].map((t, i) => (
-                  <li key={t} className="flex items-baseline gap-3 text-sm">
-                    <span className="text-fg-subtle font-mono text-2xs tabular w-5">{(i + 1).toString().padStart(2, '0')}</span>
-                    <span className="flex-1">{t}</span>
-                  </li>
-                ))}
-              </ul>
+              {(data?.next_meeting_agenda?.length ?? 0) > 0 ? (
+                <ul className="space-y-3 mb-6">
+                  {data?.next_meeting_agenda?.map((item, i) => (
+                    <li key={item.id} className="flex items-baseline gap-3 text-sm">
+                      <span className="text-fg-subtle font-mono text-2xs tabular w-5">
+                        {(i + 1).toString().padStart(2, '0')}
+                      </span>
+                      <span className="flex-1">{item.title}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-fg-subtle text-sm mb-6 italic">
+                  Ordre du jour à définir.
+                </p>
+              )}
 
               <Link to="/meetings/$id" params={{ id: data.upcoming_meetings[0].id }}>
                 <PremiumButton variant="primary" size="md" iconRight={<ArrowUpRight size={15} />} className="w-full">
@@ -199,28 +215,47 @@ export function DashboardPage() {
           </div>
 
           <div className="space-y-3 divide-y divide-border">
-            {(data?.upcoming_meetings ?? []).slice(0, 4).map((m, i) => (
+            {(data?.top_pending_decisions ?? []).slice(0, 5).map((d, i) => (
               <Link
-                key={m.id}
-                to="/meetings/$id" params={{ id: m.id }}
+                key={d.id}
+                to="/decisions/$id" params={{ id: d.id }}
                 className="block py-3 group first:pt-0"
               >
                 <div className="flex items-start gap-3">
                   <span className="text-fg-subtle font-mono text-2xs tabular pt-1">
                     {(i + 1).toString().padStart(2, '0')}
                   </span>
-                  <div className="flex-1">
-                    <div className="text-fg group-hover:text-copper-400 transition font-medium leading-tight">
-                      {m.title}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-fg group-hover:text-copper-400 transition font-medium leading-tight line-clamp-2">
+                      {d.title}
                     </div>
-                    <div className="text-2xs text-fg-subtle uppercase tracking-wider mt-1.5">
-                      Référence MTG-{m.id.slice(0, 6).toUpperCase()}
+                    <div className="text-2xs text-fg-subtle uppercase tracking-wider mt-1.5 flex items-center gap-2">
+                      <span>{d.ref}</span>
+                      {d.responsible && (
+                        <>
+                          <span className="dot-muted" />
+                          <span className="truncate">{d.responsible}</span>
+                        </>
+                      )}
+                      {d.deadline && (
+                        <>
+                          <span className="dot-muted" />
+                          <span>
+                            {format(new Date(d.deadline), 'd MMM', { locale: fr })}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                   <ArrowUpRight size={14} className="text-fg-subtle group-hover:text-copper-400 transition mt-1" />
                 </div>
               </Link>
             ))}
+            {(data?.top_pending_decisions?.length ?? 0) === 0 && !isLoading && (
+              <div className="text-fg-subtle text-sm py-6 text-center italic">
+                Aucune décision en attente.
+              </div>
+            )}
             {isLoading && <div className="text-fg-subtle text-sm py-3">Chargement…</div>}
           </div>
 
@@ -302,7 +337,7 @@ export function DashboardPage() {
           </div>
           
           <div className="text-2xs text-white/40 uppercase tracking-widest">
-            Codir Executive Platform · {format(today, "yyyy")}
+            CODIR Executive Platform · {format(today, "yyyy")}
           </div>
         </div>
       </footer>
@@ -311,28 +346,48 @@ export function DashboardPage() {
 }
 
 function Stat({
-  label, value, delta, warning, spark,
-}: { label: string; value: number; delta?: string; warning?: boolean; spark?: number[] }) {
-  return (
-    <div>
-      <div className="text-2xs uppercase tracking-widest text-fg-muted font-semibold mb-3">
-        {label}
+  label, value, delta, warning, to,
+}: {
+  label: string
+  value: number
+  delta?: string
+  warning?: boolean
+  /** Si fourni, la card devient cliquable et navigue vers `to`. */
+  to?: string
+}) {
+  const content = (
+    <>
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-2xs uppercase tracking-widest text-fg-muted font-semibold">
+          {label}
+        </div>
+        {to && (
+          <ArrowUpRight
+            size={13}
+            strokeWidth={1.75}
+            className="text-fg-subtle group-hover:text-copper-500 transition-colors"
+          />
+        )}
       </div>
       <div className={`serif ${warning && value > 0 ? 'text-danger' : 'text-fg'} text-kpi leading-none`}>
         <NeonNumber value={value} />
       </div>
-      {spark && spark.length > 1 && (
-        <div className="mt-2 -ml-1">
-          <Sparkline
-            data={spark}
-            color={warning && value > 0 ? 'hsl(var(--danger))' : 'hsl(var(--copper-500))'}
-            width={120} height={26}
-          />
-        </div>
-      )}
       {delta && (
-        <div className="text-2xs uppercase tracking-wider text-fg-subtle mt-2">{delta}</div>
+        <div className="text-2xs uppercase tracking-wider text-fg-subtle mt-3">{delta}</div>
       )}
-    </div>
+    </>
   )
+
+  if (to) {
+    return (
+      <Link
+        to={to}
+        className="group block rounded-lg -m-3 p-3 hover:bg-bg-elevated/50 transition-colors cursor-pointer"
+        aria-label={`${label} — voir les détails`}
+      >
+        {content}
+      </Link>
+    )
+  }
+  return <div>{content}</div>
 }

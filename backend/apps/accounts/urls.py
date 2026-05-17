@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from .views import (
-    LoginView, MembershipViewSet, MeView,
+    ChangePasswordView, LoginView, MembershipViewSet, MeView,
     MyMembershipsView, RoleViewSet, UserViewSet,
 )
 
@@ -16,6 +16,7 @@ urlpatterns = [
     path("login/", LoginView.as_view(), name="auth-login"),
     path("refresh/", TokenRefreshView.as_view(), name="auth-refresh"),
     path("me/", MeView.as_view(), name="auth-me"),
+    path("me/change-password/", ChangePasswordView.as_view(), name="auth-change-password"),
     path("my-memberships/", MyMembershipsView.as_view(), name="auth-my-memberships"),
     path("", include(router.urls)),
 ]

@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
+from django.utils.html import format_html
 
 from core.admin import TenantAwareAdmin
 
@@ -9,14 +10,39 @@ from .models import (
 )
 
 
+# ─── Inline : Memberships sur la page User ────────────────────────────
+class MembershipInline(admin.TabularInline):
+    model = Membership
+    extra = 0
+    autocomplete_fields = ("organization", "subsidiary")
+    fields = (
+        "organization", "subsidiary",
+        "is_owner", "is_executive", "is_active", "expires_at",
+    )
+    verbose_name = "Appartenance"
+    verbose_name_plural = "Appartenances (organisation × filiale)"
+
+
 @admin.register(User)
 class UserAdmin(DjangoUserAdmin):
-    list_display = ("email", "first_name", "last_name", "is_executive", "mfa_enabled",
-                    "is_staff", "is_superuser", "last_login")
-    list_filter = ("is_executive", "is_staff", "is_superuser", "mfa_enabled", "is_active")
-    search_fields = ("email", "first_name", "last_name", "phone_e164")
+    list_display = (
+        "email", "first_name", "last_name",
+        "subsidiaries_display", "is_executive",
+        "mfa_enabled", "is_staff", "is_superuser", "last_login",
+    )
+    list_filter = (
+        "is_executive", "is_staff", "is_superuser", "mfa_enabled", "is_active",
+        "memberships__subsidiary",
+    )
+    search_fields = (
+        "email", "first_name", "last_name", "phone_e164",
+        "memberships__subsidiary__name",
+    )
     ordering = ("last_name", "first_name")
-    readonly_fields = ("id", "date_joined", "last_login", "last_login_ip", "last_login_geo", "last_mfa_at")
+    readonly_fields = (
+        "id", "date_joined", "last_login", "last_login_ip", "last_login_geo", "last_mfa_at",
+    )
+    inlines = [MembershipInline]
     fieldsets = (
         (None, {"fields": ("id", "email", "password")}),
         ("Identité", {"fields": ("first_name", "last_name", "phone_e164", "avatar")}),
@@ -30,6 +56,24 @@ class UserAdmin(DjangoUserAdmin):
         (None, {"classes": ("wide",), "fields": ("email", "password1", "password2",
                                                   "first_name", "last_name", "is_executive")}),
     )
+
+    def get_queryset(self, request):
+        return (
+            super().get_queryset(request)
+            .prefetch_related("memberships__subsidiary")
+        )
+
+    @admin.display(description="Filiale(s)")
+    def subsidiaries_display(self, obj):
+        """Liste des filiales du user (via memberships actifs)."""
+        names = sorted({
+            m.subsidiary.name
+            for m in obj.memberships.all()
+            if m.is_active and m.subsidiary_id
+        })
+        if not names:
+            return format_html('<span style="color:#999">— Groupe transverse —</span>')
+        return ", ".join(names)
 
 
 @admin.register(Permission)
@@ -51,11 +95,27 @@ class RoleAdmin(TenantAwareAdmin):
 
 @admin.register(Membership)
 class MembershipAdmin(TenantAwareAdmin):
-    list_display = ("user", "organization", "is_owner", "is_executive", "is_active", "expires_at")
-    list_filter = ("is_owner", "is_executive", "is_active", "organization")
-    search_fields = ("user__email", "user__first_name", "user__last_name")
-    autocomplete_fields = ("user", "organization", "invited_by")
+    list_display = (
+        "user", "organization", "subsidiary",
+        "is_owner", "is_executive", "is_active", "expires_at",
+    )
+    list_filter = (
+        "is_owner", "is_executive", "is_active",
+        "organization", "subsidiary",
+    )
+    list_select_related = ("user", "organization", "subsidiary")
+    search_fields = (
+        "user__email", "user__first_name", "user__last_name",
+        "subsidiary__name",
+    )
+    autocomplete_fields = ("user", "organization", "subsidiary", "invited_by")
     filter_horizontal = ("roles", "directions", "departments")
+    fieldsets = (
+        ("Identité", {"fields": ("user", "organization", "subsidiary")}),
+        ("Rôles & Périmètre", {"fields": ("roles", "directions", "departments")}),
+        ("Statut", {"fields": ("is_owner", "is_executive", "is_active", "expires_at")}),
+        ("Invitation", {"fields": ("invited_by",)}),
+    )
 
 
 @admin.register(MFADevice)

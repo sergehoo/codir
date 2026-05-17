@@ -1,6 +1,7 @@
 import { Link, Outlet, useRouter } from '@tanstack/react-router'
 import {
-  Bell, CheckSquare, FileText, Gauge, LayoutDashboard, LogOut, Scale, Search, Users,
+  Bell, Building2, CheckSquare, Gauge, LayoutDashboard, LogOut,
+  Scale, Search, User as UserIcon, Users,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -17,9 +18,15 @@ const NAV: { to: string; label: string; icon: typeof Gauge }[] = [
   { to: '/',              label: 'Cockpit',          icon: LayoutDashboard },
   { to: '/meetings',      label: 'Réunions',         icon: Gauge },
   { to: '/decisions',     label: 'Décisions',        icon: Scale },
-  { to: '/action-plans',  label: 'Plans d\'action',  icon: CheckSquare },
+  { to: '/action-plans',  label: 'Suivi Projets/Dossiers',  icon: CheckSquare },
   { to: '/my-tasks',      label: 'Mes tâches',       icon: Users },
-  { to: '/documents',     label: 'Documents',        icon: FileText },
+//{ to: '/documents',     label: 'Documents',        icon: FileText },
+]
+
+const SETTINGS_NAV: { to: string; label: string; icon: typeof Gauge }[] = [
+  { to: '/settings/members',     label: 'Membres CODIR', icon: Users },
+  { to: '/settings/subsidiaries', label: 'Filiales',     icon: Building2 },
+  { to: '/profile',              label: 'Mon profil',    icon: UserIcon },
 ]
 
 export function Shell() {
@@ -53,7 +60,7 @@ export function Shell() {
           {/* Produit */}
           <div className="flex items-center justify-between gap-2">
             <div>
-              <div className="serif text-base font-semibold leading-none">Codir</div>
+              <div className="serif text-base font-semibold leading-none">CODIR</div>
               <div className="text-2xs uppercase tracking-widest text-fg-subtle mt-1">
                 Executive Platform
               </div>
@@ -117,6 +124,31 @@ export function Shell() {
               </span>
             )}
           </Link>
+
+          {/* ─── Paramètres ─── */}
+          <div className="text-2xs uppercase tracking-widest text-fg-subtle px-3 pt-7 pb-3 font-semibold flex items-center gap-2.5">
+            <span className="divider-accent" /> Paramètres
+          </div>
+          {SETTINGS_NAV.map((n) => {
+            const active = path === n.to || (n.to !== '/' && path.startsWith(n.to))
+            return (
+              <Link
+                key={n.to} to={n.to}
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-250 ease-editorial relative text-sm',
+                  active
+                    ? 'bg-copper-500/10 text-copper-400 font-medium'
+                    : 'text-fg-muted hover:bg-fg/[0.04] hover:text-fg',
+                )}
+              >
+                {active && (
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-copper-500 rounded-r" />
+                )}
+                <n.icon size={16} className="shrink-0" strokeWidth={1.75} />
+                <span className="flex-1">{n.label}</span>
+              </Link>
+            )
+          })}
         </nav>
 
         {/* Footer sidebar — user card */}

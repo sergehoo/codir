@@ -92,7 +92,13 @@ export function TaskDetailPage() {
                   iconLeft={<CheckCircle2 size={14} />}
                   onClick={() => complete.mutate()}
                   loading={complete.isPending}
-                >Clôturer</PremiumButton>
+                  disabled={(t.progress_percent ?? 0) < 100}
+                  title={
+                    (t.progress_percent ?? 0) < 100
+                      ? `La tâche doit être à 100% pour être archivée (actuellement : ${t.progress_percent ?? 0}%)`
+                      : 'Archiver la tâche'
+                  }
+                >Archiver</PremiumButton>
               </>
             )}
           </div>

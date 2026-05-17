@@ -10,12 +10,15 @@ import { DecisionsListPage } from '@/features/decisions/DecisionsListPage'
 import { DecisionDetailPage } from '@/features/decisions/DecisionDetailPage'
 import { ActionPlansListPage } from '@/features/action-plans/ActionPlansListPage'
 import { ActionPlanDetailPage } from '@/features/action-plans/ActionPlanDetailPage'
+import { LiveCodirPage } from '@/features/action-plans/LiveCodirPage'
 import { MyTasksPage } from '@/features/action-plans/MyTasksPage'
 import { TaskDetailPage } from '@/features/action-plans/TaskDetailPage'
 import { DocumentsPage } from '@/features/documents/DocumentsPage'
 import { NotificationsPage } from '@/features/notifications/NotificationsPage'
 import { NotificationPreferencesPage } from '@/features/notifications/NotificationPreferencesPage'
 import { ProfilePage } from '@/features/profile/ProfilePage'
+import { MembersPage } from '@/features/settings/MembersPage'
+import { SubsidiariesPage } from '@/features/settings/SubsidiariesPage'
 import { useAuthStore } from '@/stores/auth'
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> })
@@ -58,18 +61,22 @@ const planDetail = createRoute({
   component: ActionPlanDetailPage,
 })
 const myTasks = createRoute({ getParentRoute: () => shellRoute, path: '/my-tasks', component: MyTasksPage })
+const liveCodir = createRoute({ getParentRoute: () => shellRoute, path: '/live-codir', component: LiveCodirPage })
 const taskDetail = createRoute({ getParentRoute: () => shellRoute, path: '/tasks/$id', component: TaskDetailPage })
 const notifs = createRoute({ getParentRoute: () => shellRoute, path: '/notifications', component: NotificationsPage })
 const notifPrefs = createRoute({ getParentRoute: () => shellRoute, path: '/notifications/preferences', component: NotificationPreferencesPage })
 const documents = createRoute({ getParentRoute: () => shellRoute, path: '/documents', component: DocumentsPage })
 const profile = createRoute({ getParentRoute: () => shellRoute, path: '/profile', component: ProfilePage })
+const settingsMembers = createRoute({ getParentRoute: () => shellRoute, path: '/settings/members', component: MembersPage })
+const settingsSubsidiaries = createRoute({ getParentRoute: () => shellRoute, path: '/settings/subsidiaries', component: SubsidiariesPage })
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
   shellRoute.addChildren([
     dashboardRoute, meetingsList, meetingNew, meetingDetail,
     decisionsList, decisionDetail, plansList, planDetail,
-    myTasks, taskDetail, notifs, notifPrefs, documents, profile,
+    myTasks, liveCodir, taskDetail, notifs, notifPrefs, documents,
+    profile, settingsMembers, settingsSubsidiaries,
   ]),
 ])
 

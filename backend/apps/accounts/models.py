@@ -67,6 +67,31 @@ class User(AbstractUser):
     def __str__(self):
         return f"{self.get_full_name() or self.email}"
 
+    # ─── Helpers filiale ──────────────────────────────────────────
+    def subsidiary_ids_for(self, organization) -> set:
+        """IDs des filiales actives auxquelles ce user appartient via Membership.
+
+        Utilisé par les permissions et filtres : un user ne peut modifier
+        que les ressources rattachées à l'une de SES filiales.
+        Retourne un set (vide → user transverse Groupe sans filiale spécifique).
+        """
+        ids = (
+            self.memberships
+            .filter(organization=organization, is_active=True, subsidiary__isnull=False)
+            .values_list("subsidiary_id", flat=True)
+        )
+        return set(ids)
+
+    def primary_subsidiary_for(self, organization):
+        """Première filiale active du user pour l'org donnée (ou None)."""
+        m = (
+            self.memberships
+            .filter(organization=organization, is_active=True, subsidiary__isnull=False)
+            .select_related("subsidiary")
+            .first()
+        )
+        return m.subsidiary if m else None
+
 
 class MFADevice(TimestampedModel):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="mfa_devices")
@@ -143,9 +168,17 @@ class Role(TenantAwareModel):
 
 
 class Membership(TenantAwareModel):
-    """Liaison user × organisation × rôles."""
+    """Liaison user × organisation × rôles × filiale."""
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="memberships")
+    # Filiale principale du collaborateur (null pour rôles transverses Groupe)
+    subsidiary = models.ForeignKey(
+        "organizations.Subsidiary",
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name="memberships",
+        help_text="Filiale principale du collaborateur (null pour les rôles transverses Groupe).",
+    )
     roles = models.ManyToManyField(Role, blank=True, related_name="memberships")
     directions = models.ManyToManyField("governance.Direction", blank=True, related_name="memberships")
     departments = models.ManyToManyField("governance.Department", blank=True, related_name="memberships")
@@ -157,4 +190,7 @@ class Membership(TenantAwareModel):
 
     class Meta:
         unique_together = [("organization", "user")]
-        indexes = [models.Index(fields=["organization", "user", "is_active"])]
+        indexes = [
+            models.Index(fields=["organization", "user", "is_active"]),
+            models.Index(fields=["organization", "subsidiary", "is_active"]),
+        ]

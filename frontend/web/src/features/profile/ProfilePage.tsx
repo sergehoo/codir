@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Mail, Save, Shield } from 'lucide-react'
+import { Eye, EyeOff, KeyRound, Lock, Mail, Save, Shield } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
@@ -39,6 +39,47 @@ export function ProfilePage() {
     },
     onError: () => toast.error('Échec de la sauvegarde'),
   })
+
+  // ── Changement de mot de passe ──
+  const [currentPwd, setCurrentPwd] = useState('')
+  const [newPwd, setNewPwd] = useState('')
+  const [confirmPwd, setConfirmPwd] = useState('')
+  const [showPwd, setShowPwd] = useState(false)
+
+  const changePassword = useMutation({
+    mutationFn: async () => {
+      const r = await apiClient.post('/auth/me/change-password/', {
+        current_password: currentPwd,
+        new_password: newPwd,
+      })
+      return r.data
+    },
+    onSuccess: () => {
+      setCurrentPwd(''); setNewPwd(''); setConfirmPwd('')
+      toast.success('Mot de passe changé avec succès')
+    },
+    onError: (e: any) => {
+      const msg = e?.response?.data?.detail || e?.response?.data?.current_password?.[0] || e?.response?.data?.new_password?.[0]
+      toast.error(msg || 'Échec du changement de mot de passe')
+    },
+  })
+
+  const handleChangePassword = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (newPwd.length < 8) {
+      toast.error('Le nouveau mot de passe doit faire au moins 8 caractères')
+      return
+    }
+    if (newPwd !== confirmPwd) {
+      toast.error('Les deux mots de passe ne correspondent pas')
+      return
+    }
+    if (newPwd === currentPwd) {
+      toast.error('Le nouveau mot de passe doit être différent de l\'ancien')
+      return
+    }
+    changePassword.mutate()
+  }
 
   if (!user) return <div className="p-10 text-fg-subtle">Chargement…</div>
 
@@ -130,6 +171,81 @@ export function ProfilePage() {
           <div className="flex justify-end pt-4 border-t border-border">
             <PremiumButton type="submit" loading={save.isPending} iconLeft={<Save size={14} />}>
               Enregistrer
+            </PremiumButton>
+          </div>
+        </form>
+
+        {/* ─── Changement de mot de passe ─── */}
+        <form onSubmit={handleChangePassword} className="card p-6 space-y-5">
+          <div className="text-2xs uppercase tracking-widest text-fg-muted font-semibold flex items-center gap-3">
+            <span className="divider-accent" /> Sécurité — Mot de passe
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="label">Mot de passe actuel</label>
+              <div className="relative">
+                <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-subtle" />
+                <input
+                  type={showPwd ? 'text' : 'password'}
+                  className="input pl-9 pr-10"
+                  value={currentPwd}
+                  onChange={(e) => setCurrentPwd(e.target.value)}
+                  autoComplete="current-password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPwd((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg"
+                  tabIndex={-1}
+                >
+                  {showPwd ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Nouveau mot de passe</label>
+                <input
+                  type={showPwd ? 'text' : 'password'}
+                  className="input"
+                  value={newPwd}
+                  onChange={(e) => setNewPwd(e.target.value)}
+                  autoComplete="new-password"
+                  minLength={8}
+                  required
+                />
+              </div>
+              <div>
+                <label className="label">Confirmer</label>
+                <input
+                  type={showPwd ? 'text' : 'password'}
+                  className="input"
+                  value={confirmPwd}
+                  onChange={(e) => setConfirmPwd(e.target.value)}
+                  autoComplete="new-password"
+                  required
+                />
+              </div>
+            </div>
+
+            <ul className="text-2xs text-fg-subtle space-y-0.5 list-disc list-inside">
+              <li>Minimum 8 caractères</li>
+              <li>Différent de votre mot de passe actuel</li>
+              <li>Recommandé : mix lettres, chiffres et symboles</li>
+            </ul>
+          </div>
+
+          <div className="flex justify-end pt-4 border-t border-border">
+            <PremiumButton
+              type="submit"
+              variant="secondary"
+              loading={changePassword.isPending}
+              iconLeft={<KeyRound size={14} />}
+            >
+              Changer le mot de passe
             </PremiumButton>
           </div>
         </form>
