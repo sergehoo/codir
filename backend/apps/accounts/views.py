@@ -21,7 +21,142 @@ log = logging.getLogger(__name__)
 
 
 class LoginView(TokenObtainPairView):
+    """Login en 2 étapes si l'utilisateur a MFA activé.
+
+    Étape 1 (email + password) :
+        - Si user.mfa_enabled = False → retourne {access, refresh} (flow normal)
+        - Si user.mfa_enabled = True → retourne {mfa_required: True, challenge_token}
+    Étape 2 (challenge_token + code TOTP) :
+        - POST /auth/mfa/verify/ → retourne {access, refresh}
+    """
     serializer_class = TokenObtainPairWithOrgSerializer
+
+    def post(self, request, *args, **kwargs):
+        from rest_framework import status as drf_status
+        from . import mfa
+
+        email = (request.data.get("email") or "").lower().strip()
+        if not email:
+            return super().post(request, *args, **kwargs)
+
+        # Vérification password via serializer standard
+        response = super().post(request, *args, **kwargs)
+        if response.status_code != drf_status.HTTP_200_OK:
+            return response
+
+        # Password OK — check MFA
+        user = User.objects.filter(email=email).first()
+        if user and user.mfa_enabled and user.mfa_method == "totp":
+            return Response({
+                "mfa_required": True,
+                "challenge_token": mfa.make_challenge_token(user.id),
+                "method": "totp",
+                "email": email,
+            }, status=drf_status.HTTP_200_OK)
+
+        return response
+
+
+class MFASetupView(APIView):
+    """POST /api/v1/auth/mfa/setup/
+
+    Génère un secret TOTP + QR code. L'user doit ensuite appeler
+    `/auth/mfa/verify-setup/` avec un code pour activer.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from . import mfa
+        if request.user.mfa_enabled:
+            return Response(
+                {"detail": "MFA déjà activé. Désactivez d'abord pour reconfigurer."},
+                status=400,
+            )
+        data = mfa.generate_setup(request.user)
+        return Response(data)
+
+
+class MFAVerifySetupView(APIView):
+    """POST /api/v1/auth/mfa/verify-setup/  — body: {code}
+
+    Vérifie le 1er code TOTP fourni après scan QR → active MFA.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from . import mfa
+        code = (request.data.get("code") or "").strip()
+        if not code or not code.isdigit() or len(code) != 6:
+            return Response({"detail": "Code à 6 chiffres requis."}, status=400)
+        if mfa.confirm_setup(request.user, code):
+            return Response({"detail": "MFA activé.", "mfa_enabled": True})
+        return Response(
+            {"detail": "Code incorrect. Vérifiez l'heure de votre téléphone."},
+            status=400,
+        )
+
+
+class MFALoginVerifyView(APIView):
+    """POST /api/v1/auth/mfa/verify/
+
+    Body: {challenge_token, code}
+    Retourne {access, refresh} si code OK.
+    """
+    permission_classes = []  # public — l'user n'est pas encore authentifié
+
+    def post(self, request):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        from . import mfa
+
+        token = request.data.get("challenge_token") or ""
+        code = (request.data.get("code") or "").strip()
+        if not token or not code:
+            return Response(
+                {"detail": "challenge_token et code requis."}, status=400,
+            )
+
+        user_id = mfa.verify_challenge_token(token)
+        if not user_id:
+            return Response(
+                {"detail": "Session expirée. Reconnectez-vous."}, status=400,
+            )
+
+        user = User.objects.filter(id=user_id).first()
+        if not user:
+            return Response({"detail": "Utilisateur introuvable."}, status=400)
+
+        if not mfa.verify_code(user, code):
+            return Response({"detail": "Code MFA invalide."}, status=400)
+
+        # Génère le JWT comme dans le login normal (avec org_id)
+        refresh = RefreshToken.for_user(user)
+        m = Membership.unscoped.filter(
+            user=user, is_active=True,
+        ).select_related("organization").first()
+        if m:
+            refresh["org_id"] = str(m.organization_id)
+        return Response({
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+        })
+
+
+class MFADisableView(APIView):
+    """POST /api/v1/auth/mfa/disable/  — body: {password}
+
+    Désactive le MFA. Requiert confirmation du password pour sécurité.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from . import mfa
+        password = request.data.get("password", "")
+        if not request.user.check_password(password):
+            return Response(
+                {"detail": "Mot de passe incorrect."}, status=400,
+            )
+        mfa.disable_mfa(request.user)
+        return Response({"detail": "MFA désactivé.", "mfa_enabled": False})
 
 
 class MeView(APIView):

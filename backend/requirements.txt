@@ -73,3 +73,6 @@ pdfplumber==0.11.4
 rapidfuzz==3.10.1
 # DOCX export (CR CODIR)
 python-docx==1.1.2
+# MFA TOTP (Google Authenticator / Authy / 1Password)
+pyotp==2.9.0
+qrcode[pil]==7.4.2

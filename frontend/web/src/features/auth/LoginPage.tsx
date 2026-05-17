@@ -29,11 +29,24 @@ export function LoginPage() {
     }
   }, [])
 
+  // ─── État MFA (étape 2) ───
+  const [mfaRequired, setMfaRequired] = useState(false)
+  const [challengeToken, setChallengeToken] = useState('')
+  const [mfaCode, setMfaCode] = useState('')
+
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     try {
-      const r = await authApi.login(email, pwd)
+      const r: any = await authApi.login(email, pwd)
+      // Si le backend demande un code MFA
+      if (r.mfa_required && r.challenge_token) {
+        setChallengeToken(r.challenge_token)
+        setMfaRequired(true)
+        setLoading(false)
+        return
+      }
+      // Flow normal (pas de MFA)
       setTokens(r.access, r.refresh)
       const me = await authApi.me()
       setUser(me)
@@ -41,6 +54,28 @@ export function LoginPage() {
     } catch {
       toast.error('Identifiants invalides')
     } finally { setLoading(false) }
+  }
+
+  async function submitMfa(e: React.FormEvent) {
+    e.preventDefault()
+    setLoading(true)
+    try {
+      const r: any = await authApi.verifyMfa(challengeToken, mfaCode)
+      setTokens(r.access, r.refresh)
+      const me = await authApi.me()
+      setUser(me)
+      navigate({ to: '/' })
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || 'Code MFA invalide')
+      setMfaCode('')
+    } finally { setLoading(false) }
+  }
+
+  function cancelMfa() {
+    setMfaRequired(false)
+    setChallengeToken('')
+    setMfaCode('')
+    setPwd('')
   }
 
   return (
@@ -113,6 +148,57 @@ export function LoginPage() {
             </div>
           )}
 
+          {mfaRequired ? (
+            /* ─── Étape 2 : Saisie code MFA ─── */
+            <form onSubmit={submitMfa} className="space-y-6">
+              <div className="rounded-lg border border-copper-500/30 bg-copper-500/5 p-4">
+                <div className="flex items-start gap-3">
+                  <Lock size={16} className="text-copper-500 mt-0.5" />
+                  <div>
+                    <div className="font-semibold text-sm">Vérification en 2 étapes</div>
+                    <div className="text-fg-muted text-xs mt-1">
+                      Ouvrez votre application d'authentification (Google Authenticator,
+                      Authy, 1Password…) et entrez le code à 6 chiffres pour
+                      <span className="font-medium text-fg"> {email}</span>.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="label">Code à 6 chiffres</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="\d{6}"
+                  maxLength={6}
+                  autoComplete="one-time-code"
+                  autoFocus
+                  className="input text-center text-2xl font-mono tracking-[0.5em]"
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="••••••"
+                />
+              </div>
+
+              <PremiumButton
+                type="submit" size="lg" loading={loading} className="w-full"
+                iconRight={<ArrowRight size={16} />}
+                disabled={mfaCode.length !== 6}
+              >
+                {loading ? 'Vérification…' : 'Valider le code'}
+              </PremiumButton>
+
+              <button
+                type="button"
+                onClick={cancelMfa}
+                className="block mx-auto text-2xs text-fg-muted hover:text-copper-400 uppercase tracking-wider font-semibold"
+              >
+                ← Recommencer la connexion
+              </button>
+            </form>
+          ) : (
+            /* ─── Étape 1 : Email + Password ─── */
           <form onSubmit={submit} className="space-y-6">
             <div>
               <label className="label">Email professionnel</label>
@@ -167,6 +253,7 @@ export function LoginPage() {
               <span className="font-bold">M</span> SSO Microsoft Entra ID
             </button>
           </form>
+          )}
 
 
         </div>
