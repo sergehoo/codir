@@ -47,16 +47,39 @@ def send_notification_email(self, notification_id: str):
     }
     html, text = render_email(template_base, context)
 
-    subject = f"[CODIR] {n.title}"
+    # Subject sans préfixe « [CODIR] » trop accrocheur (mauvais signal anti-spam)
+    subject = n.title
     body_text = text or n.body or n.title
     from_email = getattr(settings, "DEFAULT_FROM_EMAIL", None)
+    reply_to = getattr(settings, "SERVER_EMAIL", from_email)
 
     msg = EmailMultiAlternatives(
-        subject=subject, body=body_text,
-        from_email=from_email, to=[n.recipient.email],
+        subject=subject,
+        body=body_text,
+        from_email=from_email,
+        to=[n.recipient.email],
+        reply_to=[reply_to] if reply_to else None,
     )
     if html:
         msg.attach_alternative(html, "text/html")
+
+    # ── Headers anti-spam : améliorent la délivrabilité Gmail/Outlook ──
+    # 1. Message-ID stable : permet aux threads de regrouper proprement
+    # 2. List-Unsubscribe : Gmail valorise fortement la présence de ce header
+    # 3. List-Unsubscribe-Post : RFC 8058, validé par Gmail/Apple Mail
+    # 4. X-Entity-Ref-ID : tracking interne pour debug
+    site_url = getattr(settings, "FRONTEND_BASE_URL", "https://codir.datarium-dev.com")
+    unsubscribe_url = f"{site_url.rstrip('/')}/notifications/preferences"
+    domain = (from_email or "noreply@codir.local").rsplit("@", 1)[-1].strip(">")
+    msg.extra_headers = {
+        "Message-ID": f"<codir-{n.id}@{domain}>",
+        "List-Unsubscribe": f"<{unsubscribe_url}>",
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        "X-Entity-Ref-ID": str(n.id),
+        "X-Auto-Response-Suppress": "OOF, AutoReply",
+        "Auto-Submitted": "auto-generated",
+        "Precedence": "bulk",
+    }
 
     try:
         msg.send(fail_silently=False)
