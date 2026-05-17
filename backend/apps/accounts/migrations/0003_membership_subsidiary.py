@@ -24,11 +24,8 @@ class Migration(migrations.Migration):
                 help_text='Filiale principale du collaborateur (peut être null pour les rôles transverses Groupe).',
             ),
         ),
-        migrations.AddIndex(
-            model_name='membership',
-            index=models.Index(
-                fields=['organization', 'subsidiary', 'is_active'],
-                name='accounts_me_org_sub_idx',
-            ),
-        ),
+        # Note : l'index (organization, subsidiary, is_active) est déclaré dans
+        # Meta.indexes du modèle. Django le créera via makemigrations standard
+        # plutôt qu'ici, évitant les conflits de nom sur les déploiements
+        # incrémentaux.
     ]

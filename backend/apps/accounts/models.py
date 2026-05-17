@@ -192,5 +192,4 @@ class Membership(TenantAwareModel):
         unique_together = [("organization", "user")]
         indexes = [
             models.Index(fields=["organization", "user", "is_active"]),
-            models.Index(fields=["organization", "subsidiary", "is_active"]),
         ]

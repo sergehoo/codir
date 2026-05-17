@@ -13,6 +13,8 @@ from .models import (
 # ─── Inline : Memberships sur la page User ────────────────────────────
 class MembershipInline(admin.TabularInline):
     model = Membership
+    # ⚠ Membership a 2 FK vers User (`user` et `invited_by`) — préciser laquelle
+    fk_name = "user"
     extra = 0
     autocomplete_fields = ("organization", "subsidiary")
     fields = (
