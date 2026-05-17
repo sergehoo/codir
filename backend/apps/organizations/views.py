@@ -25,7 +25,21 @@ class SubsidiaryViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Filtre par tenant courant si défini, sinon bypass."""
         org = getattr(self.request, "organization", None)
-        qs = Subsidiary.objects.select_related("organization", "parent").all()
+        qs = Subsidiary.objects.all()
         if org is not None:
             qs = qs.filter(organization=org)
         return qs
+
+    def list(self, request, *args, **kwargs):
+        """Override pour catcher tout 500 imprévu et retourner un détail utilisable."""
+        import logging
+        log = logging.getLogger(__name__)
+        try:
+            return super().list(request, *args, **kwargs)
+        except Exception as exc:  # noqa: BLE001
+            log.exception("SubsidiaryViewSet.list failed")
+            from rest_framework.response import Response
+            return Response(
+                {"detail": f"Erreur de chargement des filiales : {type(exc).__name__}: {exc}"},
+                status=500,
+            )
