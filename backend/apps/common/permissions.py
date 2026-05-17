@@ -69,7 +69,14 @@ def _task_subsidiary_id(task):
 
 
 class CanModifyTaskInSubsidiary(BasePermission):
-    """Cloisonnement filiale : un user ne peut modifier que les tâches de SA filiale.
+    """⚠ Permission DÉSACTIVÉE par défaut.
+
+    Conserve la logique de cloisonnement par filiale pour un usage futur
+    éventuel (sous-tenants, rôles "manager de filiale", etc.).
+    Pour CODIR Kaydan : tous les membres voient et modifient tout.
+
+    Pour réactiver : ajouter `CanModifyTaskInSubsidiary` à
+    `ActionTaskViewSet.permission_classes` dans `action_plans/views.py`.
 
     Règles :
       - Lecture (SAFE_METHODS) : autorisée à tous les membres de l'org

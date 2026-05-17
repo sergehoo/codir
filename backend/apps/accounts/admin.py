@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 
 from core.admin import TenantAwareAdmin
 
@@ -78,7 +79,7 @@ class UserAdmin(DjangoUserAdmin):
         except Exception:  # noqa: BLE001
             names = []
         if not names:
-            return format_html('<span style="color:#999">— Groupe transverse —</span>')
+            return mark_safe('<span style="color:#999">— Groupe transverse —</span>')
         return ", ".join(names)
 
 

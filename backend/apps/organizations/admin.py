@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 
 from .models import Organization, Subsidiary
 
@@ -58,6 +59,6 @@ class SubsidiaryAdmin(admin.ModelAdmin):
         """Lien direct vers la liste Membership filtrée sur cette filiale."""
         n = obj.memberships.count()
         if n == 0:
-            return format_html('<span style="color:#999">0 collaborateur</span>')
+            return mark_safe('<span style="color:#999">0 collaborateur</span>')
         url = reverse("admin:accounts_membership_changelist") + f"?subsidiary__id__exact={obj.pk}"
         return format_html('<a href="{}">{} collaborateur(s) →</a>', url, n)

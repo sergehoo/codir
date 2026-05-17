@@ -5,9 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.response import Response
 
-from apps.common.permissions import (
-    CanModifyTaskInSubsidiary, IsOrganizationMember,
-)
+from apps.common.permissions import IsOrganizationMember
 
 from . import services
 from .filters import ActionPlanFilter, ActionTaskFilter
@@ -82,12 +80,10 @@ class ActionPlanViewSet(viewsets.ModelViewSet):
 class ActionTaskViewSet(viewsets.ModelViewSet):
     """ViewSet des tâches.
 
-    Permissions :
-      - `IsOrganizationMember` : doit appartenir au tenant
-      - `CanModifyTaskInSubsidiary` : ne peut modifier qu'une tâche de SA
-        filiale (sauf staff/exec, sauf transverse Groupe sans filiale assignée)
+    Permission unique : ``IsOrganizationMember`` — tous les membres du CODIR
+    voient et modifient les mêmes tâches, sans cloisonnement par filiale.
     """
-    permission_classes = [IsOrganizationMember, CanModifyTaskInSubsidiary]
+    permission_classes = [IsOrganizationMember]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = ActionTaskFilter
     search_fields = ["title", "description_md"]
@@ -327,22 +323,8 @@ class ActionTaskViewSet(viewsets.ModelViewSet):
         if not qs.exists():
             return Response({"detail": "aucune tâche trouvée"}, status=404)
 
-        # Vérifie la permission filiale pour CHAQUE tâche
-        # (DRF n'appelle pas has_object_permission sur les actions custom)
-        from apps.common.permissions import CanModifyTaskInSubsidiary
-        perm = CanModifyTaskInSubsidiary()
-        forbidden = [
-            str(t.id) for t in qs
-            if not perm.has_object_permission(request, self, t)
-        ]
-        if forbidden:
-            return Response(
-                {
-                    "detail": "Certaines tâches ne sont pas dans votre filiale.",
-                    "forbidden_task_ids": forbidden,
-                },
-                status=403,
-            )
+        # Pas de cloisonnement par filiale : tous les membres CODIR peuvent
+        # modifier toutes les tâches de l'organisation.
 
         comment_text = (updates.get("comment") or "").strip()
         updated_count = 0
