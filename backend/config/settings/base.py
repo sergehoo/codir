@@ -237,6 +237,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.dashboards.tasks.snapshot_epi_score_daily",
         "schedule": crontab(minute=0, hour=6),
     },
+    # ── Génération des Meetings récurrents — 02h00 (avant tout) ──
+    "generate-recurring-meetings": {
+        "task": "apps.meetings.tasks.generate_recurring_meetings",
+        "schedule": crontab(minute=0, hour=2),
+    },
 }
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_TIMEZONE = env("CELERY_TIMEZONE", default="Africa/Abidjan")

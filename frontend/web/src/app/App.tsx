@@ -17,6 +17,7 @@ import { DocumentsPage } from '@/features/documents/DocumentsPage'
 import { NotificationsPage } from '@/features/notifications/NotificationsPage'
 import { NotificationPreferencesPage } from '@/features/notifications/NotificationPreferencesPage'
 import { ProfilePage } from '@/features/profile/ProfilePage'
+import { MeetingSeriesPage } from '@/features/settings/MeetingSeriesPage'
 import { MembersPage } from '@/features/settings/MembersPage'
 import { SubsidiariesPage } from '@/features/settings/SubsidiariesPage'
 import { useAuthStore } from '@/stores/auth'
@@ -69,6 +70,7 @@ const documents = createRoute({ getParentRoute: () => shellRoute, path: '/docume
 const profile = createRoute({ getParentRoute: () => shellRoute, path: '/profile', component: ProfilePage })
 const settingsMembers = createRoute({ getParentRoute: () => shellRoute, path: '/settings/members', component: MembersPage })
 const settingsSubsidiaries = createRoute({ getParentRoute: () => shellRoute, path: '/settings/subsidiaries', component: SubsidiariesPage })
+const settingsMeetingSeries = createRoute({ getParentRoute: () => shellRoute, path: '/settings/meeting-series', component: MeetingSeriesPage })
 
 const routeTree = rootRoute.addChildren([
   loginRoute,
@@ -76,7 +78,7 @@ const routeTree = rootRoute.addChildren([
     dashboardRoute, meetingsList, meetingNew, meetingDetail,
     decisionsList, decisionDetail, plansList, planDetail,
     myTasks, liveCodir, taskDetail, notifs, notifPrefs, documents,
-    profile, settingsMembers, settingsSubsidiaries,
+    profile, settingsMembers, settingsSubsidiaries, settingsMeetingSeries,
   ]),
 ])
 

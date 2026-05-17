@@ -4,8 +4,42 @@ from core.admin import TenantAwareAdmin
 
 from .models import (
     Meeting, MeetingAttendance, MeetingMinutes,
-    MeetingNote, MeetingParticipant,
+    MeetingNote, MeetingParticipant, MeetingSeries,
 )
+
+
+@admin.register(MeetingSeries)
+class MeetingSeriesAdmin(TenantAwareAdmin):
+    list_display = (
+        "title", "frequency", "day_of_week", "time",
+        "default_chair", "is_active",
+        "last_generated_until", "instances_count",
+    )
+    list_filter = ("frequency", "is_active", "meeting_type")
+    search_fields = ("title", "description", "location")
+    autocomplete_fields = (
+        "organization", "default_chair", "default_secretary", "default_participants",
+    )
+    readonly_fields = ("last_generated_until", "created_at", "updated_at")
+    fieldsets = (
+        ("Identité", {"fields": ("organization", "title", "description", "meeting_type")}),
+        ("Récurrence", {"fields": (
+            "frequency", "day_of_week", "day_of_month", "time", "duration_minutes",
+        )}),
+        ("Lieu / Lien", {"fields": ("location", "video_url")}),
+        ("Défauts copiés à chaque instance", {"fields": (
+            "default_chair", "default_secretary", "default_participants",
+        )}),
+        ("Génération", {"fields": (
+            "starts_on", "ends_on", "generate_weeks_ahead",
+            "last_generated_until", "is_active",
+        )}),
+        ("Audit", {"fields": ("created_at", "updated_at")}),
+    )
+
+    @admin.display(description="Instances")
+    def instances_count(self, obj):
+        return obj.instances.count()
 
 
 class MeetingParticipantInline(admin.TabularInline):

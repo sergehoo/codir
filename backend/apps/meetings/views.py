@@ -16,14 +16,14 @@ from . import services
 from .filters import MeetingFilter
 from .models import (
     Meeting, MeetingAttendance, MeetingMinutes,
-    MeetingNote, MeetingParticipant,
+    MeetingNote, MeetingParticipant, MeetingSeries,
 )
 from .serializers import (
     CancelMeetingSerializer, MeetingAttendanceSerializer,
     MeetingCreateSerializer, MeetingDetailSerializer,
     MeetingListSerializer, MeetingMinutesSerializer,
     MeetingNoteSerializer, MeetingParticipantSerializer,
-    RecordAttendanceSerializer,
+    MeetingSeriesSerializer, RecordAttendanceSerializer,
 )
 from .imports.codir_importer import import_codir_data
 from .imports.codir_pdf_extractor import extract_codir_pdf
@@ -93,6 +93,25 @@ class MeetingViewSet(viewsets.ModelViewSet):
         return Response(MeetingDetailSerializer(m).data)
 
     # ─── Import d'un CR CODIR PDF ──────────────────────────────────
+    # ─── Envoi manuel d'invitations email + ICS aux participants ──
+    @action(detail=True, methods=["post"], url_path="send-invitations")
+    def send_invitations(self, request, pk=None):
+        """POST /api/v1/meetings/{id}/send-invitations/
+
+        Envoie un email d'invitation à TOUS les participants du Meeting
+        (avec fichier .ics joint pour ajout au calendrier Outlook/Google/Apple).
+        Inclut le lien Teams/Zoom si ``video_url`` est défini.
+        """
+        from .invitations import send_invitations_for_meeting
+
+        meeting = self.get_object()
+        sent = send_invitations_for_meeting(meeting)
+        return Response({
+            "meeting_id": str(meeting.id),
+            "invitations_sent": sent,
+            "total_participants": meeting.participants.count(),
+        })
+
     # ─── Génération du CR (relevé de conclusions) en .docx ─────────
     @action(detail=True, methods=["get"], url_path="export-cr-docx")
     def export_cr_docx(self, request, pk=None):
@@ -376,3 +395,93 @@ class MeetingParticipantViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return MeetingParticipant.objects.select_related("user", "meeting").all()
+
+
+class MeetingSeriesViewSet(viewsets.ModelViewSet):
+    """CRUD des séries récurrentes (templates de réunions).
+
+    Endpoint custom ``POST /series/{id}/generate-now/`` → déclenche immédiatement
+    la génération des instances sans attendre le cron quotidien.
+    """
+    permission_classes = [IsOrganizationMember]
+    serializer_class = MeetingSeriesSerializer
+
+    def get_queryset(self):
+        org = getattr(self.request, "organization", None)
+        qs = (
+            MeetingSeries.unscoped
+            .select_related("default_chair", "default_secretary", "organization")
+            .prefetch_related("default_participants")
+            .all()
+        )
+        if org is not None:
+            qs = qs.filter(organization=org)
+        return qs
+
+    def perform_create(self, serializer):
+        org = getattr(self.request, "organization", None)
+        serializer.save(organization=org)
+
+    @action(detail=True, methods=["post"], url_path="generate-now")
+    def generate_now(self, request, pk=None):
+        """Génère immédiatement les instances pour CETTE série (sans attendre le cron)."""
+        from .tasks import generate_recurring_meetings, _occurrence_dates
+        from datetime import datetime, timedelta
+        from django.utils import timezone as dj_tz
+        from apps.common.enums import MeetingStatus, ParticipantRole
+
+        series = self.get_object()
+        today = dj_tz.localdate()
+        target_end = today + timedelta(weeks=series.generate_weeks_ahead)
+        if series.ends_on and series.ends_on < target_end:
+            target_end = series.ends_on
+        start_from = series.last_generated_until or series.starts_on or today
+        if start_from < today:
+            start_from = today
+
+        occurrences = _occurrence_dates(series, start_from, target_end)
+        local_tz = dj_tz.get_current_timezone()
+        created = 0
+
+        for occ_date in occurrences:
+            start_dt = dj_tz.make_aware(
+                datetime.combine(occ_date, series.time), local_tz,
+            )
+            end_dt = start_dt + timedelta(minutes=series.duration_minutes)
+            meeting, was_created = Meeting.unscoped.get_or_create(
+                series=series,
+                scheduled_start=start_dt,
+                defaults={
+                    "organization": series.organization,
+                    "title": f"{series.title} — {occ_date:%d/%m/%Y}",
+                    "description": series.description,
+                    "meeting_type": series.meeting_type,
+                    "scheduled_end": end_dt,
+                    "status": MeetingStatus.SCHEDULED,
+                    "location": series.location,
+                    "video_url": series.video_url,
+                    "chair": series.default_chair,
+                    "secretary": series.default_secretary,
+                },
+            )
+            if was_created:
+                created += 1
+                for user in series.default_participants.all():
+                    role = ParticipantRole.MEMBER
+                    if series.default_chair_id == user.id:
+                        role = ParticipantRole.CHAIR
+                    elif series.default_secretary_id == user.id:
+                        role = ParticipantRole.SECRETARY
+                    MeetingParticipant.unscoped.get_or_create(
+                        organization=series.organization,
+                        meeting=meeting, user=user,
+                        defaults={"role": role, "is_required": True, "external_email": None},
+                    )
+
+        series.last_generated_until = target_end
+        series.save(update_fields=["last_generated_until"])
+        return Response({
+            "series_id": str(series.id),
+            "instances_created": created,
+            "generated_until": str(target_end),
+        })

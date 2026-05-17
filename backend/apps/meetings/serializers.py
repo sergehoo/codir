@@ -4,8 +4,40 @@ from rest_framework import serializers
 from apps.accounts.serializers import UserMiniSerializer
 from .models import (
     Meeting, MeetingAttendance, MeetingMinutes,
-    MeetingParticipant, MeetingNote,
+    MeetingParticipant, MeetingNote, MeetingSeries,
 )
+
+
+class MeetingSeriesSerializer(serializers.ModelSerializer):
+    """Sérialise un template de série récurrente."""
+    default_chair_detail = UserMiniSerializer(source="default_chair", read_only=True)
+    default_secretary_detail = UserMiniSerializer(source="default_secretary", read_only=True)
+    default_participants_detail = UserMiniSerializer(
+        source="default_participants", many=True, read_only=True,
+    )
+    instances_count = serializers.SerializerMethodField()
+    frequency_display = serializers.CharField(source="get_frequency_display", read_only=True)
+    day_of_week_display = serializers.CharField(source="get_day_of_week_display", read_only=True)
+
+    def get_instances_count(self, obj) -> int:
+        return obj.instances.count()
+
+    class Meta:
+        model = MeetingSeries
+        fields = [
+            "id", "title", "description",
+            "frequency", "frequency_display",
+            "day_of_week", "day_of_week_display",
+            "day_of_month", "time", "duration_minutes",
+            "meeting_type", "location", "video_url",
+            "default_chair", "default_chair_detail",
+            "default_secretary", "default_secretary_detail",
+            "default_participants", "default_participants_detail",
+            "generate_weeks_ahead", "last_generated_until",
+            "is_active", "starts_on", "ends_on",
+            "instances_count", "created_at", "updated_at",
+        ]
+        read_only_fields = ("id", "last_generated_until", "created_at", "updated_at")
 
 
 class MeetingParticipantSerializer(serializers.ModelSerializer):

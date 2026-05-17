@@ -1,7 +1,7 @@
 import { Link, Outlet, useRouter } from '@tanstack/react-router'
 import {
   Bell, Building2, CheckSquare, Gauge, LayoutDashboard, LogOut,
-  Scale, Search, User as UserIcon, Users,
+  RotateCcw, Scale, Search, User as UserIcon, Users,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -24,9 +24,10 @@ const NAV: { to: string; label: string; icon: typeof Gauge }[] = [
 ]
 
 const SETTINGS_NAV: { to: string; label: string; icon: typeof Gauge }[] = [
-  { to: '/settings/members',     label: 'Membres CODIR', icon: Users },
-  { to: '/settings/subsidiaries', label: 'Filiales',     icon: Building2 },
-  { to: '/profile',              label: 'Mon profil',    icon: UserIcon },
+  { to: '/settings/members',        label: 'Membres CODIR',     icon: Users },
+  { to: '/settings/subsidiaries',   label: 'Filiales',          icon: Building2 },
+  { to: '/settings/meeting-series', label: 'Séries récurrentes', icon: RotateCcw },
+  { to: '/profile',                 label: 'Mon profil',        icon: UserIcon },
 ]
 
 export function Shell() {

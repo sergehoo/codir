@@ -16,6 +16,98 @@ class MeetingType(models.TextChoices):
     CRISIS = "crisis", "De crise"
 
 
+# ───────────────────────────────────────────────────────────────
+#  Séries récurrentes — pattern "CODIR hebdo lundi 10h"
+# ───────────────────────────────────────────────────────────────
+
+class MeetingFrequency(models.TextChoices):
+    WEEKLY     = "weekly", "Hebdomadaire"
+    BIWEEKLY   = "biweekly", "Bi-mensuel (toutes les 2 semaines)"
+    MONTHLY    = "monthly", "Mensuel"
+
+
+class MeetingSeries(TenantAwareModel):
+    """Template récurrent qui génère automatiquement des instances de Meeting.
+
+    Exemple : « CODIR Kaydan, tous les lundis à 10h, salle Comex, durée 3h ».
+    Le Celery beat ``generate_recurring_meetings`` crée les N prochaines instances
+    selon ``generate_weeks_ahead``. Chaque instance Meeting reste modifiable
+    individuellement (annulation, déplacement, agenda spécifique).
+    """
+
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+
+    # ── Récurrence ──
+    frequency = models.CharField(
+        max_length=20, choices=MeetingFrequency.choices,
+        default=MeetingFrequency.WEEKLY,
+    )
+    DAY_CHOICES = [
+        (0, "Lundi"), (1, "Mardi"), (2, "Mercredi"), (3, "Jeudi"),
+        (4, "Vendredi"), (5, "Samedi"), (6, "Dimanche"),
+    ]
+    day_of_week = models.PositiveSmallIntegerField(
+        choices=DAY_CHOICES, default=0,
+        help_text="Jour de la semaine pour weekly/biweekly. Pour monthly = jour du mois (1-28).",
+    )
+    day_of_month = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        help_text="Pour frequency=monthly : jour du mois (1-28). Sinon ignoré.",
+    )
+    time = models.TimeField(default="10:00", help_text="Heure locale de début")
+    duration_minutes = models.PositiveIntegerField(default=180)
+
+    # ── Défauts copiés à chaque instance générée ──
+    meeting_type = models.CharField(
+        max_length=20, choices=MeetingType.choices, default=MeetingType.STRATEGIC,
+    )
+    location = models.CharField(max_length=200, blank=True)
+    video_url = models.URLField(blank=True)
+    default_chair = models.ForeignKey(
+        "accounts.User", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="meeting_series_as_chair",
+    )
+    default_secretary = models.ForeignKey(
+        "accounts.User", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="meeting_series_as_secretary",
+    )
+    default_participants = models.ManyToManyField(
+        "accounts.User", blank=True, related_name="meeting_series_default",
+    )
+
+    # ── Génération automatique ──
+    generate_weeks_ahead = models.PositiveIntegerField(
+        default=12,
+        help_text="Nombre de semaines d'avance à générer (par défaut 12 = 3 mois).",
+    )
+    last_generated_until = models.DateField(
+        null=True, blank=True,
+        help_text="Date jusqu'à laquelle les instances ont été générées.",
+    )
+    is_active = models.BooleanField(default=True)
+
+    starts_on = models.DateField(
+        null=True, blank=True,
+        help_text="Date à partir de laquelle la série démarre (default : aujourd'hui).",
+    )
+    ends_on = models.DateField(
+        null=True, blank=True,
+        help_text="Date de fin éventuelle de la série (null = pas de fin).",
+    )
+
+    class Meta:
+        ordering = ["title"]
+        verbose_name = "Série de réunions"
+        verbose_name_plural = "Séries de réunions"
+        indexes = [
+            models.Index(fields=["organization", "is_active"]),
+        ]
+
+    def __str__(self):
+        return f"{self.title} ({self.get_frequency_display()})"
+
+
 class Meeting(TenantAwareModel):
     """Réunion CODIR — bêta."""
 
@@ -60,6 +152,17 @@ class Meeting(TenantAwareModel):
         on_delete=models.SET_NULL, related_name="meetings_created",
     )
 
+    # ─── Récurrence ───
+    series = models.ForeignKey(
+        "MeetingSeries", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="instances",
+        help_text="Série récurrente qui a généré cette instance. Null = réunion ponctuelle.",
+    )
+    overrides_series = models.BooleanField(
+        default=False,
+        help_text="True si cette instance a été modifiée et diverge du template.",
+    )
+
     class Meta:
         ordering = ["-scheduled_start"]
         indexes = [
@@ -67,6 +170,7 @@ class Meeting(TenantAwareModel):
             models.Index(fields=["organization", "status"]),
             models.Index(fields=["chair"]),
             models.Index(fields=["secretary"]),
+            models.Index(fields=["series", "scheduled_start"]),
         ]
 
     def __str__(self):
