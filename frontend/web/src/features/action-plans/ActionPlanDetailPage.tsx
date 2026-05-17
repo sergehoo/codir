@@ -1,11 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link, useParams } from '@tanstack/react-router'
+import { Link, useNavigate, useParams } from '@tanstack/react-router'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { AlertTriangle, ArrowLeft, CheckCircle2, Plus, Trash2 } from 'lucide-react'
+import {
+  AlertTriangle, ArrowLeft, Pencil, Plus, Trash2,
+} from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { apiClient } from '@/api/client'
 import { Modal } from '@/components/widgets/Modal'
 import { PremiumButton } from '@/components/widgets/PremiumButton'
 import { PriorityBadge } from '@/components/widgets/PriorityBadge'
@@ -18,7 +21,9 @@ import { DelegateButton } from './DelegateTaskModal'
 export function ActionPlanDetailPage() {
   const { id } = useParams({ strict: false }) as { id: string }
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [showAdd, setShowAdd] = useState(false)
+  const [showEdit, setShowEdit] = useState(false)
   const [editingProgress, setEditingProgress] = useState<string | null>(null)
   const [progressValue, setProgressValue] = useState(0)
 
@@ -36,6 +41,19 @@ export function ActionPlanDetailPage() {
     mutationFn: ({ taskId, value }: { taskId: string; value: number }) =>
       actionPlansApi.updateProgress(taskId, { progress_percent: value }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: plansKeys.detail(id) }); setEditingProgress(null) },
+  })
+
+  const deletePlan = useMutation({
+    mutationFn: () => apiClient.delete(`/action-plans/${id}/`),
+    onSuccess: () => {
+      toast.success('Plan supprimé')
+      qc.invalidateQueries({ queryKey: plansKeys.all })
+      navigate({ to: '/action-plans' })
+    },
+    onError: (e: any) => {
+      const msg = e?.response?.data?.detail || 'Suppression impossible'
+      toast.error(msg)
+    },
   })
 
   if (!p) return <div className="p-10 text-fg-subtle">Chargement…</div>
@@ -66,7 +84,42 @@ export function ActionPlanDetailPage() {
 
         <div className="flex items-end justify-between gap-6 flex-wrap">
           <h1 className="serif text-display leading-[1.05] flex-1 min-w-0">{p.title}</h1>
-          <StatusBadge status={p.status} />
+          <div className="flex items-center gap-3 shrink-0">
+            <StatusBadge status={p.status} />
+            {p.can_modify && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowEdit(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border hover:border-copper-500/40 text-2xs font-semibold uppercase tracking-wider transition"
+                  title="Modifier ce plan d'action"
+                >
+                  <Pencil size={13} /> Modifier
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`Supprimer le plan "${p.title}" ?\n\nLes ${tasks.length} tâche(s) associée(s) seront aussi supprimées.\n\nCette action est irréversible.`)) {
+                      deletePlan.mutate()
+                    }
+                  }}
+                  disabled={deletePlan.isPending}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border hover:border-danger/50 text-2xs font-semibold uppercase tracking-wider text-fg-muted hover:text-danger transition disabled:opacity-40"
+                  title="Supprimer ce plan d'action"
+                >
+                  <Trash2 size={13} /> Supprimer
+                </button>
+              </>
+            )}
+            {p.can_modify === false && (
+              <span
+                className="text-2xs uppercase tracking-wider text-fg-subtle italic"
+                title="Vous n'avez pas la permission de modifier ce plan"
+              >
+                Lecture seule
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-6 text-sm text-fg-muted flex-wrap mt-4">
@@ -217,7 +270,143 @@ export function ActionPlanDetailPage() {
       <Modal open={showAdd} onClose={() => setShowAdd(false)} title="Nouvelle tâche">
         <AddTaskForm planId={id} onCreated={() => setShowAdd(false)} />
       </Modal>
+
+      {/* ─── Modal édition plan ─── */}
+      <Modal
+        open={showEdit}
+        onClose={() => setShowEdit(false)}
+        title={`Modifier "${p.title}"`}
+        size="lg"
+      >
+        <EditPlanForm
+          plan={p}
+          onSaved={() => {
+            setShowEdit(false)
+            qc.invalidateQueries({ queryKey: plansKeys.detail(id) })
+            qc.invalidateQueries({ queryKey: plansKeys.all })
+            toast.success('Plan d\'action mis à jour')
+          }}
+        />
+      </Modal>
     </div>
+  )
+}
+
+
+// ─── Formulaire d'édition d'un plan d'action ─────────────────────────
+
+function EditPlanForm({
+  plan, onSaved,
+}: { plan: any; onSaved: () => void }) {
+  const [title, setTitle] = useState(plan.title ?? '')
+  const [description, setDescription] = useState(plan.description_md ?? '')
+  const [status, setStatus] = useState(plan.status ?? 'open')
+  const [progress, setProgress] = useState(plan.progress_percent ?? 0)
+  const [startDate, setStartDate] = useState(plan.start_date ?? '')
+  const [targetEndDate, setTargetEndDate] = useState(plan.target_end_date ?? '')
+
+  const saveMut = useMutation({
+    mutationFn: () =>
+      apiClient.patch(`/action-plans/${plan.id}/`, {
+        title,
+        description_md: description,
+        status,
+        progress_percent: progress,
+        start_date: startDate || null,
+        target_end_date: targetEndDate || null,
+      }),
+    onSuccess: () => onSaved(),
+    onError: (e: any) => {
+      const msg = e?.response?.data?.detail || 'Échec de la sauvegarde'
+      toast.error(msg)
+    },
+  })
+
+  return (
+    <form
+      onSubmit={(e) => { e.preventDefault(); saveMut.mutate() }}
+      className="space-y-5"
+    >
+      <div>
+        <label className="label">Titre</label>
+        <input
+          className="input"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          required
+        />
+      </div>
+
+      <div>
+        <label className="label">Description</label>
+        <textarea
+          className="input min-h-[80px]"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Statut</label>
+          <select
+            className="input"
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+          >
+            <option value="open">Ouvert</option>
+            <option value="in_progress">En cours</option>
+            <option value="blocked">Bloqué</option>
+            <option value="completed">Terminé</option>
+            <option value="cancelled">Annulé</option>
+          </select>
+        </div>
+        <div>
+          <label className="label">Avancement ({progress}%)</label>
+          <input
+            type="range"
+            min={0} max={100} step={5}
+            value={progress}
+            onChange={(e) => setProgress(Number(e.target.value))}
+            className="w-full mt-2 accent-copper-500"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Date de début</label>
+          <input
+            type="date"
+            className="input"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="label">Date cible</label>
+          <input
+            type="date"
+            className="input"
+            value={targetEndDate}
+            onChange={(e) => setTargetEndDate(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2 pt-4 border-t border-border">
+        <button
+          type="button"
+          onClick={() => onSaved()}
+          className="px-4 py-2 rounded-md border border-border text-sm"
+        >
+          Annuler
+        </button>
+        <PremiumButton type="submit" loading={saveMut.isPending}>
+          Enregistrer
+        </PremiumButton>
+      </div>
+    </form>
   )
 }
 

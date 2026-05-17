@@ -5,7 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.response import Response
 
-from apps.common.permissions import IsOrganizationMember
+from apps.common.permissions import CanModifyActionPlan, IsOrganizationMember
 
 from . import services
 from .filters import ActionPlanFilter, ActionTaskFilter
@@ -19,7 +19,13 @@ from .serializers import (
 
 
 class ActionPlanViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsOrganizationMember]
+    """ViewSet des plans d'action.
+
+    Permissions :
+      - `IsOrganizationMember` : doit appartenir à l'org
+      - `CanModifyActionPlan` : update/delete réservés à staff/exec/owner
+    """
+    permission_classes = [IsOrganizationMember, CanModifyActionPlan]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = ActionPlanFilter
     search_fields = ["title", "description_md"]

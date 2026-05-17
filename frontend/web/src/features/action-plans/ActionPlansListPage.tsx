@@ -24,20 +24,57 @@ import { LiveCodirMode } from './LiveCodirMode'
 import { actionPlansApi, plansKeys } from './api'
 
 const SUB_LABEL_DEFAULT = 'Sans filiale'
+const DIR_LABEL_DEFAULT = 'Sans direction'
 
-function groupBySubsidiary(plans: ActionPlan[]) {
-  const map = new Map<string, { label: string; items: ActionPlan[] }>()
+/**
+ * Hiérarchie Filiale → Direction → Plans d'action.
+ * Renvoie un tableau de groupes-filiale, chacun contenant des sous-groupes
+ * direction triés.
+ */
+function groupBySubsidiaryAndDirection(plans: ActionPlan[]) {
+  const subMap = new Map<
+    string,
+    {
+      label: string
+      directions: Map<string, { label: string; items: ActionPlan[] }>
+    }
+  >()
+
   plans.forEach((p) => {
-    const key = p.subsidiary_id ?? '__none__'
-    const label = p.subsidiary_name ?? SUB_LABEL_DEFAULT
-    if (!map.has(key)) map.set(key, { label, items: [] })
-    map.get(key)!.items.push(p)
+    const subKey = p.subsidiary_id ?? '__none__'
+    const subLabel = p.subsidiary_name ?? SUB_LABEL_DEFAULT
+    if (!subMap.has(subKey)) {
+      subMap.set(subKey, { label: subLabel, directions: new Map() })
+    }
+    const sub = subMap.get(subKey)!
+
+    const dirKey = p.direction_id ?? '__none__'
+    const dirLabel = p.direction_name ?? DIR_LABEL_DEFAULT
+    if (!sub.directions.has(dirKey)) {
+      sub.directions.set(dirKey, { label: dirLabel, items: [] })
+    }
+    sub.directions.get(dirKey)!.items.push(p)
   })
-  return Array.from(map.values()).sort((a, b) => {
-    if (a.label === SUB_LABEL_DEFAULT) return 1
-    if (b.label === SUB_LABEL_DEFAULT) return -1
-    return a.label.localeCompare(b.label)
-  })
+
+  // Tri : filiales alpha avec "Sans filiale" en dernier ; idem pour les directions
+  const sortGroups = <T extends { label: string }>(arr: T[], defaultLabel: string) =>
+    arr.sort((a, b) => {
+      if (a.label === defaultLabel) return 1
+      if (b.label === defaultLabel) return -1
+      return a.label.localeCompare(b.label)
+    })
+
+  return sortGroups(
+    Array.from(subMap.values()).map((s) => ({
+      label: s.label,
+      directions: sortGroups(Array.from(s.directions.values()), DIR_LABEL_DEFAULT),
+      totalPlans: Array.from(s.directions.values()).reduce(
+        (acc, d) => acc + d.items.length,
+        0,
+      ),
+    })),
+    SUB_LABEL_DEFAULT,
+  )
 }
 
 const ACTIVE_STATUSES = new Set(['open', 'in_progress', 'blocked'])
@@ -65,8 +102,9 @@ export function ActionPlansListPage() {
   )
   const archived = allItems.filter(isPlanArchived)
 
-  const activeGroups = groupBySubsidiary(active)
-  const showActiveGrouping = activeGroups.length > 1
+  // Hiérarchie Filiale → Direction → Plans d'action
+  const activeGroups = groupBySubsidiaryAndDirection(active)
+  const showActiveGrouping = activeGroups.length > 0
 
   const [showHistory, setShowHistory] = useState(false)
   const [liveMode, setLiveMode] = useState(false)
@@ -75,11 +113,11 @@ export function ActionPlansListPage() {
     <div className="min-h-full bg-bg-base">
       <SectionHeader
         eyebrow="Exécution"
-        title="Plans d'action"
+        title="Projets / Dossiers"
         description={
           active.length > 0
-            ? `${active.length} plan(s) en cours · ${archived.length} archivé(s)`
-            : `${archived.length} plan(s) archivé(s)`
+            ? `${active.length} Dossier(s) en cours · ${archived.length} archivé(s)`
+            : `${archived.length} Dossier(s) archivé(s)`
         }
         actions={
           <button
@@ -115,25 +153,40 @@ export function ActionPlansListPage() {
           />
         )}
 
-        {/* ─── Actifs (accordéons) ──────────────────────────── */}
+        {/* ─── Actifs : Filiale → Direction → Plans (hiérarchie) ──── */}
         {!isLoading && active.length > 0 && (
           <>
-            {!showActiveGrouping && (
-              <div className="space-y-3">
-                {active.map((p, i) => <PlanAccordion key={p.id} p={p} idx={i} />)}
-              </div>
-            )}
-            {showActiveGrouping && activeGroups.map((g) => (
-              <div key={g.label} className="mb-10 last:mb-0 animate-fade-in-up">
-                <div className="flex items-center gap-3 mb-4">
-                  <span className="divider-accent" />
-                  <h2 className="text-2xs uppercase tracking-widest text-fg-muted font-semibold">{g.label}</h2>
-                  <span className="chip-quiet">{g.items.length}</span>
-                </div>
-                <div className="space-y-3">
-                  {g.items.map((p, i) => <PlanAccordion key={p.id} p={p} idx={i} />)}
-                </div>
-              </div>
+            {activeGroups.map((subGroup) => (
+              <section key={subGroup.label} className="mb-12 last:mb-0 animate-fade-in-up">
+                {/* En-tête Filiale */}
+                <header className="flex items-center gap-3 mb-5 pb-2 border-b border-copper-500/30">
+                  <span className="w-1 h-6 bg-copper-500 rounded-full" />
+                  <h2 className="serif text-h2 font-semibold">{subGroup.label}</h2>
+                  <span className="chip-copper">
+                    {subGroup.totalPlans} dossier{subGroup.totalPlans > 1 ? 's' : ''}
+                  </span>
+                </header>
+
+                {/* Sous-groupes Direction */}
+                {subGroup.directions.map((dirGroup) => (
+                  <div key={dirGroup.label} className="mb-6 last:mb-0">
+                    <div className="flex items-center gap-3 mb-3 ml-1">
+                      <span className="text-2xs uppercase tracking-widest text-fg-muted font-semibold">
+                        {dirGroup.label}
+                      </span>
+                      <span className="flex-1 h-px bg-border" />
+                      <span className="text-2xs text-fg-subtle">
+                        {dirGroup.items.length}
+                      </span>
+                    </div>
+                    <div className="space-y-3 ml-3">
+                      {dirGroup.items.map((p, i) => (
+                        <PlanAccordion key={p.id} p={p} idx={i} />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </section>
             ))}
           </>
         )}

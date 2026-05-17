@@ -94,8 +94,11 @@ class ActionPlanListSerializer(serializers.ModelSerializer):
     tasks_count = serializers.SerializerMethodField()
     subsidiary_id = serializers.SerializerMethodField()
     subsidiary_name = serializers.SerializerMethodField()
+    direction_id = serializers.SerializerMethodField()
+    direction_name = serializers.SerializerMethodField()
     decision_ref = serializers.CharField(source="decision.ref", read_only=True)
     can_add_tasks = serializers.SerializerMethodField()
+    can_modify = serializers.SerializerMethodField()
 
     class Meta:
         model = ActionPlan
@@ -104,7 +107,9 @@ class ActionPlanListSerializer(serializers.ModelSerializer):
             "owner", "owner_detail",
             "start_date", "target_end_date", "actual_end_date",
             "tasks_count",
-            "subsidiary_id", "subsidiary_name", "can_add_tasks",
+            "subsidiary_id", "subsidiary_name",
+            "direction_id", "direction_name",
+            "can_add_tasks", "can_modify",
             "created_at", "updated_at",
         ]
 
@@ -119,6 +124,16 @@ class ActionPlanListSerializer(serializers.ModelSerializer):
         sub = _resolve_subsidiary(obj)
         return sub.name if sub else None
 
+    def get_direction_id(self, obj):
+        decision = getattr(obj, "decision", None)
+        direction = getattr(decision, "direction", None) if decision else None
+        return str(direction.id) if direction else None
+
+    def get_direction_name(self, obj):
+        decision = getattr(obj, "decision", None)
+        direction = getattr(decision, "direction", None) if decision else None
+        return direction.name if direction else None
+
     def get_can_add_tasks(self, obj):
         request = self.context.get("request") if hasattr(self, "context") else None
         user = getattr(request, "user", None) if request else None
@@ -126,6 +141,15 @@ class ActionPlanListSerializer(serializers.ModelSerializer):
             return False
         from .services import user_can_add_tasks_to_plan
         return user_can_add_tasks_to_plan(user, obj)
+
+    def get_can_modify(self, obj):
+        """True si le user courant peut modifier/supprimer ce plan."""
+        request = self.context.get("request") if hasattr(self, "context") else None
+        if request is None:
+            return False
+        from apps.common.permissions import CanModifyActionPlan
+        perm = CanModifyActionPlan()
+        return perm.has_object_permission(request, None, obj)
 
 
 class ActionPlanDetailSerializer(ActionPlanListSerializer):

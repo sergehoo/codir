@@ -68,6 +68,48 @@ def _task_subsidiary_id(task):
     return getattr(direction, "subsidiary_id", None) if direction else None
 
 
+class CanModifyActionPlan(BasePermission):
+    """Permission de modifier/supprimer un Plan d'action.
+
+    Règles :
+      - Lecture (SAFE_METHODS) : tous les membres de l'org
+      - Modification/Suppression : staff, executive, ou créateur/owner du plan
+      - Sinon : 403
+
+    Pour modifier la liste des autorisés, ajouter des rôles via Membership
+    et étendre la condition ici.
+    """
+
+    message = "Vous n'avez pas la permission de modifier ce plan d'action."
+
+    def _user_can_modify(self, request, obj=None) -> bool:
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if user.is_staff or getattr(user, "is_executive", False):
+            return True
+        if obj is not None:
+            # Owner du plan
+            if getattr(obj, "owner_id", None) == user.id:
+                return True
+            # Créateur de la décision liée
+            decision = getattr(obj, "decision", None)
+            if decision and getattr(decision, "created_by_id", None) == user.id:
+                return True
+        return False
+
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return True
+        # Pour les méthodes write (create) : staff/exec uniquement
+        return self._user_can_modify(request)
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in SAFE_METHODS:
+            return True
+        return self._user_can_modify(request, obj)
+
+
 class CanModifyTaskInSubsidiary(BasePermission):
     """⚠ Permission DÉSACTIVÉE par défaut.
 

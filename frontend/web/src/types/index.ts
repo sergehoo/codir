@@ -171,9 +171,12 @@ export type ActionPlan = {
   tasks?: ActionTask[]
   subsidiary_id?: ID | null
   subsidiary_name?: string | null
-  /** True si l'utilisateur connecté peut créer des tâches sur ce plan
-   *  (appartient à la même filiale, est owner, ou le plan est Groupe). */
+  direction_id?: ID | null
+  direction_name?: string | null
+  /** True si l'utilisateur connecté peut créer des tâches sur ce plan. */
   can_add_tasks?: boolean
+  /** True si l'utilisateur connecté peut modifier/supprimer ce plan. */
+  can_modify?: boolean
 }
 
 export type Notification = {
