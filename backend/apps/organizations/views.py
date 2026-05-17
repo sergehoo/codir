@@ -23,4 +23,9 @@ class SubsidiaryViewSet(viewsets.ModelViewSet):
     serializer_class = SubsidiarySerializer
 
     def get_queryset(self):
-        return Subsidiary.objects.all()
+        """Filtre par tenant courant si défini, sinon bypass."""
+        org = getattr(self.request, "organization", None)
+        qs = Subsidiary.objects.select_related("organization", "parent").all()
+        if org is not None:
+            qs = qs.filter(organization=org)
+        return qs

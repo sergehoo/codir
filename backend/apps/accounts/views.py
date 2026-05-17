@@ -165,9 +165,25 @@ class MembershipViewSet(viewsets.ModelViewSet):
     serializer_class = MembershipSerializer
 
     def get_queryset(self):
-        return (
-            Membership.objects
+        """Limite aux memberships du tenant courant si présent."""
+        org = getattr(self.request, "organization", None)
+        qs = (
+            Membership.unscoped
             .select_related("user", "subsidiary", "organization")
             .prefetch_related("roles")
             .all()
         )
+        if org is not None:
+            qs = qs.filter(organization=org)
+        return qs
+
+    def list(self, request, *args, **kwargs):
+        """Override pour catcher tout 500 imprévu et retourner un détail utilisable."""
+        try:
+            return super().list(request, *args, **kwargs)
+        except Exception as exc:  # noqa: BLE001
+            log.exception("MembershipViewSet.list failed")
+            return Response(
+                {"detail": f"Erreur de chargement des membres : {type(exc).__name__}: {exc}"},
+                status=500,
+            )
