@@ -248,6 +248,7 @@ export function MeetingSeriesPage() {
         open={showForm}
         onClose={() => { setShowForm(false); setEditing(null) }}
         title={editing ? `Modifier "${editing.title}"` : 'Nouvelle série'}
+        size="lg"
       >
         <SeriesForm
           initial={editing}
@@ -420,26 +421,66 @@ function SeriesForm({
       </div>
 
       <div>
-        <label className="label">
-          Participants par défaut ({participants.length})
-        </label>
-        <div className="max-h-48 overflow-y-auto border border-border rounded-md p-2 space-y-1 bg-bg-elevated">
-          {users?.map((u) => (
-            <label key={u.id} className="flex items-center gap-2 text-sm hover:bg-bg-base px-2 py-1 rounded">
-              <input
-                type="checkbox"
-                checked={participants.includes(u.id)}
-                onChange={(e) => {
-                  setParticipants((prev) =>
-                    e.target.checked
-                      ? [...prev, u.id]
-                      : prev.filter((p) => p !== u.id),
-                  )
-                }}
-              />
-              <span>{u.full_name || `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || u.email}</span>
-            </label>
-          ))}
+        <div className="flex items-center justify-between mb-2">
+          <label className="label !mb-0">
+            Participants par défaut ({participants.length}
+            {users && ` / ${users.length}`})
+          </label>
+          {users && users.length > 0 && (
+            <div className="flex items-center gap-2 text-2xs">
+              <button
+                type="button"
+                onClick={() => setParticipants(users.map((u) => u.id))}
+                disabled={participants.length === users.length}
+                className="uppercase tracking-wider text-copper-400 hover:underline font-semibold disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed"
+              >
+                Tout sélectionner
+              </button>
+              <span className="text-fg-subtle">·</span>
+              <button
+                type="button"
+                onClick={() => setParticipants([])}
+                disabled={participants.length === 0}
+                className="uppercase tracking-wider text-fg-muted hover:text-copper-400 hover:underline font-semibold disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed"
+              >
+                Tout retirer
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="max-h-56 overflow-y-auto border border-border rounded-md p-2 space-y-0.5 bg-bg-base">
+          {users?.map((u) => {
+            const checked = participants.includes(u.id)
+            return (
+              <label
+                key={u.id}
+                className={`flex items-center gap-2 text-sm px-2 py-1.5 rounded cursor-pointer transition-colors ${
+                  checked ? 'bg-copper-500/10' : 'hover:bg-bg-elevated'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(e) => {
+                    setParticipants((prev) =>
+                      e.target.checked
+                        ? [...prev, u.id]
+                        : prev.filter((p) => p !== u.id),
+                    )
+                  }}
+                  className="shrink-0 accent-copper-500"
+                />
+                <span className="flex-1 truncate">
+                  {u.full_name || `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || u.email}
+                </span>
+              </label>
+            )
+          })}
+          {users && users.length === 0 && (
+            <p className="text-fg-muted text-xs text-center py-4">
+              Aucun utilisateur trouvé dans l'organisation.
+            </p>
+          )}
         </div>
       </div>
 
