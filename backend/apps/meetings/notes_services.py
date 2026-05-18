@@ -112,7 +112,10 @@ def _text_of(node: dict) -> str:
 # ─── Parser ────────────────────────────────────────────────────
 
 LINE_DECISION_RE = re.compile(r"^\s*#\s+(.+?)\s*$")
-LINE_ACTION_RE   = re.compile(r"^(\s*)[\*\-]\s+(.+?)\s*$")
+# Actions et Tâches partagent la même cible (ActionTask).
+# `*` ou `-` : item rapide (action mentionnée en séance).
+# `>`        : tâche structurée (préfixe explicite alternatif).
+LINE_ACTION_RE   = re.compile(r"^(\s*)[\*\->]\s+(.+?)\s*$")
 MENTION_RE       = re.compile(r"@([A-Za-zÀ-ÿ\-']+(?:\s+[A-Za-zÀ-ÿ\-']+)*)")
 
 

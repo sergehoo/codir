@@ -93,7 +93,10 @@ export function MeetingNotesSection({ meetingId }: { meetingId: string }) {
           <Sparkles size={13} className="text-copper-400" /> Notes intelligentes
         </h2>
         <p className="text-xs text-fg-subtle ml-2 hidden md:block">
-          <code className="text-copper-400 font-mono">#</code> décision · <code className="text-copper-400 font-mono">*</code> action · <code className="text-copper-400 font-mono">@</code> mention
+          <code className="text-copper-400 font-mono">#</code> décision ·{' '}
+          <code className="text-copper-400 font-mono">*</code> action ·{' '}
+          <code className="text-success font-mono">&gt;</code> tâche ·{' '}
+          <code className="text-copper-400 font-mono">@</code> mention
         </p>
         <div className="flex items-center gap-2 ml-auto">
           <PremiumButton size="sm" variant="ghost" iconLeft={<RefreshCw size={12} />}
@@ -136,6 +139,7 @@ export function MeetingNotesSection({ meetingId }: { meetingId: string }) {
             </div>
             <Shortcut k="#"   l="Décision" />
             <Shortcut k="*"   l="Action" />
+            <Shortcut k=">"   l="Tâche" />
             <Shortcut k="@"   l="Mention" />
             <Shortcut k="Tab" l="Indenter" />
             <Shortcut k="⌘S"  l="Sauvegarder" />

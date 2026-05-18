@@ -21,12 +21,16 @@ import { meetingsApi } from '../api'
 import { MentionAutocomplete } from './MentionAutocomplete'
 import { tiptapToLines } from './NotesParser'
 
-// ─── Décoration live des lignes # / * ─────────────────────────
-// Patterns assouplis : on décore dès que la ligne COMMENCE par `#` / `*` / `-`.
+// ─── Décoration live des lignes # / * / > ─────────────────────
+// Patterns assouplis : on décore dès que la ligne COMMENCE par le marqueur.
 // L'espace après n'est plus obligatoire — du coup le badge s'affiche au tout
-// premier keystroke et non plus seulement après avoir tapé l'espace.
+// premier keystroke.
+//   #  → DÉCISION   (titre en gras + souligné — l'identifiant du plan d'action)
+//   *  → ACTION     (item rapide à mener en séance)
+//   >  → TÂCHE      (tâche structurée — rattachée au plan parent)
 const DECISION_RE = /^\s*#(?:\s|$)/      // # ou # texte
-const ACTION_RE   = /^\s*[*-](?:\s|$)/   // * ou * texte / - texte
+const ACTION_RE   = /^\s*[*-](?:\s|$)/   // * ou - texte
+const TASK_RE     = /^\s*>(?:\s|$)/      // > ou > texte
 
 const SmartLineDecoration = Extension.create({
   name: 'smartLineDecoration',
@@ -44,6 +48,12 @@ const SmartLineDecoration = Extension.create({
                   decos.push(
                     Decoration.node(pos, pos + node.nodeSize, {
                       class: 'smart-line smart-line-decision',
+                    }),
+                  )
+                } else if (TASK_RE.test(text)) {
+                  decos.push(
+                    Decoration.node(pos, pos + node.nodeSize, {
+                      class: 'smart-line smart-line-task',
                     }),
                   )
                 } else if (ACTION_RE.test(text)) {
@@ -92,6 +102,25 @@ const TabHandler = Extension.create({
 function buildMentionExtension(meetingId: string) {
   return Mention.configure({
     HTMLAttributes: { class: 'smart-mention' },
+    // Rendu HTML : on n'inclut PAS le `@` dans le contenu, c'est le CSS
+    // (`.smart-mention::before { content: '@' }`) qui le préfixe visuellement.
+    // Sans cet override, on a `@@Catherine` car Tiptap met `@` dans le HTML
+    // ET le CSS rajoute le sien — d'où le doublon.
+    renderHTML({ options, node }) {
+      return [
+        'span',
+        {
+          ...options.HTMLAttributes,
+          'data-id': node.attrs.id,
+          'data-label': node.attrs.label,
+        },
+        `${node.attrs.label ?? node.attrs.id}`,
+      ]
+    },
+    // Texte plain (export, copier-coller, parser backend) : on garde le `@`.
+    renderText({ node }) {
+      return `@${node.attrs.label ?? node.attrs.id}`
+    },
     suggestion: {
       char: '@',
       items: async ({ query }: { query: string }) => {
@@ -172,7 +201,7 @@ export function SmartMeetingEditor({
       }),
       Placeholder.configure({
         placeholder:
-          "Prenez vos notes…\n\nAstuce :\n  # Décision   — la ligne devient une décision\n  * Action      — la ligne devient une action\n  @Prénom      — pour assigner",
+          "Prenez vos notes…\n\nAstuce :\n  # Décision   — la ligne devient une décision\n  * Action      — item rapide à mener\n  > Tâche       — tâche structurée\n  @Prénom      — mentionner un membre",
       }),
       buildMentionExtension(meetingId),
       SmartLineDecoration,

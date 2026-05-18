@@ -30,7 +30,9 @@ export type LocalParseResult = {
 }
 
 const LINE_DECISION = /^\s*#\s+(.+)\s*$/
-const LINE_ACTION = /^\s*[*\-]\s+(.+)\s*$/
+// Actions et tâches partagent la même cible (ActionTask).
+// Préfixes acceptés : `*`, `-` (action courte) ou `>` (tâche structurée).
+const LINE_ACTION = /^\s*[*\->]\s+(.+)\s*$/
 const MENTION = /@([A-Za-zÀ-ÿ\-']+(?:\s+[A-Za-zÀ-ÿ\-']+)*)/
 
 export function parseLines(lines: string[]): LocalParseResult {
