@@ -15,9 +15,10 @@ import { StarterKit } from '@tiptap/starter-kit'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Extension } from '@tiptap/core'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { meetingsApi } from '../api'
+import { DatePickerPopup } from './DatePickerPopup'
 import { MentionAutocomplete } from './MentionAutocomplete'
 import { tiptapToLines } from './NotesParser'
 
@@ -96,6 +97,19 @@ const TabHandler = Extension.create({
     }
   },
 })
+
+// ─── Datepicker : Cmd+D / Ctrl+D ouvre le sélecteur de date ──────
+function buildDatePickerExtension(open: () => void) {
+  return Extension.create({
+    name: 'datepickerShortcut',
+    addKeyboardShortcuts() {
+      return {
+        'Mod-d': () => { open(); return true },
+        'Mod-D': () => { open(); return true },
+      }
+    },
+  })
+}
 
 // ─── Mention factory ──────────────────────────────────────────
 
@@ -193,6 +207,8 @@ export function SmartMeetingEditor({
   readOnly?: boolean
 }) {
   const debounceRef = useRef<number | null>(null)
+  const [dateOpen, setDateOpen] = useState(false)
+  const [dateAnchor, setDateAnchor] = useState<{ top: number; left: number } | null>(null)
 
   const editor = useEditor({
     extensions: [
@@ -201,11 +217,24 @@ export function SmartMeetingEditor({
       }),
       Placeholder.configure({
         placeholder:
-          "Prenez vos notes…\n\nAstuce :\n  # Décision   — la ligne devient une décision\n  * Action      — item rapide à mener\n  > Tâche       — tâche structurée\n  @Prénom      — mentionner un membre",
+          "Prenez vos notes…\n\nAstuce :\n  # Décision   — la ligne devient une décision\n  * Action      — item rapide à mener\n  > Tâche       — tâche structurée (date 22/08/2026, !high, @Nom)\n  @Prénom      — mentionner un membre\n\n  ⌘D ouvre un sélecteur de date — 2 espaces sous la tâche = description",
       }),
       buildMentionExtension(meetingId),
       SmartLineDecoration,
       TabHandler,
+      buildDatePickerExtension(() => {
+        // Capture la position du curseur pour ancrer le popup
+        const sel = window.getSelection()
+        if (sel && sel.rangeCount > 0) {
+          const r = sel.getRangeAt(0).getBoundingClientRect()
+          if (r.top || r.left) {
+            setDateAnchor({ top: r.bottom + 6, left: r.left })
+          } else {
+            setDateAnchor(null)
+          }
+        }
+        setDateOpen(true)
+      }),
     ],
     content: initialJson ?? '',
     editable: !readOnly,
@@ -240,6 +269,21 @@ export function SmartMeetingEditor({
     <div className="smart-editor relative">
       <EditorContent editor={editor} className="prose prose-sm max-w-none focus:outline-none" />
       <SaveBadge state={saving} />
+      <DatePickerPopup
+        open={dateOpen}
+        anchor={dateAnchor}
+        onClose={() => setDateOpen(false)}
+        onSelect={(formatted) => {
+          // Insère " DD/MM/YYYY" au curseur (espace avant pour ne pas coller au mot)
+          const cur = editor.state.doc.textBetween(
+            Math.max(0, editor.state.selection.from - 1),
+            editor.state.selection.from,
+          )
+          const prefix = cur && cur !== ' ' && cur !== '\n' ? ' ' : ''
+          editor.chain().focus().insertContent(`${prefix}${formatted}`).run()
+          setDateOpen(false)
+        }}
+      />
     </div>
   )
 }

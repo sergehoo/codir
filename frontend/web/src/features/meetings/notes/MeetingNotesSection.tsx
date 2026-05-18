@@ -96,7 +96,9 @@ export function MeetingNotesSection({ meetingId }: { meetingId: string }) {
           <code className="text-copper-400 font-mono">#</code> décision ·{' '}
           <code className="text-copper-400 font-mono">*</code> action ·{' '}
           <code className="text-success font-mono">&gt;</code> tâche ·{' '}
-          <code className="text-copper-400 font-mono">@</code> mention
+          <code className="text-copper-400 font-mono">@</code> mention ·{' '}
+          <code className="text-copper-400 font-mono">22/08/2026</code> échéance ·{' '}
+          <code className="text-copper-400 font-mono">!high</code> priorité
         </p>
         <div className="flex items-center gap-2 ml-auto">
           <PremiumButton size="sm" variant="ghost" iconLeft={<RefreshCw size={12} />}
@@ -141,7 +143,9 @@ export function MeetingNotesSection({ meetingId }: { meetingId: string }) {
             <Shortcut k="*"   l="Action" />
             <Shortcut k=">"   l="Tâche" />
             <Shortcut k="@"   l="Mention" />
-            <Shortcut k="Tab" l="Indenter" />
+            <Shortcut k="!"   l="Prio. !high !med …" />
+            <Shortcut k="⌘D"  l="Échéance (datepicker)" />
+            <Shortcut k="Tab" l="Indenter / desc." />
             <Shortcut k="⌘S"  l="Sauvegarder" />
           </div>
         </aside>

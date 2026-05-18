@@ -31,6 +31,7 @@ class MeetingDetectedActionSerializer(serializers.ModelSerializer):
         model = MeetingDetectedAction
         fields = [
             "id", "title", "raw_line",
+            "description_md", "due_date", "priority",
             "assignee", "assignee_detail", "assignee_mention",
             "order", "status",
             "action_task", "published_at",

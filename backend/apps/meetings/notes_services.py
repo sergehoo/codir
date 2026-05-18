@@ -118,6 +118,50 @@ LINE_DECISION_RE = re.compile(r"^\s*#\s+(.+?)\s*$")
 LINE_ACTION_RE   = re.compile(r"^(\s*)[\*\->]\s+(.+?)\s*$")
 MENTION_RE       = re.compile(r"@([A-Za-zÀ-ÿ\-']+(?:\s+[A-Za-zÀ-ÿ\-']+)*)")
 
+# Date d'échéance inline : 22/08/2026 — 22/08/26 — 22/08
+DUE_DATE_RE      = re.compile(r"\b(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\b")
+
+# Priorité inline : !low / !medium / !high / !critical (+ alias !l !m !h !c)
+PRIORITY_RE      = re.compile(r"!(low|medium|high|critical|l|m|h|c)\b", re.IGNORECASE)
+PRIORITY_ALIASES = {
+    "l": "low", "m": "medium", "h": "high", "c": "critical",
+    "low": "low", "medium": "medium", "high": "high", "critical": "critical",
+}
+
+
+def _extract_due_date(text: str, *, today=None):
+    """Extrait une date DD/MM[/YY[YY]] du texte. Retourne (date|None, text_sans_date)."""
+    from datetime import date as _date
+    today = today or _date.today()
+    m = DUE_DATE_RE.search(text)
+    if not m:
+        return None, text
+    day, month = int(m.group(1)), int(m.group(2))
+    year_raw = m.group(3)
+    if year_raw is None:
+        year = today.year
+    else:
+        year = int(year_raw)
+        if year < 100:
+            year += 2000
+    try:
+        dt = _date(year, month, day)
+    except ValueError:
+        return None, text  # ex: 31/02/2026 — non valide → on ignore
+    cleaned = (text[: m.start()] + text[m.end():]).strip()
+    return dt, re.sub(r"\s{2,}", " ", cleaned)
+
+
+def _extract_priority(text: str):
+    """Extrait une priorité !low|!medium|!high|!critical du texte."""
+    m = PRIORITY_RE.search(text)
+    if not m:
+        return "", text
+    raw = m.group(1).lower()
+    priority = PRIORITY_ALIASES.get(raw, "")
+    cleaned = (text[: m.start()] + text[m.end():]).strip()
+    return priority, re.sub(r"\s{2,}", " ", cleaned)
+
 
 @dataclass
 class ParsedAction:
@@ -126,6 +170,9 @@ class ParsedAction:
     assignee: object = None  # User or None
     assignee_mention: str = ""
     order: int = 0
+    due_date: object = None  # date | None
+    priority: str = ""
+    description_md: str = ""
 
 
 @dataclass
@@ -143,34 +190,28 @@ class ParseResult:
     mentions: dict[str, object] = field(default_factory=dict)  # raw_name → User or None
 
     def as_dict(self):
+        def _action_dict(a):
+            return {
+                "title": a.title,
+                "raw_line": a.raw_line,
+                "assignee_id": str(a.assignee.id) if a.assignee else None,
+                "assignee_name": (a.assignee.get_full_name() if a.assignee else None),
+                "assignee_mention": a.assignee_mention,
+                "due_date": a.due_date.isoformat() if a.due_date else None,
+                "priority": a.priority or "",
+                "description_md": a.description_md or "",
+            }
         return {
             "decisions": [
                 {
                     "title": d.title,
                     "raw_line": d.raw_line,
                     "order": d.order,
-                    "actions": [
-                        {
-                            "title": a.title,
-                            "raw_line": a.raw_line,
-                            "assignee_id": str(a.assignee.id) if a.assignee else None,
-                            "assignee_name": (a.assignee.get_full_name() if a.assignee else None),
-                            "assignee_mention": a.assignee_mention,
-                        }
-                        for a in d.actions
-                    ],
+                    "actions": [_action_dict(a) for a in d.actions],
                 }
                 for d in self.decisions
             ],
-            "orphan_actions": [
-                {
-                    "title": a.title,
-                    "raw_line": a.raw_line,
-                    "assignee_id": str(a.assignee.id) if a.assignee else None,
-                    "assignee_mention": a.assignee_mention,
-                }
-                for a in self.orphan_actions
-            ],
+            "orphan_actions": [_action_dict(a) for a in self.orphan_actions],
             "mentions": [
                 {
                     "raw_text": k,
@@ -227,16 +268,26 @@ def parse_notes(*, content_json: dict | None = None, content_md: str = "",
 
     result = ParseResult()
     current_decision: ParsedDecision | None = None
+    current_action: ParsedAction | None = None  # pour capturer les desc indentées
     decision_order = 0
     action_order = 0
 
+    def _flush_current_action():
+        """Nettoie la description multi-ligne en cours."""
+        nonlocal current_action
+        if current_action and current_action.description_md:
+            current_action.description_md = current_action.description_md.strip()
+        current_action = None
+
     for raw in lines:
         if not raw.strip():
+            _flush_current_action()
             continue
 
         # DECISION ?
         m = LINE_DECISION_RE.match(raw)
         if m:
+            _flush_current_action()
             decision_order += 1
             current_decision = ParsedDecision(
                 title=m.group(1).strip()[:400],
@@ -249,8 +300,15 @@ def parse_notes(*, content_json: dict | None = None, content_md: str = "",
         # ACTION ?
         m = LINE_ACTION_RE.match(raw)
         if m:
+            _flush_current_action()
             action_order += 1
             text = m.group(2).strip()
+
+            # Extraction date + priorité (avant les mentions pour ne pas
+            # collisioner les regex, notamment !c qui pourrait être en bord
+            # de mot).
+            due_date, text = _extract_due_date(text)
+            priority, text = _extract_priority(text)
 
             # Mentions
             assignee = None
@@ -259,23 +317,44 @@ def parse_notes(*, content_json: dict | None = None, content_md: str = "",
             if mention_match:
                 mention_raw = mention_match.group(1).strip()
                 assignee = _resolve_user(mention_raw, candidates)
-                # Mémorise tous les mentions du document
                 result.mentions[mention_raw] = assignee
-                # Retire le @mention du titre
                 text = MENTION_RE.sub("", text).strip()
 
-            action = ParsedAction(
+            # Nettoyage final : virer les éventuels mots de liaison "d'ici le"
+            # / "avant le" laissés derrière par la suppression de la date.
+            text = re.sub(
+                r"\b(d'ici|avant|jusqu'au|le|pour)\s*(le)?\s*$",
+                "", text, flags=re.IGNORECASE,
+            ).strip()
+            text = re.sub(r"\s{2,}", " ", text).strip()
+
+            current_action = ParsedAction(
                 title=text[:400],
                 raw_line=raw,
                 assignee=assignee,
                 assignee_mention=mention_raw,
                 order=action_order,
+                due_date=due_date,
+                priority=priority,
             )
             if current_decision:
-                current_decision.actions.append(action)
+                current_decision.actions.append(current_action)
             else:
-                result.orphan_actions.append(action)
+                result.orphan_actions.append(current_action)
             continue
+
+        # Ligne indentée (≥2 espaces ou tab) après une action → description
+        if current_action and (raw.startswith("  ") or raw.startswith("\t")):
+            indent_stripped = raw.lstrip(" \t").rstrip()
+            if indent_stripped:
+                if current_action.description_md:
+                    current_action.description_md += "\n" + indent_stripped
+                else:
+                    current_action.description_md = indent_stripped
+                continue
+
+        # Ligne non-indentée : on clôt la capture de description en cours
+        _flush_current_action()
 
         # Mentions hors action (paragraphe libre)
         for match in MENTION_RE.finditer(raw):
@@ -283,6 +362,7 @@ def parse_notes(*, content_json: dict | None = None, content_md: str = "",
             if mention_raw not in result.mentions:
                 result.mentions[mention_raw] = _resolve_user(mention_raw, candidates)
 
+    _flush_current_action()
     return result
 
 
@@ -405,6 +485,8 @@ def sync_detected_entities(*, meeting: Meeting, note: MeetingNote | None = None)
                 detected_decision=dd, title=pa.title, raw_line=pa.raw_line,
                 assignee=pa.assignee, assignee_mention=pa.assignee_mention,
                 order=pa.order, status=DetectedDecisionStatus.PENDING,
+                due_date=pa.due_date, priority=pa.priority,
+                description_md=pa.description_md,
             )
             act_count += 1
 
@@ -418,6 +500,8 @@ def sync_detected_entities(*, meeting: Meeting, note: MeetingNote | None = None)
             detected_decision=None, title=pa.title, raw_line=pa.raw_line,
             assignee=pa.assignee, assignee_mention=pa.assignee_mention,
             order=pa.order, status=DetectedDecisionStatus.PENDING,
+            due_date=pa.due_date, priority=pa.priority,
+            description_md=pa.description_md,
         )
         act_count += 1
 
@@ -551,13 +635,20 @@ def publish_detected_action(*, detected: MeetingDetectedAction, by_user) -> Acti
                 task = t
                 break
     if task is None:
+        # Priorité : prefer la valeur détectée si présente, sinon MEDIUM
+        detected_prio = (detected.priority or "").lower()
+        priority_value = detected_prio if detected_prio in {
+            Priority.LOW, Priority.MEDIUM, Priority.HIGH, Priority.CRITICAL,
+        } else Priority.MEDIUM
         task = ActionTask.unscoped.create(
             organization=detected.meeting.organization,
             action_plan=plan,
             title=detected.title,
-            priority=Priority.MEDIUM,
+            description_md=detected.description_md or "",
+            priority=priority_value,
             status=ActionTaskStatus.TODO,
             assignee=detected.assignee,
+            due_date=detected.due_date,
         )
 
     detected.action_task = task

@@ -80,6 +80,9 @@ export type DetectedAction = {
   id: string
   title: string
   raw_line: string
+  description_md?: string
+  due_date?: string | null   // ISO yyyy-mm-dd
+  priority?: '' | 'low' | 'medium' | 'high' | 'critical'
   assignee: string | null
   assignee_detail?: MentionCandidate
   assignee_mention: string

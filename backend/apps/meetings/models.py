@@ -300,6 +300,19 @@ class MeetingDetectedAction(TenantAwareModel):
     )
     title = models.CharField(max_length=400)
     raw_line = models.TextField(blank=True)
+    # Métadonnées extraites par le parser inline (date / priorité / description).
+    description_md = models.TextField(
+        blank=True,
+        help_text="Description extraite des lignes indentées sous la tâche.",
+    )
+    due_date = models.DateField(
+        null=True, blank=True,
+        help_text="Échéance extraite d'un pattern DD/MM/YYYY dans la ligne.",
+    )
+    priority = models.CharField(
+        max_length=10, blank=True,
+        help_text="Priorité extraite d'un !low|!medium|!high|!critical inline.",
+    )
     assignee = models.ForeignKey(
         "accounts.User", null=True, blank=True,
         on_delete=models.SET_NULL, related_name="detected_action_assignments",
