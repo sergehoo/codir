@@ -170,11 +170,18 @@ REST_FRAMEWORK = {
 }
 
 # ─── JWT ───────────────────────────────────────────────────────────────
+# Durées configurables via env pour pouvoir ajuster sans rebuild.
+# CODIR est une app interne B2B avec MFA TOTP en place côté accounts ;
+# on privilégie le confort utilisateur — sessions longues acceptables.
+_JWT_ACCESS_HOURS = env.int("JWT_ACCESS_HOURS", default=24)
+_JWT_REFRESH_DAYS = env.int("JWT_REFRESH_DAYS", default=30)
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
-    "ROTATE_REFRESH_TOKENS": True,
-    "BLACKLIST_AFTER_ROTATION": True,
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=_JWT_ACCESS_HOURS),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=_JWT_REFRESH_DAYS),
+    # Rotation désactivée : évite les race conditions sur appels concurrents
+    # (2 onglets, refresh simultané → un des deux refresh part en blacklist).
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": False,
     "AUTH_HEADER_TYPES": ("Bearer",),
     "ALGORITHM": "HS256",  # RS256 en prod avec SIGNING_KEY = clé privée RSA
 }

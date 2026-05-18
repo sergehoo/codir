@@ -3,8 +3,8 @@ from django.contrib import admin
 from core.admin import TenantAwareAdmin
 
 from .models import (
-    Meeting, MeetingAttendance, MeetingMinutes,
-    MeetingNote, MeetingParticipant, MeetingSeries,
+    Meeting, MeetingAttendance, MeetingDetectedAction, MeetingDetectedDecision,
+    MeetingMention, MeetingMinutes, MeetingNote, MeetingParticipant, MeetingSeries,
 )
 
 
@@ -110,4 +110,41 @@ class MeetingMinutesAdmin(TenantAwareAdmin):
     list_display = ("meeting", "title", "generated_by", "created_at")
     search_fields = ("meeting__title", "title")
     autocomplete_fields = ("meeting", "generated_by", "document")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(MeetingDetectedDecision)
+class MeetingDetectedDecisionAdmin(TenantAwareAdmin):
+    """Décisions détectées par le parser de notes — à valider avant publication."""
+
+    list_display = ("title", "meeting", "order", "status", "decision", "created_at")
+    list_filter = ("status", "organization")
+    search_fields = ("title", "raw_line", "meeting__title")
+    autocomplete_fields = ("meeting", "note", "decision", "organization")
+    readonly_fields = ("created_at", "updated_at", "raw_line")
+    date_hierarchy = "created_at"
+
+
+@admin.register(MeetingDetectedAction)
+class MeetingDetectedActionAdmin(TenantAwareAdmin):
+    """Actions détectées par le parser de notes — rattachées à une décision détectée."""
+
+    list_display = ("title", "meeting", "detected_decision", "assignee",
+                    "assignee_mention", "order", "created_at")
+    list_filter = ("organization",)
+    search_fields = ("title", "raw_line", "assignee_mention",
+                     "meeting__title", "assignee__email")
+    autocomplete_fields = ("meeting", "detected_decision", "assignee", "organization")
+    readonly_fields = ("created_at", "updated_at", "raw_line")
+    date_hierarchy = "created_at"
+
+
+@admin.register(MeetingMention)
+class MeetingMentionAdmin(TenantAwareAdmin):
+    """Mentions @user dans les notes (anti-doublon : uniques par meeting + user)."""
+
+    list_display = ("meeting", "user", "raw_text", "occurrences")
+    list_filter = ("organization",)
+    search_fields = ("raw_text", "meeting__title", "user__email")
+    autocomplete_fields = ("meeting", "user", "organization")
     readonly_fields = ("created_at", "updated_at")

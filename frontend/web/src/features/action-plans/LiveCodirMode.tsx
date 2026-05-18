@@ -70,6 +70,7 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
   const [filterAssignee, setFilterAssignee]   = useState<string>('')
   const [filterStatus, setFilterStatus]       = useState<string>('')
   const [filterSubsidiary, setFilterSubsidiary] = useState<string>('')
+  const [filterDirection, setFilterDirection]   = useState<string>('')
   const [filterScope, setFilterScope]         = useState<'open' | 'all'>('open')
   const [search, setSearch]                   = useState('')
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
@@ -122,6 +123,13 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
           return false
         }
       }
+      if (filterDirection) {
+        if (filterDirection === '__none__') {
+          if (t.direction_id) return false
+        } else if (t.direction_id !== filterDirection) {
+          return false
+        }
+      }
       if (search) {
         const s = search.toLowerCase()
         const assigneeName = users?.find((u) => u.id === t.assignee)
@@ -137,7 +145,7 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
       }
       return true
     })
-  }, [tasks, filterStatus, filterAssignee, filterSubsidiary, filterScope, search, users])
+  }, [tasks, filterStatus, filterAssignee, filterSubsidiary, filterDirection, filterScope, search, users])
 
   // Liste unique des filiales présentes dans les tâches chargées
   const subsidiaryOptions = useMemo(() => {
@@ -157,18 +165,51 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
     return arr
   }, [tasks])
 
-  // Groupement hiérarchique : Filiale → Direction → Plan → Tâches
+  // Liste unique des directions — filtrée par filiale sélectionnée si applicable.
+  // Aligné sur la logique de récupération de ActionPlansListPage : on s'appuie
+  // sur `direction_id` / `direction_name` exposés par l'API tâches.
+  const directionOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    let hasNone = false
+    tasks.forEach((t) => {
+      // Si une filiale est filtrée, ne lister que les directions de cette filiale
+      if (filterSubsidiary) {
+        if (filterSubsidiary === '__none__') {
+          if (t.subsidiary_id) return
+        } else if (t.subsidiary_id !== filterSubsidiary) {
+          return
+        }
+      }
+      if (t.direction_id && t.direction_name) {
+        map.set(t.direction_id, t.direction_name)
+      } else {
+        hasNone = true
+      }
+    })
+    const arr = Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+    if (hasNone) arr.push({ id: '__none__', name: 'Sans direction' })
+    return arr
+  }, [tasks, filterSubsidiary])
+
+  // Groupement hiérarchique : Filiale → Direction → Dossier → Tâches.
+  // Aligné avec ActionPlansListPage : "Sans filiale" et "Sans direction"
+  // remontent en fin de liste (pas tri alpha pur).
   const groupedTasks = useMemo(() => {
+    const SUB_DEFAULT = 'Sans filiale (Groupe)'
+    const DIR_DEFAULT = 'Sans direction'
+
     type PlanGroup = { planId: string; planTitle: string; tasks: ActionTask[] }
     type DirGroup  = { dirId: string; dirName: string; plans: Map<string, PlanGroup> }
     type SubGroup  = { subId: string; subName: string; dirs: Map<string, DirGroup> }
 
     const subs = new Map<string, SubGroup>()
     for (const t of filtered) {
-      const subId   = t.subsidiary_id || '__none__'
-      const subName = t.subsidiary_name || 'Sans filiale (Groupe)'
-      const dirId   = t.direction_id || '__none__'
-      const dirName = t.direction_name || 'direction'
+      const subId   = t.subsidiary_id ?? '__none__'
+      const subName = t.subsidiary_name ?? SUB_DEFAULT
+      const dirId   = t.direction_id ?? '__none__'
+      const dirName = t.direction_name ?? DIR_DEFAULT
       const planId   = t.action_plan
       const planTitle = t.action_plan_title || 'Dossier'
 
@@ -190,14 +231,21 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
       plan.tasks.push(t)
     }
 
-    // Convertir Maps → Arrays triés + tri tâches par order intra-plan
-    return Array.from(subs.values())
-      .sort((a, b) => a.subName.localeCompare(b.subName))
-      .map((sub) => ({
+    // Tri qui pousse les valeurs "défaut" (sans filiale/direction) en fin de liste.
+    const sortPushDefaultLast = <T,>(arr: T[], getLabel: (x: T) => string, defaultLabel: string) =>
+      arr.sort((a, b) => {
+        const la = getLabel(a)
+        const lb = getLabel(b)
+        if (la === defaultLabel) return 1
+        if (lb === defaultLabel) return -1
+        return la.localeCompare(lb)
+      })
+
+    return sortPushDefaultLast(
+      Array.from(subs.values()).map((sub) => ({
         ...sub,
-        directions: Array.from(sub.dirs.values())
-          .sort((a, b) => a.dirName.localeCompare(b.dirName))
-          .map((dir) => ({
+        directions: sortPushDefaultLast(
+          Array.from(sub.dirs.values()).map((dir) => ({
             ...dir,
             plans: Array.from(dir.plans.values())
               .sort((a, b) => a.planTitle.localeCompare(b.planTitle))
@@ -208,7 +256,13 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
                 ),
               })),
           })),
-      }))
+          (d) => d.dirName,
+          DIR_DEFAULT,
+        ),
+      })),
+      (s) => s.subName,
+      SUB_DEFAULT,
+    )
   }, [filtered])
 
   // ─── Mutations ──
@@ -414,13 +468,31 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
           {/* Filtre filiale */}
           <select
             value={filterSubsidiary}
-            onChange={(e) => setFilterSubsidiary(e.target.value)}
+            onChange={(e) => {
+              setFilterSubsidiary(e.target.value)
+              // Reset direction si elle n'appartient plus à la nouvelle filiale
+              setFilterDirection('')
+            }}
             className="bg-bg-base border border-border rounded-md px-3 py-2 min-w-[180px]"
             title="Filtrer par filiale"
           >
             <option value="">Toutes filiales</option>
             {subsidiaryOptions.map((s) => (
               <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+
+          {/* Filtre direction (limité à la filiale sélectionnée si applicable) */}
+          <select
+            value={filterDirection}
+            onChange={(e) => setFilterDirection(e.target.value)}
+            className="bg-bg-base border border-border rounded-md px-3 py-2 min-w-[180px]"
+            title="Filtrer par direction"
+            disabled={directionOptions.length === 0}
+          >
+            <option value="">Toutes directions</option>
+            {directionOptions.map((d) => (
+              <option key={d.id} value={d.id}>{d.name}</option>
             ))}
           </select>
         </div>
@@ -445,7 +517,7 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
 
         {!tasksLoading && filtered.length === 0 && (
           <div className="text-center text-fg-muted py-12">
-            {filterMeetingId || filterStatus || filterAssignee || filterSubsidiary || search
+            {filterMeetingId || filterStatus || filterAssignee || filterSubsidiary || filterDirection || search
               ? 'Aucune tâche ne correspond aux filtres — relâchez les critères.'
               : filterScope === 'open'
                 ? 'Aucune tâche ouverte. Basculez sur "Toutes" pour voir les terminées.'
