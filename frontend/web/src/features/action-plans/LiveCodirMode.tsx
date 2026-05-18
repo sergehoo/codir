@@ -168,9 +168,9 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
       const subId   = t.subsidiary_id || '__none__'
       const subName = t.subsidiary_name || 'Sans filiale (Groupe)'
       const dirId   = t.direction_id || '__none__'
-      const dirName = t.direction_name || 'Sans direction'
+      const dirName = t.direction_name || 'direction'
       const planId   = t.action_plan
-      const planTitle = t.action_plan_title || 'Plan'
+      const planTitle = t.action_plan_title || 'Dossier'
 
       let sub = subs.get(subId)
       if (!sub) {
