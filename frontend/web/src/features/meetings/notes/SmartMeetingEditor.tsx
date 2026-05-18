@@ -22,6 +22,11 @@ import { MentionAutocomplete } from './MentionAutocomplete'
 import { tiptapToLines } from './NotesParser'
 
 // ─── Décoration live des lignes # / * ─────────────────────────
+// Patterns assouplis : on décore dès que la ligne COMMENCE par `#` / `*` / `-`.
+// L'espace après n'est plus obligatoire — du coup le badge s'affiche au tout
+// premier keystroke et non plus seulement après avoir tapé l'espace.
+const DECISION_RE = /^\s*#(?:\s|$)/      // # ou # texte
+const ACTION_RE   = /^\s*[*-](?:\s|$)/   // * ou * texte / - texte
 
 const SmartLineDecoration = Extension.create({
   name: 'smartLineDecoration',
@@ -35,13 +40,13 @@ const SmartLineDecoration = Extension.create({
             state.doc.descendants((node, pos) => {
               if (node.isTextblock) {
                 const text = node.textContent
-                if (/^\s*#\s+/.test(text)) {
+                if (DECISION_RE.test(text)) {
                   decos.push(
                     Decoration.node(pos, pos + node.nodeSize, {
                       class: 'smart-line smart-line-decision',
                     }),
                   )
-                } else if (/^\s*[*-]\s+/.test(text)) {
+                } else if (ACTION_RE.test(text)) {
                   decos.push(
                     Decoration.node(pos, pos + node.nodeSize, {
                       class: 'smart-line smart-line-action',
@@ -55,6 +60,30 @@ const SmartLineDecoration = Extension.create({
         },
       }),
     ]
+  },
+})
+
+// ─── Tabulation : indenter dans une liste, sinon insérer un Tab caractère ──
+const TabHandler = Extension.create({
+  name: 'tabHandler',
+  addKeyboardShortcuts() {
+    return {
+      Tab: ({ editor }) => {
+        // Si on est dans une liste → enfoncer un niveau (sinkListItem)
+        if (editor.can().sinkListItem('listItem')) {
+          return editor.chain().focus().sinkListItem('listItem').run()
+        }
+        // Sinon : insérer un caractère tab (\t)
+        return editor.chain().focus().insertContent('\t').run()
+      },
+      'Shift-Tab': ({ editor }) => {
+        // Sortir d'un niveau de liste
+        if (editor.can().liftListItem('listItem')) {
+          return editor.chain().focus().liftListItem('listItem').run()
+        }
+        return false
+      },
+    }
   },
 })
 
@@ -147,6 +176,7 @@ export function SmartMeetingEditor({
       }),
       buildMentionExtension(meetingId),
       SmartLineDecoration,
+      TabHandler,
     ],
     content: initialJson ?? '',
     editable: !readOnly,

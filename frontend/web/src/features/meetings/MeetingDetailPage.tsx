@@ -3,8 +3,8 @@ import { Link, useParams } from '@tanstack/react-router'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import {
-  ArrowLeft, CalendarClock, CheckCircle2, FileText, MapPin, PlayCircle,
-  Plus, Sparkles, Trash2, Users, Video, X, XCircle,
+  ArrowLeft, CalendarClock, CheckCircle2, ClipboardList, Gavel,
+  MapPin, PlayCircle, Plus, Trash2, Users, Video, XCircle,
 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -104,17 +104,8 @@ export function MeetingDetailPage() {
         </div>
       </header>
 
-      <div className="px-10 py-10 grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-        {/* Col 1 — Participants & Présence */}
-        <ParticipantsPanel meetingId={id} status={m.status} />
-
-        {/* Col 2 — Agenda */}
-        <AgendaPanel meetingId={id} status={m.status} />
-
-        {/* Col 3 — Décisions liées */}
-        <DecisionsPanel meetingId={id} />
-      </div>
+      {/* ─── Bloc info compact : onglets Participants / Agenda / Décisions ─── */}
+      <MeetingInfoTabs meetingId={id} status={m.status} />
 
       {/* ─── Notes intelligentes (Tiptap + parser CODIR) ─── */}
       <MeetingNotesSection meetingId={id} />
@@ -129,6 +120,93 @@ export function MeetingDetailPage() {
         </section>
       )}
     </div>
+  )
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Bloc info compact — onglets Participants / Agenda / Décisions
+   ═══════════════════════════════════════════════════════════════════ */
+
+type Tab = 'participants' | 'agenda' | 'decisions'
+
+function MeetingInfoTabs({ meetingId, status }: { meetingId: string; status: string }) {
+  const [tab, setTab] = useState<Tab>('participants')
+
+  // Compteurs légers (ne déclenchent pas de queries supplémentaires : les
+  // mêmes querykeys que dans les panels seront servies depuis le cache).
+  const { data: parts = [] } = useQuery({
+    queryKey: meetingsKeys.participants(meetingId),
+    queryFn: () => meetingsApi.listParticipants(meetingId),
+  })
+  const { data: meeting } = useQuery({
+    queryKey: meetingsKeys.detail(meetingId),
+    queryFn: () => meetingsApi.retrieve(meetingId),
+  })
+  const agendaId = (meeting as any)?.agenda?.id
+  const { data: agenda } = useQuery({
+    queryKey: agendasKeys.detail(agendaId ?? ''),
+    queryFn: () => agendasApi.retrieve(agendaId!),
+    enabled: !!agendaId,
+  })
+  const { data: decisionsData } = useQuery({
+    queryKey: decisionsKeys.list({ meeting: meetingId } as any),
+    queryFn: () => decisionsApi.list({ meeting: meetingId } as any),
+  })
+  const decisions = Array.isArray(decisionsData) ? decisionsData : (decisionsData?.results ?? [])
+
+  const counters: Record<Tab, number> = {
+    participants: parts.length,
+    agenda: agenda?.items?.length ?? 0,
+    decisions: decisions.length,
+  }
+  const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
+    { id: 'participants', label: 'Participants', icon: <Users size={13} /> },
+    { id: 'agenda',       label: 'Ordre du jour', icon: <ClipboardList size={13} /> },
+    { id: 'decisions',    label: 'Décisions',    icon: <Gavel size={13} /> },
+  ]
+
+  return (
+    <section className="px-10 pt-6 pb-2">
+      <div className="card overflow-hidden">
+        {/* Barre d'onglets */}
+        <nav
+          className="flex items-stretch border-b border-border bg-bg-subtle/40"
+          role="tablist"
+        >
+          {TABS.map((t) => {
+            const active = tab === t.id
+            return (
+              <button
+                key={t.id}
+                role="tab"
+                aria-selected={active}
+                onClick={() => setTab(t.id)}
+                className={`flex items-center gap-2 px-5 py-3 text-2xs uppercase tracking-wider font-semibold transition border-b-2 ${
+                  active
+                    ? 'border-copper-500 text-copper-400 bg-bg-elevated'
+                    : 'border-transparent text-fg-muted hover:text-fg hover:bg-bg-elevated/40'
+                }`}
+              >
+                {t.icon}
+                <span>{t.label}</span>
+                <span className={`text-2xs tabular px-1.5 py-0.5 rounded ${
+                  active ? 'bg-copper-500/20 text-copper-400' : 'bg-fg/[0.06] text-fg-subtle'
+                }`}>
+                  {counters[t.id]}
+                </span>
+              </button>
+            )
+          })}
+        </nav>
+
+        {/* Contenu de l'onglet actif — hauteur max + scroll interne */}
+        <div className="max-h-[420px] overflow-y-auto p-5">
+          {tab === 'participants' && <ParticipantsPanel meetingId={meetingId} status={status} />}
+          {tab === 'agenda'       && <AgendaPanel meetingId={meetingId} status={status} />}
+          {tab === 'decisions'    && <DecisionsPanel meetingId={meetingId} />}
+        </div>
+      </div>
+    </section>
   )
 }
 
@@ -163,22 +241,20 @@ function ParticipantsPanel({ meetingId, status }: { meetingId: string; status: s
   const presentSet = new Map(attendances.map((a) => [a.participant, a.status]))
 
   return (
-    <section className="card p-6">
-      <div className="flex items-center gap-3 mb-5">
-        <span className="divider-accent" />
-        <span className="text-2xs uppercase tracking-widest text-fg-muted font-semibold flex-1">
-          Participants
-        </span>
-        <span className="chip-quiet">{parts.length}</span>
-        {!locked && (
-          <button onClick={() => setShowAdd(true)} className="text-copper-400 hover:text-copper-500 transition"
-                  title="Ajouter">
-            <Plus size={16} />
+    <div>
+      {!locked && (
+        <div className="flex justify-end mb-2">
+          <button
+            onClick={() => setShowAdd(true)}
+            className="text-2xs uppercase tracking-wider text-copper-400 hover:text-copper-500 font-semibold inline-flex items-center gap-1"
+            title="Ajouter un participant"
+          >
+            <Plus size={12} /> Ajouter
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
-      <ul className="space-y-3 divide-y divide-border">
+      <ul className="divide-y divide-border">
         {parts.length === 0 && <li className="text-fg-subtle text-sm py-2">Aucun participant.</li>}
         {parts.map((p, i) => {
           const label = p.user_detail?.full_name || p.user_detail?.email || p.external_name || p.external_email
@@ -229,7 +305,7 @@ function ParticipantsPanel({ meetingId, status }: { meetingId: string; status: s
         meetingId={meetingId} open={showAdd}
         onClose={() => setShowAdd(false)}
       />
-    </section>
+    </div>
   )
 }
 
@@ -328,24 +404,17 @@ function AgendaPanel({ meetingId, status }: { meetingId: string; status: string 
 
   if (!agendaId) {
     return (
-      <section className="card p-6">
-        <div className="text-2xs uppercase tracking-widest text-fg-muted font-semibold mb-4">Ordre du jour</div>
-        <p className="text-fg-subtle text-sm">Agenda non disponible.</p>
-      </section>
+      <p className="text-fg-subtle text-sm">Agenda non disponible.</p>
     )
   }
 
   return (
-    <section className="card p-6">
-      <div className="flex items-center gap-3 mb-5">
-        <span className="divider-accent" />
-        <span className="text-2xs uppercase tracking-widest text-fg-muted font-semibold flex-1">
-          Ordre du jour
-        </span>
+    <div>
+      <div className="flex justify-end mb-2">
         {agenda?.is_validated ? <span className="chip-success">Validé</span> : <span className="chip-quiet">Brouillon</span>}
       </div>
 
-      <ul className="space-y-1 divide-y divide-border">
+      <ul className="divide-y divide-border">
         {items.length === 0 && <li className="text-fg-subtle text-sm py-2">Aucun sujet.</li>}
         {items.map((it, i) => (
           <li key={it.id} className="py-3 first:pt-0">
@@ -435,7 +504,7 @@ function AgendaPanel({ meetingId, status }: { meetingId: string; status: string 
           </PremiumButton>
         </div>
       )}
-    </section>
+    </div>
   )
 }
 
@@ -452,20 +521,18 @@ function DecisionsPanel({ meetingId }: { meetingId: string }) {
   const decisions = Array.isArray(data) ? data : (data?.results ?? [])
 
   return (
-    <section className="card p-6">
-      <div className="flex items-center gap-3 mb-5">
-        <span className="divider-accent" />
-        <span className="text-2xs uppercase tracking-widest text-fg-muted font-semibold flex-1">
-          Décisions actées
-        </span>
-        <span className="chip-quiet">{decisions.length}</span>
-        <button onClick={() => setShowCreate(true)}
-                className="text-copper-400 hover:text-copper-500" title="Créer">
-          <Plus size={16} />
+    <div>
+      <div className="flex justify-end mb-2">
+        <button
+          onClick={() => setShowCreate(true)}
+          className="text-2xs uppercase tracking-wider text-copper-400 hover:text-copper-500 font-semibold inline-flex items-center gap-1"
+          title="Créer une décision"
+        >
+          <Plus size={12} /> Nouvelle décision
         </button>
       </div>
 
-      <ul className="space-y-1 divide-y divide-border">
+      <ul className="divide-y divide-border">
         {decisions.length === 0 && (
           <li className="text-fg-subtle text-sm py-2">Aucune décision pour cette réunion.</li>
         )}
@@ -499,7 +566,7 @@ function DecisionsPanel({ meetingId }: { meetingId: string }) {
           }}
         />
       </Modal>
-    </section>
+    </div>
   )
 }
 

@@ -1,4 +1,4 @@
-import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios'
+import axios, { AxiosError, CanceledError, type InternalAxiosRequestConfig } from 'axios'
 
 import { useAuthStore } from '@/stores/auth'
 
@@ -10,9 +10,24 @@ export const apiClient = axios.create({
   withCredentials: false,
 })
 
+// Routes auth (login, refresh, register…) qui n'exigent pas de token sortant.
+const AUTH_ROUTES_REGEX = /\/auth\/(login|refresh|register|password|mfa)/i
+
 apiClient.interceptors.request.use((cfg: InternalAxiosRequestConfig) => {
   const token = useAuthStore.getState().accessToken
-  if (token) cfg.headers!.Authorization = `Bearer ${token}`
+  const url = cfg.url ?? ''
+  if (token) {
+    cfg.headers!.Authorization = `Bearer ${token}`
+    return cfg
+  }
+  // Pas de token et ce n'est pas une route d'auth → on annule la requête
+  // côté client. Ça évite le bruit "401 Informations d'authentification non
+  // fournies" pendant la transition de déconnexion → /login : le routeur
+  // root va rediriger dans son useEffect, on n'a aucun intérêt à harceler
+  // l'API entre-temps.
+  if (!AUTH_ROUTES_REGEX.test(url)) {
+    return Promise.reject(new CanceledError('Pas de session — requête annulée'))
+  }
   return cfg
 })
 
@@ -36,6 +51,12 @@ function forceLogout(reason: 'expired' | 'invalid' = 'expired') {
 apiClient.interceptors.response.use(
   (r) => r,
   async (err: AxiosError) => {
+    // Requêtes annulées explicitement (ex: pas de token, vue qui se démonte).
+    // On les rejette silencieusement — pas d'erreur réseau à signaler.
+    if (err instanceof CanceledError) {
+      return Promise.reject(err)
+    }
+
     const original = err.config as InternalAxiosRequestConfig & { _retried?: boolean }
     const url = original?.url ?? ''
     const isRefreshCall = url.includes('/auth/refresh')
