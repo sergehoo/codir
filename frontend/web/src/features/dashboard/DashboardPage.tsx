@@ -89,7 +89,7 @@ export function DashboardPage() {
               delta={`${k?.approved_decisions ?? 0} validées`}
             />
             <Stat
-              label="Plans actifs"
+              label="Dossier/Projet"
               value={k?.active_plans ?? 0}
               delta="exécution"
             />
