@@ -4,11 +4,12 @@ import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import {
   AlertTriangle, Archive, ArrowUpRight, CheckCircle2, CheckSquare,
-  ChevronDown, ChevronRight, Plus, Presentation,
+  ChevronDown, ChevronRight, Pencil, Plus, Presentation, Trash2,
 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { apiClient } from '@/api/client'
 import { EmptyState } from '@/components/widgets/EmptyState'
 import { Modal } from '@/components/widgets/Modal'
 import { PremiumButton } from '@/components/widgets/PremiumButton'
@@ -232,8 +233,10 @@ export function ActionPlansListPage() {
 // ─── Accordéon plan + tâches ─────────────────────────────────
 
 function PlanAccordion({ p, idx }: { p: ActionPlan; idx: number }) {
+  const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
+  const [showEdit, setShowEdit] = useState(false)
 
   // Lazy load tasks à l'ouverture
   const { data: tasks, isLoading } = useQuery({
@@ -244,6 +247,18 @@ function PlanAccordion({ p, idx }: { p: ActionPlan; idx: number }) {
 
   const overdue = (tasks ?? []).filter((t) => t.is_overdue).length
   const canAdd = p.can_add_tasks !== false  // optimiste si non fourni
+  const canModify = p.can_modify === true   // strict : seulement si explicitement true
+
+  const deletePlanMut = useMutation({
+    mutationFn: () => apiClient.delete(`/action-plans/${p.id}/`),
+    onSuccess: () => {
+      toast.success(`Plan "${p.title}" supprimé`)
+      qc.invalidateQueries({ queryKey: plansKeys.all })
+    },
+    onError: (e: any) => {
+      toast.error(e?.response?.data?.detail || 'Suppression impossible')
+    },
+  })
 
   return (
     <div className="card overflow-hidden">
@@ -287,13 +302,60 @@ function PlanAccordion({ p, idx }: { p: ActionPlan; idx: number }) {
           </div>
         </div>
 
-        <Link
-          to="/action-plans/$id" params={{ id: p.id }}
-          onClick={(e) => e.stopPropagation()}
-          className="text-2xs uppercase tracking-wider text-copper-400 hover:underline font-semibold mt-1 inline-flex items-center gap-1 shrink-0"
-        >
-          Détail <ArrowUpRight size={11} />
-        </Link>
+        <div className="flex items-center gap-2 mt-1 shrink-0">
+          {canModify && (
+            <>
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); setShowEdit(true) }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setShowEdit(true)
+                  }
+                }}
+                className="cursor-pointer p-1.5 rounded-md text-fg-muted hover:text-copper-400 hover:bg-copper-500/10 transition"
+                title="Modifier ce plan d'action"
+                aria-label="Modifier"
+              >
+                <Pencil size={13} />
+              </span>
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (confirm(`Supprimer le plan « ${p.title} » ?\n\nLes tâches associées seront aussi supprimées.\nCette action est irréversible.`)) {
+                    deletePlanMut.mutate()
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if ((e.key === 'Enter' || e.key === ' ') && !deletePlanMut.isPending) {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    if (confirm(`Supprimer le plan « ${p.title} » ?`)) deletePlanMut.mutate()
+                  }
+                }}
+                className={`p-1.5 rounded-md text-fg-muted hover:text-danger hover:bg-danger/10 transition ${
+                  deletePlanMut.isPending ? 'opacity-40 cursor-wait' : 'cursor-pointer'
+                }`}
+                title="Supprimer ce plan d'action"
+                aria-label="Supprimer"
+              >
+                <Trash2 size={13} />
+              </span>
+            </>
+          )}
+          <Link
+            to="/action-plans/$id" params={{ id: p.id }}
+            onClick={(e) => e.stopPropagation()}
+            className="text-2xs uppercase tracking-wider text-copper-400 hover:underline font-semibold inline-flex items-center gap-1"
+          >
+            Détail <ArrowUpRight size={11} />
+          </Link>
+        </div>
       </button>
 
       {/* Tâches en accordéon */}
@@ -346,7 +408,99 @@ function PlanAccordion({ p, idx }: { p: ActionPlan; idx: number }) {
           onCancel={() => setShowAdd(false)}
         />
       </Modal>
+
+      {/* Modal édition rapide du plan (depuis la liste) */}
+      <Modal
+        open={showEdit}
+        onClose={() => setShowEdit(false)}
+        title={`Modifier "${p.title}"`}
+        size="lg"
+      >
+        <QuickEditPlanForm
+          plan={p}
+          onSaved={() => {
+            setShowEdit(false)
+            qc.invalidateQueries({ queryKey: plansKeys.all })
+            toast.success('Plan mis à jour')
+          }}
+          onCancel={() => setShowEdit(false)}
+        />
+      </Modal>
     </div>
+  )
+}
+
+// ─── Formulaire d'édition compact (depuis la liste) ──────────
+function QuickEditPlanForm({
+  plan, onSaved, onCancel,
+}: { plan: ActionPlan; onSaved: () => void; onCancel: () => void }) {
+  const [title, setTitle] = useState(plan.title ?? '')
+  const [description, setDescription] = useState(plan.description_md ?? '')
+  const [status, setStatus] = useState(plan.status ?? 'open')
+  const [startDate, setStartDate] = useState(plan.start_date ?? '')
+  const [targetEndDate, setTargetEndDate] = useState(plan.target_end_date ?? '')
+
+  const saveMut = useMutation({
+    mutationFn: () =>
+      apiClient.patch(`/action-plans/${plan.id}/`, {
+        title,
+        description_md: description,
+        status,
+        start_date: startDate || null,
+        target_end_date: targetEndDate || null,
+      }),
+    onSuccess: () => onSaved(),
+    onError: (e: any) => {
+      toast.error(e?.response?.data?.detail || 'Échec de la sauvegarde')
+    },
+  })
+
+  return (
+    <form
+      onSubmit={(e) => { e.preventDefault(); saveMut.mutate() }}
+      className="space-y-5"
+    >
+      <div>
+        <label className="label">Titre</label>
+        <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} required />
+      </div>
+      <div>
+        <label className="label">Description</label>
+        <textarea
+          className="input min-h-[80px]"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        <div>
+          <label className="label">Statut</label>
+          <select className="input" value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
+            <option value="open">Ouvert</option>
+            <option value="in_progress">En cours</option>
+            <option value="blocked">Bloqué</option>
+            <option value="completed">Terminé</option>
+            <option value="cancelled">Annulé</option>
+          </select>
+        </div>
+        <div>
+          <label className="label">Démarrage</label>
+          <input type="date" className="input" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Échéance cible</label>
+          <input type="date" className="input" value={targetEndDate} onChange={(e) => setTargetEndDate(e.target.value)} />
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 pt-4 border-t border-border">
+        <button type="button" onClick={onCancel} className="px-4 py-2 rounded-md border border-border text-sm">
+          Annuler
+        </button>
+        <PremiumButton type="submit" loading={saveMut.isPending}>
+          Enregistrer
+        </PremiumButton>
+      </div>
+    </form>
   )
 }
 

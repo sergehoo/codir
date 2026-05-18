@@ -84,13 +84,17 @@ class ActionTaskListSerializer(serializers.ModelSerializer):
         return sub.name if sub else None
 
     def get_can_modify(self, obj):
-        """True si le user courant peut modifier/supprimer cette tâche."""
+        """True si le user courant peut modifier/supprimer cette tâche.
+
+        On contourne le shortcut SAFE_METHODS pour évaluer la permission
+        d'écriture, pas la simple permission de lecture.
+        """
         request = self.context.get("request") if hasattr(self, "context") else None
         if request is None:
             return False
         from apps.common.permissions import CanModifyTask
         perm = CanModifyTask()
-        return perm.has_object_permission(request, None, obj)
+        return perm._user_can_modify(request, obj)
 
 
 class ActionTaskDetailSerializer(ActionTaskListSerializer):
@@ -172,13 +176,18 @@ class ActionPlanListSerializer(serializers.ModelSerializer):
         return user_can_add_tasks_to_plan(user, obj)
 
     def get_can_modify(self, obj):
-        """True si le user courant peut modifier/supprimer ce plan."""
+        """True si le user courant peut modifier/supprimer ce plan.
+
+        On contourne le shortcut SAFE_METHODS de `has_object_permission` car
+        la requête en cours est GET (liste/détail) — on veut savoir si l'user
+        *pourrait* écrire, pas s'il peut lire.
+        """
         request = self.context.get("request") if hasattr(self, "context") else None
         if request is None:
             return False
         from apps.common.permissions import CanModifyActionPlan
         perm = CanModifyActionPlan()
-        return perm.has_object_permission(request, None, obj)
+        return perm._user_can_modify(request, obj)
 
 
 class ActionPlanDetailSerializer(ActionPlanListSerializer):
