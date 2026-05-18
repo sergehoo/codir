@@ -57,6 +57,8 @@ class ActionTaskListSerializer(serializers.ModelSerializer):
     is_overdue = serializers.BooleanField(read_only=True)
     subsidiary_id = serializers.SerializerMethodField()
     subsidiary_name = serializers.SerializerMethodField()
+    direction_id = serializers.SerializerMethodField()
+    direction_name = serializers.SerializerMethodField()
     action_plan_title = serializers.CharField(source="action_plan.title", read_only=True)
     can_modify = serializers.SerializerMethodField()
 
@@ -71,6 +73,7 @@ class ActionTaskListSerializer(serializers.ModelSerializer):
             "started_at", "completed_at",
             "is_overdue",
             "subsidiary_id", "subsidiary_name",
+            "direction_id", "direction_name",
             "can_modify",
             "created_at", "updated_at",
         ]
@@ -82,6 +85,16 @@ class ActionTaskListSerializer(serializers.ModelSerializer):
     def get_subsidiary_name(self, obj):
         sub = _resolve_subsidiary(obj.action_plan)
         return sub.name if sub else None
+
+    def get_direction_id(self, obj):
+        decision = getattr(obj.action_plan, "decision", None)
+        direction = getattr(decision, "direction", None) if decision else None
+        return str(direction.id) if direction else None
+
+    def get_direction_name(self, obj):
+        decision = getattr(obj.action_plan, "decision", None)
+        direction = getattr(decision, "direction", None) if decision else None
+        return direction.name if direction else None
 
     def get_can_modify(self, obj):
         """True si le user courant peut modifier/supprimer cette tâche.

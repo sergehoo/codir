@@ -156,6 +156,8 @@ export type ActionTask = {
   completed_at?: string | null
   subsidiary_id?: ID | null
   subsidiary_name?: string | null
+  direction_id?: ID | null
+  direction_name?: string | null
   /** Permission de modifier/supprimer cette tâche. */
   can_modify?: boolean
   created_at?: string

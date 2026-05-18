@@ -69,6 +69,7 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
   const [filterMeetingId, setFilterMeetingId] = useState<string>('')
   const [filterAssignee, setFilterAssignee]   = useState<string>('')
   const [filterStatus, setFilterStatus]       = useState<string>('')
+  const [filterSubsidiary, setFilterSubsidiary] = useState<string>('')
   const [filterScope, setFilterScope]         = useState<'open' | 'all'>('open')
   const [search, setSearch]                   = useState('')
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
@@ -113,6 +114,14 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
       if (filterScope === 'open' && ['done', 'cancelled'].includes(t.status)) return false
       if (filterStatus && t.status !== filterStatus) return false
       if (filterAssignee && t.assignee !== filterAssignee) return false
+      if (filterSubsidiary) {
+        // "__none__" = tâches sans filiale rattachée (cas Groupe)
+        if (filterSubsidiary === '__none__') {
+          if (t.subsidiary_id) return false
+        } else if (t.subsidiary_id !== filterSubsidiary) {
+          return false
+        }
+      }
       if (search) {
         const s = search.toLowerCase()
         const assigneeName = users?.find((u) => u.id === t.assignee)
@@ -128,7 +137,79 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
       }
       return true
     })
-  }, [tasks, filterStatus, filterAssignee, filterScope, search, users])
+  }, [tasks, filterStatus, filterAssignee, filterSubsidiary, filterScope, search, users])
+
+  // Liste unique des filiales présentes dans les tâches chargées
+  const subsidiaryOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    let hasNone = false
+    tasks.forEach((t) => {
+      if (t.subsidiary_id && t.subsidiary_name) {
+        map.set(t.subsidiary_id, t.subsidiary_name)
+      } else {
+        hasNone = true
+      }
+    })
+    const arr = Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+    if (hasNone) arr.push({ id: '__none__', name: 'Sans filiale (Groupe)' })
+    return arr
+  }, [tasks])
+
+  // Groupement hiérarchique : Filiale → Direction → Plan → Tâches
+  const groupedTasks = useMemo(() => {
+    type PlanGroup = { planId: string; planTitle: string; tasks: ActionTask[] }
+    type DirGroup  = { dirId: string; dirName: string; plans: Map<string, PlanGroup> }
+    type SubGroup  = { subId: string; subName: string; dirs: Map<string, DirGroup> }
+
+    const subs = new Map<string, SubGroup>()
+    for (const t of filtered) {
+      const subId   = t.subsidiary_id || '__none__'
+      const subName = t.subsidiary_name || 'Sans filiale (Groupe)'
+      const dirId   = t.direction_id || '__none__'
+      const dirName = t.direction_name || 'Sans direction'
+      const planId   = t.action_plan
+      const planTitle = t.action_plan_title || 'Plan'
+
+      let sub = subs.get(subId)
+      if (!sub) {
+        sub = { subId, subName, dirs: new Map() }
+        subs.set(subId, sub)
+      }
+      let dir = sub.dirs.get(dirId)
+      if (!dir) {
+        dir = { dirId, dirName, plans: new Map() }
+        sub.dirs.set(dirId, dir)
+      }
+      let plan = dir.plans.get(planId)
+      if (!plan) {
+        plan = { planId, planTitle, tasks: [] }
+        dir.plans.set(planId, plan)
+      }
+      plan.tasks.push(t)
+    }
+
+    // Convertir Maps → Arrays triés + tri tâches par order intra-plan
+    return Array.from(subs.values())
+      .sort((a, b) => a.subName.localeCompare(b.subName))
+      .map((sub) => ({
+        ...sub,
+        directions: Array.from(sub.dirs.values())
+          .sort((a, b) => a.dirName.localeCompare(b.dirName))
+          .map((dir) => ({
+            ...dir,
+            plans: Array.from(dir.plans.values())
+              .sort((a, b) => a.planTitle.localeCompare(b.planTitle))
+              .map((p) => ({
+                ...p,
+                tasks: [...p.tasks].sort(
+                  (a, b) => (a.order ?? 9999) - (b.order ?? 9999),
+                ),
+              })),
+          })),
+      }))
+  }, [filtered])
 
   // ─── Mutations ──
   const updateMut = useMutation({
@@ -329,6 +410,19 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
               </option>
             ))}
           </select>
+
+          {/* Filtre filiale */}
+          <select
+            value={filterSubsidiary}
+            onChange={(e) => setFilterSubsidiary(e.target.value)}
+            className="bg-bg-base border border-border rounded-md px-3 py-2 min-w-[180px]"
+            title="Filtrer par filiale"
+          >
+            <option value="">Toutes filiales</option>
+            {subsidiaryOptions.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
         </div>
       </header>
 
@@ -351,7 +445,7 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
 
         {!tasksLoading && filtered.length === 0 && (
           <div className="text-center text-fg-muted py-12">
-            {filterMeetingId || filterStatus || filterAssignee || search
+            {filterMeetingId || filterStatus || filterAssignee || filterSubsidiary || search
               ? 'Aucune tâche ne correspond aux filtres — relâchez les critères.'
               : filterScope === 'open'
                 ? 'Aucune tâche ouverte. Basculez sur "Toutes" pour voir les terminées.'
@@ -373,18 +467,71 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
           </div>
         )}
 
-        {filtered.map((task) => (
-          <TaskRow
-            key={task.id}
-            task={task}
-            users={users || []}
-            selected={selectedTaskIds.has(task.id)}
-            onToggleSelect={() => toggleSelect(task.id)}
-            onUpdate={(patch) => updateMut.mutate({ taskId: task.id, patch })}
-            onDelegate={(assignee) => delegateMut.mutate({ taskId: task.id, assignee })}
-            onComment={(body_md) => commentMut.mutate({ taskId: task.id, body_md })}
-            saving={updateMut.isPending || delegateMut.isPending}
-          />
+        {/* ─── Groupement hiérarchique : Filiale → Direction → Plan → Tâches ─── */}
+        {groupedTasks.map((sub) => (
+          <section key={sub.subId} className="mb-8 last:mb-0">
+            {/* Niveau 1 — Filiale */}
+            <header className="flex items-center gap-3 pb-2 mb-3 border-b border-copper-500/30">
+              <span className="w-1 h-6 bg-copper-500 rounded-full" />
+              <h2 className="serif text-xl font-semibold">{sub.subName}</h2>
+              <span className="text-2xs uppercase tracking-wider text-copper-400 font-semibold bg-copper-500/10 px-2 py-0.5 rounded">
+                {sub.directions.reduce(
+                  (acc, d) => acc + d.plans.reduce((a, p) => a + p.tasks.length, 0),
+                  0,
+                )} tâches
+              </span>
+            </header>
+
+            {sub.directions.map((dir) => (
+              <div key={`${sub.subId}-${dir.dirId}`} className="mb-5 last:mb-0">
+                {/* Niveau 2 — Direction */}
+                <div className="flex items-center gap-3 mb-2 ml-1">
+                  <span className="text-2xs uppercase tracking-widest text-fg-muted font-semibold">
+                    {dir.dirName}
+                  </span>
+                  <span className="flex-1 h-px bg-border" />
+                  <span className="text-2xs text-fg-subtle">
+                    {dir.plans.length} plan{dir.plans.length > 1 ? 's' : ''}
+                  </span>
+                </div>
+
+                {dir.plans.map((plan) => (
+                  <div
+                    key={`${dir.dirId}-${plan.planId}`}
+                    className="mb-3 last:mb-0 ml-3"
+                  >
+                    {/* Niveau 3 — Plan d'action */}
+                    <div className="flex items-center gap-2 mb-1.5 px-1">
+                      <span className="text-2xs uppercase tracking-wider text-copper-400 font-semibold">
+                        Plan
+                      </span>
+                      <span className="text-sm font-medium truncate text-fg">{plan.planTitle}</span>
+                      <span className="text-2xs text-fg-subtle">
+                        · {plan.tasks.length} tâche{plan.tasks.length > 1 ? 's' : ''}
+                      </span>
+                    </div>
+
+                    {/* Niveau 4 — Tâches */}
+                    <div className="space-y-1.5 ml-2">
+                      {plan.tasks.map((task) => (
+                        <TaskRow
+                          key={task.id}
+                          task={task}
+                          users={users || []}
+                          selected={selectedTaskIds.has(task.id)}
+                          onToggleSelect={() => toggleSelect(task.id)}
+                          onUpdate={(patch) => updateMut.mutate({ taskId: task.id, patch })}
+                          onDelegate={(assignee) => delegateMut.mutate({ taskId: task.id, assignee })}
+                          onComment={(body_md) => commentMut.mutate({ taskId: task.id, body_md })}
+                          saving={updateMut.isPending || delegateMut.isPending}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </section>
         ))}
       </main>
 

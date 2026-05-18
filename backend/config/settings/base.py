@@ -16,6 +16,12 @@ environ.Env.read_env(BASE_DIR / ".env")
 SECRET_KEY = env("DJANGO_SECRET_KEY")
 DEBUG = env.bool("DJANGO_DEBUG", default=False)
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
+# Toujours autoriser localhost/127.0.0.1 — utilisé par le healthcheck Docker
+# (curl http://localhost:8000/health/) même quand DJANGO_ALLOWED_HOSTS ne liste
+# que le domaine public. Pas un risque de sécurité car non exposé via Traefik.
+for _h in ("localhost", "127.0.0.1"):
+    if _h not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(_h)
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # ─── Apps ──────────────────────────────────────────────────────────────
