@@ -491,7 +491,7 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
                   </span>
                   <span className="flex-1 h-px bg-border" />
                   <span className="text-2xs text-fg-subtle">
-                    {dir.plans.length} plan{dir.plans.length > 1 ? 's' : ''}
+                    {dir.plans.length} Dossier{dir.plans.length > 1 ? 's' : ''}
                   </span>
                 </div>
 
