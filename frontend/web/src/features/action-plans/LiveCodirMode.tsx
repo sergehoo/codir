@@ -500,10 +500,10 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
                     key={`${dir.dirId}-${plan.planId}`}
                     className="mb-3 last:mb-0 ml-3"
                   >
-                    {/* Niveau 3 — Plan d'action */}
+                    {/* Niveau 3 — Dossier (plan d'action) */}
                     <div className="flex items-center gap-2 mb-1.5 px-1">
                       <span className="text-2xs uppercase tracking-wider text-copper-400 font-semibold">
-                        Plan
+                        Dossier
                       </span>
                       <span className="text-sm font-medium truncate text-fg">{plan.planTitle}</span>
                       <span className="text-2xs text-fg-subtle">
