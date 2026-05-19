@@ -186,25 +186,74 @@ def _task_context(task) -> dict:
 
 
 def send_task_assigned_notification(*, task, by_user=None):
-    if not task.assignee:
-        return None
-    return notify(
-        organization=task.organization,
-        recipient=task.assignee,
-        event=NotificationEvent.TASK_ASSIGNED,
-        level=NotificationLevel.INFO,
-        priority=_priority_from_task(task),
-        channel=NotificationChannel.EMAIL,
-        title=f"Nouvelle tâche assignée : {task.title}",
-        body=(f"Vous avez été assigné à la tâche **{task.title}**.\n"
-              f"Échéance : {task.due_date or '—'}"),
-        target=task,
-        link_url=f"/action-plans/{task.action_plan_id}",
-        action_url=f"/action-plans/{task.action_plan_id}",
-        send_email=True,
-        email_template="task_assigned",
-        email_context=_task_context(task) | {"assigned_by": _user_label(by_user)},
-    )
+    """Notifie le lead ET les co-responsables d'une nouvelle assignation.
+
+    - Lead (`task.assignee`) : email "Nouvelle tâche assignée"
+    - Co-responsables (`task.co_assignees`) : email "Vous êtes co-responsable"
+    """
+    results = []
+    notified_user_ids: set = set()
+    base_ctx = _task_context(task) | {"assigned_by": _user_label(by_user)}
+    lead_label = _user_label(task.assignee) if task.assignee else "—"
+    due_str = task.due_date.isoformat() if task.due_date else "—"
+
+    # ─── 1) Lead (responsable principal) ───
+    if task.assignee:
+        results.append(notify(
+            organization=task.organization,
+            recipient=task.assignee,
+            event=NotificationEvent.TASK_ASSIGNED,
+            level=NotificationLevel.INFO,
+            priority=_priority_from_task(task),
+            channel=NotificationChannel.EMAIL,
+            title=f"Nouvelle tâche assignée : {task.title}",
+            body=(f"Vous avez été assigné à la tâche **{task.title}**.\n"
+                  f"Échéance : {due_str}"),
+            target=task,
+            link_url=f"/action-plans/{task.action_plan_id}",
+            action_url=f"/action-plans/{task.action_plan_id}",
+            send_email=True,
+            email_template="task_assigned",
+            email_context=base_ctx,
+        ))
+        notified_user_ids.add(task.assignee_id)
+
+    # ─── 2) Co-responsables ───
+    # On itère même si task.assignee est None (cas tâche avec uniquement
+    # des co_assignees). Le M2M peut être vide → boucle no-op silencieuse.
+    try:
+        co_assignees = list(task.co_assignees.all())
+    except Exception:  # noqa: BLE001 — M2M pas migré ou ressource détachée
+        co_assignees = []
+
+    for user in co_assignees:
+        if user.id in notified_user_ids:
+            continue  # déjà notifié comme lead — pas de doublon
+        results.append(notify(
+            organization=task.organization,
+            recipient=user,
+            event=NotificationEvent.TASK_ASSIGNED,
+            level=NotificationLevel.INFO,
+            priority=_priority_from_task(task),
+            channel=NotificationChannel.EMAIL,
+            title=f"Vous êtes co-responsable : {task.title}",
+            body=(f"Vous avez été ajouté(e) comme **co-responsable** de la "
+                  f"tâche **{task.title}**.\n"
+                  f"Responsable principal : {lead_label}\n"
+                  f"Échéance : {due_str}"),
+            target=task,
+            link_url=f"/action-plans/{task.action_plan_id}",
+            action_url=f"/action-plans/{task.action_plan_id}",
+            send_email=True,
+            email_template="task_assigned",
+            email_context=base_ctx | {
+                "is_co_assignee": True,
+                "lead_name": lead_label,
+            },
+        ))
+        notified_user_ids.add(user.id)
+
+    return results
 
 
 def send_task_delegated_notification(*, task, old_assignee, new_assignee, by_user=None, note: str = ""):
