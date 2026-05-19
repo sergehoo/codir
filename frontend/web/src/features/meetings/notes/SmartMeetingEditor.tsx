@@ -33,6 +33,11 @@ const DECISION_RE = /^\s*#(?:\s|$)/      // # ou # texte
 const ACTION_RE   = /^\s*[*-](?:\s|$)/   // * ou - texte
 const TASK_RE     = /^\s*>(?:\s|$)/      // > ou > texte
 
+// Décorations inline (s'appliquent aux substrings dans le texte) : date,
+// priorité — affichent un symbole + couleur sans toucher au contenu.
+const INLINE_DATE_RE     = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/g
+const INLINE_PRIORITY_RE = /!(low|medium|high|critical|l|m|h|c)\b/gi
+
 const SmartLineDecoration = Extension.create({
   name: 'smartLineDecoration',
   addProseMirrorPlugins() {
@@ -43,6 +48,7 @@ const SmartLineDecoration = Extension.create({
           decorations(state) {
             const decos: Decoration[] = []
             state.doc.descendants((node, pos) => {
+              // ── Décoration de ligne (textblock) ──
               if (node.isTextblock) {
                 const text = node.textContent
                 if (DECISION_RE.test(text)) {
@@ -62,6 +68,34 @@ const SmartLineDecoration = Extension.create({
                     Decoration.node(pos, pos + node.nodeSize, {
                       class: 'smart-line smart-line-action',
                     }),
+                  )
+                }
+              }
+              // ── Décorations inline (sur les text nodes) ──
+              if (node.isText && node.text) {
+                const text = node.text
+                // Dates DD/MM[/YY[YY]]
+                INLINE_DATE_RE.lastIndex = 0
+                let m: RegExpExecArray | null
+                while ((m = INLINE_DATE_RE.exec(text)) !== null) {
+                  decos.push(
+                    Decoration.inline(
+                      pos + m.index,
+                      pos + m.index + m[0].length,
+                      { class: 'smart-inline-date' },
+                    ),
+                  )
+                }
+                // Priorités !low/!medium/!high/!critical (+ alias 1 lettre)
+                INLINE_PRIORITY_RE.lastIndex = 0
+                while ((m = INLINE_PRIORITY_RE.exec(text)) !== null) {
+                  const key = m[1].toLowerCase().charAt(0) // l|m|h|c
+                  decos.push(
+                    Decoration.inline(
+                      pos + m.index,
+                      pos + m.index + m[0].length,
+                      { class: `smart-inline-priority smart-inline-priority-${key}` },
+                    ),
                   )
                 }
               }

@@ -352,6 +352,69 @@
   line-height: 1;
 }
 
+/* ─── Décorations inline : date détectée dans le texte ─── */
+.smart-editor .ProseMirror .smart-inline-date {
+  color: hsl(var(--copper-400));
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: hsl(var(--copper-500) / 0.55);
+  text-underline-offset: 2px;
+  padding: 0 1px;
+}
+.smart-editor .ProseMirror .smart-inline-date::before {
+  content: '📅 ';
+  font-size: 0.9em;
+  margin-right: 1px;
+}
+
+/* ─── Décorations inline : priorité détectée ─── */
+.smart-editor .ProseMirror .smart-inline-priority {
+  font-weight: 700;
+  padding: 0 0.35em;
+  border-radius: 3px;
+  font-size: 0.9em;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin: 0 1px;
+}
+.smart-editor .ProseMirror .smart-inline-priority::before {
+  margin-right: 1px;
+  opacity: 0.85;
+}
+/* Faible — vert */
+.smart-editor .ProseMirror .smart-inline-priority-l {
+  color: hsl(var(--success));
+  background: hsl(var(--success) / 0.10);
+}
+.smart-editor .ProseMirror .smart-inline-priority-l::before {
+  content: '● ';
+}
+/* Moyenne — bleu */
+.smart-editor .ProseMirror .smart-inline-priority-m {
+  color: #2563eb;
+  background: rgba(37, 99, 235, 0.12);
+}
+.smart-editor .ProseMirror .smart-inline-priority-m::before {
+  content: '◆ ';
+}
+/* Élevée — orange */
+.smart-editor .ProseMirror .smart-inline-priority-h {
+  color: #d97706;
+  background: rgba(217, 119, 6, 0.12);
+}
+.smart-editor .ProseMirror .smart-inline-priority-h::before {
+  content: '▲ ';
+}
+/* Critique — rouge + emoji feu */
+.smart-editor .ProseMirror .smart-inline-priority-c {
+  color: hsl(var(--danger));
+  background: hsl(var(--danger) / 0.15);
+}
+.smart-editor .ProseMirror .smart-inline-priority-c::before {
+  content: '🔥 ';
+}
+
 /* Mention chip */
 .smart-editor .ProseMirror .smart-mention {
   display: inline-flex;

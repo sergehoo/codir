@@ -27,6 +27,15 @@ from .services import (
 
 # ─── Email unitaire ───────────────────────────────────────────
 
+# ─── Événements considérés "digest" — peuvent porter Precedence: bulk
+# (résumés quotidiens, rappels périodiques). Les notifs transactionnelles
+# NE DOIVENT JAMAIS porter ce header, sinon Gmail les classe en Promotions.
+_DIGEST_EVENTS = {
+    "manager_daily_summary",
+    "task_reminder",
+}
+
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=120)
 def send_notification_email(self, notification_id: str):
     """Envoi de l'email associé à une notification — idempotent."""
@@ -38,20 +47,39 @@ def send_notification_email(self, notification_id: str):
 
     md = n.metadata or {}
     template_base = md.get("email_template", "generic")
+    site_name = getattr(settings, "DEFAULT_SITE_NAME", "CODIR")
     context = md.get("email_context", {}) | {
         "title": n.title, "body": n.body,
         "recipient_email": n.recipient.email,
         "recipient_name": n.recipient.get_full_name() or n.recipient.email,
         "link_url": _absolute(n.action_url or n.link_url),
-        "site_name": getattr(settings, "DEFAULT_SITE_NAME", "CODIR"),
+        "site_name": site_name,
     }
     html, text = render_email(template_base, context)
 
-    # Subject sans préfixe « [CODIR] » trop accrocheur (mauvais signal anti-spam)
-    subject = n.title
-    body_text = text or n.body or n.title
-    from_email = getattr(settings, "DEFAULT_FROM_EMAIL", None)
-    reply_to = getattr(settings, "SERVER_EMAIL", from_email)
+    # ─── Subject : nom destinataire en préfixe légèrement personnalisé.
+    # Aide à passer les filtres "non personnalisé = pub" + meilleur taux d'ouverture.
+    first_name = (n.recipient.first_name or "").strip()
+    if first_name and first_name.lower() not in n.title.lower():
+        subject = f"{first_name}, {n.title[0].lower()}{n.title[1:]}" if len(n.title) > 1 else n.title
+    else:
+        subject = n.title
+
+    # Body fallback : on évite un texte trop court (signal spam). Si pas de
+    # template texte rendu, on construit un fallback lisible.
+    body_text = text or _build_text_fallback(n, context)
+
+    # ─── From / Reply-To
+    # `from_email` peut être au format "Nom <addr@domaine>" — Django gère.
+    # `reply_to` doit pointer vers une vraie boîte humaine pour les réponses.
+    from_email = (
+        getattr(settings, "DEFAULT_FROM_EMAIL", None)
+        or f"{site_name} <noreply@codir.local>"
+    )
+    reply_to = (
+        getattr(settings, "EMAIL_REPLY_TO", None)
+        or getattr(settings, "SERVER_EMAIL", None)
+    )
 
     msg = EmailMultiAlternatives(
         subject=subject,
@@ -63,36 +91,50 @@ def send_notification_email(self, notification_id: str):
     if html:
         msg.attach_alternative(html, "text/html")
 
-    # ── Headers anti-spam : améliorent la délivrabilité Gmail/Outlook ──
-    # 1. Message-ID stable : permet aux threads de regrouper proprement
-    # 2. List-Unsubscribe : Gmail valorise fortement la présence de ce header
-    # 3. List-Unsubscribe-Post : RFC 8058, validé par Gmail/Apple Mail
-    # 4. X-Entity-Ref-ID : tracking interne pour debug
+    # ── Headers anti-spam (Gmail / Outlook / Apple Mail) ──
+    # Stratégie transactionnelle :
+    #   * Message-ID stable → threading correct
+    #   * List-Unsubscribe + List-Unsubscribe-Post (RFC 8058) → Gmail valorise
+    #   * X-Entity-Ref-ID → tracking debug interne
+    #   * Date header géré par Django (UTC)
+    # On NE met PAS :
+    #   * Precedence: bulk (sauf digests) → sinon Gmail flag "promotion"
+    #   * Auto-Submitted: auto-generated → bruit pour notifs transactionnelles
     site_url = getattr(settings, "FRONTEND_BASE_URL", "https://codir.datarium-dev.com")
     unsubscribe_url = f"{site_url.rstrip('/')}/notifications/preferences"
-    domain = (from_email or "noreply@codir.local").rsplit("@", 1)[-1].strip(">")
-    msg.extra_headers = {
+    # Domaine extrait de l'adresse (gérant aussi le format "Nom <addr@domaine>")
+    raw_from = from_email.split("<")[-1].rstrip(">")
+    domain = raw_from.rsplit("@", 1)[-1] if "@" in raw_from else "codir.local"
+
+    headers = {
         "Message-ID": f"<codir-{n.id}@{domain}>",
-        "List-Unsubscribe": f"<{unsubscribe_url}>",
+        "List-Unsubscribe": f"<{unsubscribe_url}>, <mailto:{reply_to or raw_from}?subject=Unsubscribe>",
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         "X-Entity-Ref-ID": str(n.id),
-        "X-Auto-Response-Suppress": "OOF, AutoReply",
-        "Auto-Submitted": "auto-generated",
-        "Precedence": "bulk",
     }
+    # Digest only : marqueur bulk
+    if n.event in _DIGEST_EVENTS:
+        headers["Precedence"] = "bulk"
+        headers["X-Auto-Response-Suppress"] = "OOF, AutoReply"
+
+    msg.extra_headers = headers
 
     try:
         msg.send(fail_silently=False)
     except Exception as exc:  # noqa: BLE001
+        err_str = str(exc)[:1000]
         n.failed_at = timezone.now()
-        n.error_message = str(exc)[:1000]
+        n.error_message = err_str
         n.status = NotificationStatus.FAILED
         n.save(update_fields=["failed_at", "error_message", "status", "updated_at"])
         log_transport(
             notification=n, provider="smtp",
             channel=NotificationChannel.EMAIL,
-            status_code="error", error=str(exc),
+            status_code="error", error=err_str,
         )
+        # Erreur 5xx (permanente) → pas la peine de retry
+        if _is_permanent_smtp_error(exc):
+            return "failed-permanent"
         raise self.retry(exc=exc)
 
     mark_email_sent(n)
@@ -102,6 +144,36 @@ def send_notification_email(self, notification_id: str):
         status_code="sent",
     )
     return "sent"
+
+
+def _is_permanent_smtp_error(exc: Exception) -> bool:
+    """Détecte un échec SMTP 5xx (auth, recipient refusé, etc.) où retry est vain."""
+    msg = str(exc).lower()
+    if any(s in msg for s in (
+        "authentication", "auth", "501", "550", "553", "554",
+        "relay denied", "recipient", "sender refused",
+    )):
+        return True
+    return False
+
+
+def _build_text_fallback(notification, context: dict) -> str:
+    """Construit un texte plain raisonnable si pas de template texte."""
+    lines = [
+        f"Bonjour {context.get('recipient_name', '')},",
+        "",
+        notification.body or notification.title,
+        "",
+    ]
+    link = context.get("link_url") or ""
+    if link:
+        lines.append(f"Accéder à CODIR : {link}")
+        lines.append("")
+    lines.append("--")
+    lines.append(f"{context.get('site_name', 'CODIR')} — comité exécutif")
+    lines.append("Vous pouvez gérer vos préférences de notification "
+                 "depuis votre profil dans l'application.")
+    return "\n".join(lines)
 
 
 # ─── Tâches périodiques (Celery Beat) ─────────────────────────

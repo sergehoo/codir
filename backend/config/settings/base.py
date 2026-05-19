@@ -267,6 +267,9 @@ EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
 EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=False)
 EMAIL_USE_SSL = env.bool("EMAIL_USE_SSL", default=False)
+# Adresse humaine à laquelle les destinataires peuvent répondre (différente
+# de DEFAULT_FROM_EMAIL pour pouvoir conserver un From `noreply@...`).
+EMAIL_REPLY_TO = env("EMAIL_REPLY_TO", default="")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="CODIR Executive <no-reply@codir.local>")
 SERVER_EMAIL = env("SERVER_EMAIL", default=DEFAULT_FROM_EMAIL)
 EMAIL_TIMEOUT = 30
