@@ -10,8 +10,9 @@
 // Le composant gère lui-même le consentement : on ne déclenche getUserMedia
 // QU'APRÈS que l'utilisateur ait validé la bannière "Réunion enregistrée".
 import { Link } from '@tanstack/react-router'
-import { CheckCircle2, FileText, Loader2, Mic, Sparkles, Users } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, FileText, Loader2, Mic, Sparkles, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 
 import { cn } from '@/utils/cn'
 
@@ -45,6 +46,10 @@ export function MeetingRecorderButton({
   const [phase, setPhase] = useState<'idle' | 'capturing' | 'uploading' | 'processing' | 'done'>(
     existingRecording ? statusToPhase(existingRecording.status) : 'idle',
   )
+  // Si l'upload échoue, on garde le Blob audio en mémoire pour permettre un retry
+  // sans re-enregistrer la réunion (l'audio capturé est précieux).
+  const [savedBlob, setSavedBlob] = useState<Blob | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
   const mr = useMediaRecorder({ preventUnload: true })
   const upload = useRecordingUpload(meetingId)
@@ -64,10 +69,9 @@ export function MeetingRecorderButton({
     setPhase('capturing')
   }
 
-  const handleStop = async () => {
-    const blob = await mr.stop()
-    if (!blob) return
+  const doUpload = async (blob: Blob) => {
     setPhase('uploading')
+    setUploadError(null)
     try {
       const created = await upload.upload({
         blob,
@@ -77,11 +81,34 @@ export function MeetingRecorderButton({
       })
       setRecording(created)
       onRecordingCreated?.(created)
+      setSavedBlob(null)
       setPhase('processing')
-    } catch (e) {
-      // Conserve l'audio en local pour ne pas perdre la prise — l'utilisateur peut retry
-      setPhase('capturing')
+    } catch (err: any) {
+      // Garde l'audio en mémoire pour permettre un retry.
+      // Récupère le message backend détaillé (502 → cause storage exacte).
+      setSavedBlob(blob)
+      const data = err?.response?.data
+      const msg = data?.detail
+        ?? (typeof data === 'string' ? data : null)
+        ?? err?.message
+        ?? "Erreur réseau inconnue."
+      setUploadError(msg)
+      toast.error("Échec de l'envoi de l'audio", {
+        description: msg.length > 300 ? msg.slice(0, 300) + '…' : msg,
+        duration: 10000,
+      })
+      setPhase('uploading')  // reste en uploading pour montrer le retry
     }
+  }
+
+  const handleStop = async () => {
+    const blob = await mr.stop()
+    if (!blob) return
+    await doUpload(blob)
+  }
+
+  const handleRetryUpload = () => {
+    if (savedBlob) doUpload(savedBlob)
   }
 
   // ─── Render ─────────────────────────────────────────────
@@ -145,6 +172,46 @@ export function MeetingRecorderButton({
   }
 
   if (phase === 'uploading') {
+    // Cas 1 : erreur d'upload → affiche le message backend + bouton retry.
+    if (uploadError && savedBlob) {
+      return (
+        <div className="p-5 rounded-xl border border-red-500/30 bg-red-500/5 space-y-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={20} className="text-red-400 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-red-300">
+                L'envoi de l'audio a échoué
+              </div>
+              <p className="text-xs text-red-200/80 mt-1 break-words">{uploadError}</p>
+              <p className="text-2xs text-fg-muted mt-2">
+                Votre audio est conservé en mémoire — vous pouvez retenter
+                l'envoi sans réenregistrer la réunion.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleRetryUpload}
+              disabled={upload.isUploading}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-copper-500 hover:bg-copper-600 disabled:bg-fg/20 text-white text-sm font-semibold transition"
+            >
+              {upload.isUploading
+                ? <><Loader2 size={14} className="animate-spin" /> Nouvelle tentative…</>
+                : <><Sparkles size={14} /> Réessayer l'envoi</>}
+            </button>
+            <a
+              href={URL.createObjectURL(savedBlob)}
+              download={`reunion-${meetingId}-${Date.now()}.webm`}
+              className="text-xs text-fg-muted hover:text-fg underline"
+            >
+              Télécharger l'audio localement
+            </a>
+          </div>
+        </div>
+      )
+    }
+    // Cas 2 : upload en cours normal
     return (
       <div className="p-5 rounded-xl border border-border bg-bg-elevated space-y-3">
         <div className="flex items-center gap-2 text-sm font-medium">
