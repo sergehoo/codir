@@ -15,6 +15,18 @@ export const agendasApi = {
     (await apiClient.post<AgendaItem>(`/agendas/items/${id}/discuss/`, { notes_md })).data,
   postponeItem: async (id: string, reason?: string) =>
     (await apiClient.post<AgendaItem>(`/agendas/items/${id}/postpone/`, { reason })).data,
+
+  /**
+   * Reporte les items non-clôturés de la séance précédente d'une série.
+   * Renvoie { copied, source_meeting_id, source_meeting_title, agenda }.
+   */
+  copyFromPrevious: async (id: string) =>
+    (await apiClient.post<{
+      copied: number
+      source_meeting_id: string | null
+      source_meeting_title: string
+      agenda: Agenda
+    }>(`/agendas/${id}/copy-from-previous/`)).data,
 }
 
 export const agendasKeys = {
