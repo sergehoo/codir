@@ -28,26 +28,60 @@ CSRF_COOKIE_SAMESITE = "Lax"
 
 # ─── Storage S3 — chiffrement at-rest forcé ──────────────────
 # Surcharge le bloc STORAGES de base.py
+# IMPORTANT : on garde la structure 2-storages (default + recordings) définie
+# dans base.py, et on ajoute simplement les options spécifiques prod.
+
+# Server-Side Encryption : par défaut désactivé (compat MinIO self-hosted).
+# Activer uniquement sur AWS S3 où SSE-S3 / SSE-KMS sont supportés nativement.
+# Pour activer : S3_SSE=AES256 dans .env.prod (cas AWS) — laisser vide pour MinIO.
+_SSE_MODE = env("S3_SSE", default="")  # noqa: F405
+
+# Construction conditionnelle de object_parameters (chiffrement + cache headers)
+_S3_OBJECT_PARAMS = {}
+if _SSE_MODE:
+    # AES256 (SSE-S3) ou aws:kms — AWS uniquement, NE PAS utiliser avec MinIO
+    # standard. Si tu actives ça par erreur sur MinIO → erreur NotImplemented.
+    _S3_OBJECT_PARAMS["ServerSideEncryption"] = _SSE_MODE
+
+_S3_COMMON_OPTIONS = {
+    "region_name": env("S3_REGION", default="eu-west-1"),  # noqa: F405
+    "endpoint_url": env("S3_ENDPOINT", default=None),  # noqa: F405
+    "access_key": env("S3_ACCESS_KEY"),  # noqa: F405
+    "secret_key": env("S3_SECRET_KEY"),  # noqa: F405
+    "default_acl": "private",
+    "querystring_auth": True,
+    "addressing_style": "path",       # OBLIGATOIRE pour MinIO
+    "signature_version": "s3v4",      # OBLIGATOIRE pour MinIO
+    "file_overwrite": False,
+    "custom_domain": env("S3_PUBLIC_DOMAIN", default=""),  # noqa: F405
+    "url_protocol": env("S3_URL_PROTOCOL", default="https:"),  # noqa: F405
+    "querystring_expire": env.int("S3_PRESIGN_EXPIRE", default=3600),  # noqa: F405
+}
+# Ne mettre object_parameters dans les options QUE si non vide — sinon
+# django-storages enverra un paramètre vide qui fait planter boto3.
+if _S3_OBJECT_PARAMS:
+    _S3_COMMON_OPTIONS["object_parameters"] = _S3_OBJECT_PARAMS
+
 STORAGES = {
     "default": {
         "BACKEND": "storages.backends.s3.S3Storage",
         "OPTIONS": {
+            **_S3_COMMON_OPTIONS,
             "bucket_name": env("S3_BUCKET"),  # noqa: F405
-            "region_name": env("S3_REGION", default="eu-west-1"),  # noqa: F405
-            "endpoint_url": env("S3_ENDPOINT", default=None),  # noqa: F405
-            "access_key": env("S3_ACCESS_KEY"),  # noqa: F405
-            "secret_key": env("S3_SECRET_KEY"),  # noqa: F405
-            "default_acl": "private",
-            "querystring_auth": True,
-            "object_parameters": {
-                "ServerSideEncryption": env("S3_SSE", default="AES256"),  # noqa: F405
-                # Cache long pour assets, pas pour docs :
-                # "CacheControl": "max-age=3600",
-            },
         },
     },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+    "recordings": {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {
+            **_S3_COMMON_OPTIONS,
+            "bucket_name": env(
+                "RECORDING_S3_BUCKET",
+                default=env("S3_BUCKET", default="codir-recordings-prod"),  # noqa: F405
+            ),  # noqa: F405
+        },
     },
 }
 
