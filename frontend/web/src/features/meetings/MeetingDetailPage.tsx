@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useParams } from '@tanstack/react-router'
-import { format } from 'date-fns'
-import { fr } from 'date-fns/locale'
+
+import { safeFormat } from '@/utils/safeDate'
 import {
   ArrowLeft, CalendarClock, CheckCircle2, ClipboardList, Gavel,
   GripVertical, MapPin, Pencil, PlayCircle, Plus, Trash2, Users, Video, XCircle,
@@ -87,7 +87,7 @@ export function MeetingDetailPage() {
             <div className="flex items-center gap-5 text-sm text-fg-muted flex-wrap">
               <span className="inline-flex items-center gap-1.5">
                 <CalendarClock size={14} strokeWidth={1.75} />
-                {format(new Date(m.scheduled_start), "EEEE d MMMM yyyy 'à' HH:mm", { locale: fr })}
+                {safeFormat(m.scheduled_start, "EEEE d MMMM yyyy 'à' HH:mm", { fallback: 'Date non définie' })}
               </span>
               {m.location && (
                 <span className="inline-flex items-center gap-1.5">

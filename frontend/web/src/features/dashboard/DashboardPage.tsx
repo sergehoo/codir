@@ -10,6 +10,7 @@ import { MasterGauge } from '@/components/widgets/MasterGauge'
 import { NeonNumber } from '@/components/widgets/NeonNumber'
 import { PremiumButton } from '@/components/widgets/PremiumButton'
 import { useAuthStore } from '@/stores/auth'
+import { safeFormat } from '@/utils/safeDate'
 
 import { dashboardApi } from './api'
 
@@ -122,7 +123,7 @@ export function DashboardPage() {
               </h3>
               <div className="flex items-center gap-3 text-sm text-fg-muted mb-6">
                 <Calendar size={14} strokeWidth={1.75} />
-                <span>{format(new Date(data.upcoming_meetings[0].scheduled_start), "EEEE d MMM 'à' HH:mm", { locale: fr })}</span>
+                <span>{safeFormat(data.upcoming_meetings[0].scheduled_start, "EEEE d MMM 'à' HH:mm", { fallback: 'Date à confirmer' })}</span>
               </div>
 
               <div className="divider mb-5" />

@@ -61,15 +61,43 @@ def transcribe_recording(recording: MeetingRecording) -> bool:
         return False
 
     try:
-        config = aai.TranscriptionConfig(
-            speech_model=aai.SpeechModel.best,
+        # ─── speech_model ─────────────────────────────────────
+        # AssemblyAI a déprécié les anciens modèles "best" / "nano" en 2025.
+        # Nouveaux modèles : "universal" (générique multilingue, défaut),
+        # "slam-1" (anglais+français focus), "nano" (rapide bas coût).
+        # On choisit le modèle via env pour pouvoir changer sans rebuild.
+        # Si non défini, on laisse le défaut serveur → robuste aux changements futurs.
+        model_name = getattr(settings, "ASSEMBLYAI_MODEL", "universal")
+        # Essaie de mapper sur l'enum SDK si dispo ; sinon passe la string brute.
+        try:
+            speech_model = getattr(aai.SpeechModel, model_name, model_name)
+        except Exception:  # noqa: BLE001
+            speech_model = model_name
+
+        config_kwargs = dict(
             language_code=getattr(settings, "ASSEMBLYAI_LANGUAGE", "fr"),
             speaker_labels=True,
             # Désactive le filtrage profanité (CR exécutif = on garde le mot exact)
             filter_profanity=False,
-            # punctuate=True et format_text=True (défauts) : on récupère un texte lisible.
+            # punctuate=True et format_text=True (défauts) : texte lisible.
         )
+        if speech_model:
+            config_kwargs["speech_model"] = speech_model
+
+        try:
+            config = aai.TranscriptionConfig(**config_kwargs)
+        except TypeError as exc:
+            # Compat SDK : si speech_model n'est plus un paramètre valide,
+            # on retombe sur la config sans modèle (défaut serveur = universal).
+            logger.warning("TranscriptionConfig sans speech_model: %s", exc)
+            config_kwargs.pop("speech_model", None)
+            config = aai.TranscriptionConfig(**config_kwargs)
+
         transcriber = aai.Transcriber(config=config)
+        logger.info(
+            "AAI transcribe start: recording=%s model=%s lang=%s",
+            recording.id, speech_model, config_kwargs.get("language_code"),
+        )
         transcript = transcriber.transcribe(audio_input)
         if transcript.status == aai.TranscriptStatus.error:
             err = (transcript.error or "Erreur AssemblyAI inconnue")[:1000]
