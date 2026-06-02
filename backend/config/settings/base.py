@@ -399,12 +399,14 @@ AI_DEFAULT_PROVIDER = env("AI_DEFAULT_PROVIDER", default="openai")
 # AssemblyAI : transcription + diarisation cloud (clé requise en prod).
 ASSEMBLYAI_API_KEY = env("ASSEMBLYAI_API_KEY", default="")
 ASSEMBLYAI_LANGUAGE = env("ASSEMBLYAI_LANGUAGE", default="fr")
-# Modèle ASR AssemblyAI. Valeurs supportées en 2026 :
-# - "universal"  → générique multilingue, défaut recommandé (FR très bon)
-# - "slam-1"     → focus anglais/français, plus précis sur ces 2 langues
-# - "nano"       → rapide + low-cost, moins précis
-# Vide = utilise le défaut serveur (AssemblyAI choisit automatiquement).
-ASSEMBLYAI_MODEL = env("ASSEMBLYAI_MODEL", default="universal")
+# Modèle ASR AssemblyAI.
+# DÉFAUT = VIDE → on ne passe PAS le paramètre au SDK, AssemblyAI utilise
+# son meilleur modèle par défaut côté serveur (universal-2 en 2026, FR OK).
+# C'est le mode le plus résilient car l'API AssemblyAI déprécie régulièrement
+# les anciens noms de modèles (best → universal → universal-2 → universal-3-pro).
+# Pour forcer un modèle : ASSEMBLYAI_MODEL=universal-2 (ou slam-1, nano, etc.)
+# IMPORTANT : nécessite que la version du SDK assemblyai installée le supporte.
+ASSEMBLYAI_MODEL = env("ASSEMBLYAI_MODEL", default="")
 # Claude primary, DeepSeek fallback (compat OpenAI SDK).
 RECORDING_AI_PRIMARY = env("RECORDING_AI_PRIMARY", default="anthropic")
 RECORDING_AI_FALLBACK = env("RECORDING_AI_FALLBACK", default="deepseek")

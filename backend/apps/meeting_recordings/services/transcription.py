@@ -61,42 +61,51 @@ def transcribe_recording(recording: MeetingRecording) -> bool:
         return False
 
     try:
-        # ─── speech_model ─────────────────────────────────────
-        # AssemblyAI a déprécié les anciens modèles "best" / "nano" en 2025.
-        # Nouveaux modèles : "universal" (générique multilingue, défaut),
-        # "slam-1" (anglais+français focus), "nano" (rapide bas coût).
-        # On choisit le modèle via env pour pouvoir changer sans rebuild.
-        # Si non défini, on laisse le défaut serveur → robuste aux changements futurs.
-        model_name = getattr(settings, "ASSEMBLYAI_MODEL", "universal")
-        # Essaie de mapper sur l'enum SDK si dispo ; sinon passe la string brute.
-        try:
-            speech_model = getattr(aai.SpeechModel, model_name, model_name)
-        except Exception:  # noqa: BLE001
-            speech_model = model_name
-
+        # ─── Stratégie 2026 : ne PAS spécifier speech_model ─────
+        # AssemblyAI a déprécié `speech_model="best"` (envoie 400 erreur).
+        # Le nouveau format API est `speech_models=["universal-3-pro", ...]`
+        # (pluriel + liste), mais tous les SDK Python ne sont pas alignés.
+        # Solution résiliente : on ne passe AUCUN paramètre de modèle → le
+        # serveur AssemblyAI utilise son meilleur défaut (universal-2 en 2026)
+        # qui supporte le français nativement.
+        #
+        # Si tu veux forcer un modèle spécifique, définis ASSEMBLYAI_MODEL
+        # dans .env.prod (ex: "universal-2", "slam-1") ET assure-toi que la
+        # version du SDK assemblyai installée le supporte.
         config_kwargs = dict(
             language_code=getattr(settings, "ASSEMBLYAI_LANGUAGE", "fr"),
             speaker_labels=True,
-            # Désactive le filtrage profanité (CR exécutif = on garde le mot exact)
+            # Garde les mots exacts (CR exécutif) sans masquage profanité
             filter_profanity=False,
-            # punctuate=True et format_text=True (défauts) : texte lisible.
+            # punctuate=True et format_text=True sont les défauts → texte lisible
         )
-        if speech_model:
-            config_kwargs["speech_model"] = speech_model
 
-        try:
-            config = aai.TranscriptionConfig(**config_kwargs)
-        except TypeError as exc:
-            # Compat SDK : si speech_model n'est plus un paramètre valide,
-            # on retombe sur la config sans modèle (défaut serveur = universal).
-            logger.warning("TranscriptionConfig sans speech_model: %s", exc)
-            config_kwargs.pop("speech_model", None)
+        model_name = getattr(settings, "ASSEMBLYAI_MODEL", "") or ""
+        config = None
+        if model_name:
+            # Tentative 1 : avec speech_model si le user a explicitement forcé
+            try:
+                speech_model = getattr(aai.SpeechModel, model_name, model_name)
+                config = aai.TranscriptionConfig(
+                    speech_model=speech_model, **config_kwargs,
+                )
+            except (TypeError, AttributeError) as exc:
+                logger.warning(
+                    "speech_model=%s rejeté par le SDK (%s), fallback défaut.",
+                    model_name, exc,
+                )
+                config = None
+
+        if config is None:
+            # Défaut serveur AssemblyAI = compatible 2026
             config = aai.TranscriptionConfig(**config_kwargs)
 
         transcriber = aai.Transcriber(config=config)
         logger.info(
-            "AAI transcribe start: recording=%s model=%s lang=%s",
-            recording.id, speech_model, config_kwargs.get("language_code"),
+            "AAI transcribe start: recording=%s model=%s lang=%s url=%s",
+            recording.id, model_name or "(défaut serveur)",
+            config_kwargs.get("language_code"),
+            audio_input if isinstance(audio_input, str) else "(bytes uploadés)",
         )
         transcript = transcriber.transcribe(audio_input)
         if transcript.status == aai.TranscriptStatus.error:
