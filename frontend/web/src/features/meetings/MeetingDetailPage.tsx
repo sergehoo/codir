@@ -16,6 +16,9 @@ import { UserSelect } from '@/components/widgets/UserSelect'
 import { agendasApi, agendasKeys } from '@/features/agendas/api'
 import { decisionsApi, decisionsKeys } from '@/features/decisions/api'
 
+import { MeetingRecorderButton } from '@/features/meeting-recordings/components/MeetingRecorderButton'
+import { recordingsApi } from '@/features/meeting-recordings/api'
+
 import { meetingsApi, meetingsKeys } from './api'
 import { CreateDecisionForm } from './CreateDecisionForm'
 import { MeetingNotesSection } from './notes/MeetingNotesSection'
@@ -107,6 +110,9 @@ export function MeetingDetailPage() {
       {/* ─── Bloc info compact : onglets Participants / Agenda / Décisions ─── */}
       <MeetingInfoTabs meetingId={id} status={m.status} />
 
+      {/* ─── Enregistrement audio IA (transcription + diarisation + résumé) ─── */}
+      <MeetingRecordingSection meetingId={id} />
+
       {/* ─── Notes intelligentes (Tiptap + parser CODIR) ─── */}
       <MeetingNotesSection meetingId={id} />
 
@@ -122,6 +128,35 @@ export function MeetingDetailPage() {
     </div>
   )
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Section enregistrement audio IA — encart dans le détail réunion
+   ═══════════════════════════════════════════════════════════════════ */
+
+function MeetingRecordingSection({ meetingId }: { meetingId: string }) {
+  // Récupère le recording le plus récent (s'il existe) pour reprendre l'état.
+  const { data: recordings } = useQuery({
+    queryKey: ['recordings', 'list', meetingId],
+    queryFn: () => recordingsApi.listForMeeting(meetingId),
+    staleTime: 5_000,
+  })
+  const latest = recordings?.[0] ?? null
+
+  return (
+    <section className="px-10 py-8 border-t border-border bg-bg-subtle/30">
+      <div className="text-2xs uppercase tracking-widest text-fg-muted font-semibold mb-5 flex items-center gap-3">
+        <span className="divider-accent" /> Enregistrement & compte rendu IA
+      </div>
+      <div className="max-w-3xl">
+        <MeetingRecorderButton
+          meetingId={meetingId}
+          existingRecording={latest as any}
+        />
+      </div>
+    </section>
+  )
+}
+
 
 /* ═══════════════════════════════════════════════════════════════════
    Bloc info compact — onglets Participants / Agenda / Décisions

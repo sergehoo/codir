@@ -1,0 +1,106 @@
+// API client meeting_recordings — wrappers axios typés.
+import { apiClient } from '@/api/client'
+import type {
+  DetectedSpeaker, MeetingRecording, RecordingAIExtraction,
+  RecordingStatusPayload, SpeakerMappingInput, SpeakerSegment,
+} from './types/recording.types'
+
+export const recordingsApi = {
+  // ─── Nested under meeting ────────────────────────────────
+  listForMeeting: async (meetingId: string) =>
+    (await apiClient.get<MeetingRecording[]>(`/meetings/${meetingId}/recordings/`)).data,
+
+  start: async (meetingId: string, payload: { title?: string; consent_acknowledged?: boolean }) =>
+    (await apiClient.post<MeetingRecording>(
+      `/meetings/${meetingId}/recordings/start/`, payload,
+    )).data,
+
+  /** Upload du Blob audio en multipart. Optionnellement attaché à un recording_id pré-créé. */
+  upload: async (
+    meetingId: string,
+    audioBlob: Blob,
+    opts: {
+      recordingId?: string
+      title?: string
+      durationSeconds?: number
+      consentAcknowledged?: boolean
+      onProgress?: (percent: number) => void
+    } = {},
+  ) => {
+    const form = new FormData()
+    if (opts.recordingId) form.append('recording_id', opts.recordingId)
+    if (opts.title) form.append('title', opts.title)
+    if (opts.durationSeconds != null) form.append('duration_seconds', String(opts.durationSeconds))
+    form.append('consent_acknowledged', String(opts.consentAcknowledged ?? false))
+    // Extension cohérente avec le type MIME — important pour AssemblyAI.
+    const filename = audioBlob.type.includes('webm') ? 'recording.webm'
+      : audioBlob.type.includes('ogg') ? 'recording.ogg'
+      : audioBlob.type.includes('mp4') ? 'recording.m4a'
+      : 'recording.audio'
+    form.append('audio', new File([audioBlob], filename, { type: audioBlob.type }))
+    const res = await apiClient.post<MeetingRecording>(
+      `/meetings/${meetingId}/recordings/upload/`,
+      form,
+      {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (e) => {
+          if (opts.onProgress && e.total) {
+            opts.onProgress(Math.round((e.loaded / e.total) * 100))
+          }
+        },
+      },
+    )
+    return res.data
+  },
+
+  // ─── Flat under /recordings/ ─────────────────────────────
+  retrieve: async (id: string) =>
+    (await apiClient.get<MeetingRecording>(`/recordings/${id}/`)).data,
+
+  status: async (id: string) =>
+    (await apiClient.get<RecordingStatusPayload>(`/recordings/${id}/status/`)).data,
+
+  process: async (id: string) =>
+    (await apiClient.post(`/recordings/${id}/process/`)).data,
+
+  speakers: async (id: string) =>
+    (await apiClient.get<DetectedSpeaker[]>(`/recordings/${id}/speakers/`)).data,
+
+  segments: async (id: string) =>
+    (await apiClient.get<SpeakerSegment[]>(`/recordings/${id}/segments/`)).data,
+
+  setSpeakerMapping: async (id: string, mappings: SpeakerMappingInput[]) =>
+    (await apiClient.post<{ updated: DetectedSpeaker[] }>(
+      `/recordings/${id}/speaker-mapping/`, { mappings },
+    )).data,
+
+  confirmSpeakers: async (id: string) =>
+    (await apiClient.post(`/recordings/${id}/confirm-speakers/`)).data,
+
+  generateFinalTranscript: async (id: string) =>
+    (await apiClient.post(`/recordings/${id}/generate-final-transcript/`)).data,
+
+  generateSummary: async (id: string) =>
+    (await apiClient.post(`/recordings/${id}/generate-summary/`)).data,
+
+  extractDecisions: async (id: string) =>
+    (await apiClient.post(`/recordings/${id}/extract-decisions/`)).data,
+
+  extractActions: async (id: string) =>
+    (await apiClient.post(`/recordings/${id}/extract-actions/`)).data,
+
+  listExtractions: async (id: string, type?: string) =>
+    (await apiClient.get<RecordingAIExtraction[]>(
+      `/recordings/${id}/extractions/`, { params: type ? { type } : {} },
+    )).data,
+
+  createDecisions: async (id: string, extractionIds: string[]) =>
+    (await apiClient.post<{ created: Array<{ extraction_id: string; decision_id?: string; error?: string }> }>(
+      `/recordings/${id}/create-decisions/`, { extraction_ids: extractionIds },
+    )).data,
+
+  createActionPlans: async (id: string, extractionIds: string[]) =>
+    (await apiClient.post<{ created: Array<{ extraction_id: string; action_plan_id?: string; error?: string }> }>(
+      `/recordings/${id}/create-action-plans/`, { extraction_ids: extractionIds },
+    )).data,
+}

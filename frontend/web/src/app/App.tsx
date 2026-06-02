@@ -20,6 +20,8 @@ import { ProfilePage } from '@/features/profile/ProfilePage'
 import { MeetingSeriesPage } from '@/features/settings/MeetingSeriesPage'
 import { MembersPage } from '@/features/settings/MembersPage'
 import { SubsidiariesPage } from '@/features/settings/SubsidiariesPage'
+import { SpeakerMappingPage } from '@/features/meeting-recordings/pages/SpeakerMappingPage'
+import { RecordingSummaryPage } from '@/features/meeting-recordings/pages/RecordingSummaryPage'
 import { useAuthStore } from '@/stores/auth'
 
 const rootRoute = createRootRoute({ component: () => <Outlet /> })
@@ -72,6 +74,18 @@ const settingsMembers = createRoute({ getParentRoute: () => shellRoute, path: '/
 const settingsSubsidiaries = createRoute({ getParentRoute: () => shellRoute, path: '/settings/subsidiaries', component: SubsidiariesPage })
 const settingsMeetingSeries = createRoute({ getParentRoute: () => shellRoute, path: '/settings/meeting-series', component: MeetingSeriesPage })
 
+// ── Meeting recordings : identification voix + résumé IA ──
+const recordingSpeakers = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/meetings/$meetingId/recordings/$recordingId/speakers',
+  component: SpeakerMappingPage,
+})
+const recordingSummary = createRoute({
+  getParentRoute: () => shellRoute,
+  path: '/meetings/$meetingId/recordings/$recordingId/summary',
+  component: RecordingSummaryPage,
+})
+
 const routeTree = rootRoute.addChildren([
   loginRoute,
   shellRoute.addChildren([
@@ -79,6 +93,7 @@ const routeTree = rootRoute.addChildren([
     decisionsList, decisionDetail, plansList, planDetail,
     myTasks, liveCodir, taskDetail, notifs, notifPrefs, documents,
     profile, settingsMembers, settingsSubsidiaries, settingsMeetingSeries,
+    recordingSpeakers, recordingSummary,
   ]),
 ])
 

@@ -66,6 +66,7 @@ LOCAL_APPS = [
     "apps.notifications",
     "apps.audit_logs",
     "apps.dashboards",
+    "apps.meeting_recordings",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -204,6 +205,8 @@ CELERY_TASK_ROUTES = {
     "apps.notifications.tasks.*": {"queue": "notifications"},
     "apps.action_plans.tasks.*": {"queue": "default"},
     "apps.meetings.tasks.*": {"queue": "default"},
+    # Recordings : queue dédiée — pipeline lourd (audio I/O + API externes).
+    "apps.meeting_recordings.tasks.*": {"queue": "recordings"},
 }
 
 # ─── Celery Beat — tâches récurrentes bêta ──────────────────
@@ -340,6 +343,26 @@ OPENAI_API_KEY = env("OPENAI_API_KEY", default="")
 ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")
 OLLAMA_URL = env("OLLAMA_URL", default="http://localhost:11434")
 AI_DEFAULT_PROVIDER = env("AI_DEFAULT_PROVIDER", default="openai")
+
+# ─── Meeting recordings — transcription + LLM ──────────────────────────
+# AssemblyAI : transcription + diarisation cloud (clé requise en prod).
+ASSEMBLYAI_API_KEY = env("ASSEMBLYAI_API_KEY", default="")
+ASSEMBLYAI_LANGUAGE = env("ASSEMBLYAI_LANGUAGE", default="fr")
+# Claude primary, DeepSeek fallback (compat OpenAI SDK).
+RECORDING_AI_PRIMARY = env("RECORDING_AI_PRIMARY", default="anthropic")
+RECORDING_AI_FALLBACK = env("RECORDING_AI_FALLBACK", default="deepseek")
+ANTHROPIC_MODEL = env("ANTHROPIC_MODEL", default="claude-sonnet-4-5-20250929")
+DEEPSEEK_API_KEY = env("DEEPSEEK_API_KEY", default="")
+DEEPSEEK_BASE_URL = env("DEEPSEEK_BASE_URL", default="https://api.deepseek.com")
+DEEPSEEK_MODEL = env("DEEPSEEK_MODEL", default="deepseek-chat")
+# Bucket dédié recordings (séparé du bucket documents pour quota + IAM).
+RECORDING_S3_BUCKET = env("RECORDING_S3_BUCKET", default="codir-recordings-dev")
+# Limite upload : 4h x 256 kbps Opus webm ≈ 460 Mo. On laisse 600 Mo de marge.
+MAX_RECORDING_UPLOAD_MB = env.int("MAX_RECORDING_UPLOAD_MB", default=600)
+# Durée d'extrait audio par speaker (en secondes) — sample d'identification UI.
+SPEAKER_SAMPLE_DURATION_SEC = env.int("SPEAKER_SAMPLE_DURATION_SEC", default=8)
+# Rétention audio brut (jours). 0 = pas de purge auto.
+RECORDING_RAW_RETENTION_DAYS = env.int("RECORDING_RAW_RETENTION_DAYS", default=90)
 
 # ─── Logging ───────────────────────────────────────────────────────────
 # JSON formatter optionnel : si python-json-logger n'est pas installé,
