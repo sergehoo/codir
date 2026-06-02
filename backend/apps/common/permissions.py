@@ -44,6 +44,31 @@ class IsAdminOrReadOnly(BasePermission):
         ))
 
 
+class IsOrganizationOwner(BasePermission):
+    """Lecture pour membres ; écriture réservée aux Owner / Superuser / Staff Django.
+
+    Utilisée pour les actions admin sensibles : créer/désactiver un utilisateur,
+    réinitialiser un mot de passe, modifier une affectation.
+    """
+
+    message = "Action réservée aux administrateurs (DG / Owner) de l'organisation."
+
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.method in SAFE_METHODS:
+            return True
+        if request.user.is_superuser or request.user.is_staff:
+            return True
+        org = getattr(request, "organization", None)
+        if org is None:
+            return False
+        from apps.accounts.models import Membership
+        return Membership.unscoped.filter(
+            user=request.user, organization=org, is_active=True, is_owner=True,
+        ).exists()
+
+
 class CanModifyMeeting(BasePermission):
     """Une réunion terminée est verrouillée sauf pour staff."""
 

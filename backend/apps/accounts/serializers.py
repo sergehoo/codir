@@ -65,6 +65,42 @@ class MembershipSerializer(serializers.ModelSerializer):
         }
 
 
+class CreateMemberSerializer(serializers.Serializer):
+    """Payload de POST /api/v1/auth/users/ — création admin d'un membre.
+
+    Crée le User (si nouveau) + Membership. Email envoyé automatiquement
+    avec les identifiants temporaires.
+    """
+    email = serializers.EmailField()
+    first_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    last_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    phone_e164 = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    is_executive = serializers.BooleanField(default=False)
+    is_owner = serializers.BooleanField(default=False)
+    subsidiary = serializers.UUIDField(required=False, allow_null=True)
+    direction_ids = serializers.ListField(
+        child=serializers.UUIDField(), required=False, default=list,
+    )
+    role_codes = serializers.ListField(
+        child=serializers.CharField(max_length=50), required=False, default=list,
+    )
+    send_welcome_email = serializers.BooleanField(default=True)
+
+
+class ReassignMembershipSerializer(serializers.Serializer):
+    """Payload de POST /api/v1/auth/memberships/{id}/reassign/."""
+    subsidiary = serializers.UUIDField(required=False, allow_null=True)
+    direction_ids = serializers.ListField(
+        child=serializers.UUIDField(), required=False,
+    )
+    role_codes = serializers.ListField(
+        child=serializers.CharField(max_length=50), required=False,
+    )
+    is_owner = serializers.BooleanField(required=False)
+    is_executive = serializers.BooleanField(required=False)
+    send_email = serializers.BooleanField(default=True)
+
+
 class TokenObtainPairWithOrgSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):

@@ -1,0 +1,17 @@
+Compte réactivé — CODIR
+
+Bonjour {{ user_name }},
+
+Bonne nouvelle — votre accès à la plateforme CODIR de
+{{ organization_name|default:"Kaydan Groupe" }} a été rétabli par {{ actor_name }}.
+Vous pouvez vous reconnecter avec vos identifiants habituels.
+
+{% if perimeter %}Périmètre actuel : {{ perimeter }}{% endif %}
+
+Se reconnecter : {{ login_url }}
+
+--
+Si vous avez oublié votre mot de passe, contactez votre administrateur
+pour qu'il le réinitialise.
+
+CODIR Executive Platform

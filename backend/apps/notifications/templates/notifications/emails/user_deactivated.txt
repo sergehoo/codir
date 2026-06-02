@@ -1,0 +1,13 @@
+Compte désactivé — CODIR
+
+Bonjour {{ user_name }},
+
+Votre accès à la plateforme CODIR de {{ organization_name|default:"Kaydan Groupe" }}
+a été désactivé par {{ actor_name }}. Vous ne pourrez plus vous connecter
+avec vos identifiants jusqu'à la réactivation du compte.
+
+Vos données restent intactes côté plateforme. Si cette désactivation est
+une erreur, contactez votre administrateur.
+
+--
+CODIR Executive Platform

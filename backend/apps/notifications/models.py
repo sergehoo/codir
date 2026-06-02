@@ -78,6 +78,12 @@ class NotificationEvent(models.TextChoices):
     ACTION_PLAN_BLOCKED = "action_plan_blocked", "Plan d'action bloqué"
     ACTION_PLAN_COMPLETED = "action_plan_completed", "Plan d'action clôturé"
     PLAN_COMPLETED = "plan_completed", "Plan d'action clôturé (legacy)"
+    # Gestion utilisateurs (admin)
+    USER_CREATED = "user_created", "Bienvenue — compte créé"
+    USER_PASSWORD_RESET = "user_password_reset", "Mot de passe réinitialisé"
+    USER_REASSIGNED = "user_reassigned", "Affectation mise à jour"
+    USER_DEACTIVATED = "user_deactivated", "Compte désactivé"
+    USER_REACTIVATED = "user_reactivated", "Compte réactivé"
 
 
 # ─── Notification ─────────────────────────────────────────────

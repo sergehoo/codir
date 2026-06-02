@@ -1,0 +1,24 @@
+Bienvenue sur CODIR{% if user_name %}, {{ user_name }}{% endif %} !
+
+Votre compte vient d'être créé par {{ actor_name }} sur la plateforme
+exécutive de {{ organization_name|default:"Kaydan Groupe" }}.
+
+═══════════════════════════════════════════
+IDENTIFIANTS DE CONNEXION
+═══════════════════════════════════════════
+Email                : {{ user_email }}
+Mot de passe temporaire : {{ raw_password }}
+═══════════════════════════════════════════
+
+⚠ À la première connexion, vous devrez choisir un nouveau mot de passe
+personnel. Ce mot de passe temporaire ne vous sera plus jamais envoyé.
+
+{% if perimeter %}Votre périmètre : {{ perimeter }}{% endif %}
+
+Se connecter : {{ login_url }}
+
+--
+Si vous n'êtes pas à l'origine de cette inscription, contactez immédiatement
+votre administrateur — ne communiquez ce mot de passe à personne.
+
+CODIR Executive Platform

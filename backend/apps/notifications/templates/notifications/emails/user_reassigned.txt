@@ -1,0 +1,16 @@
+Affectation mise à jour — CODIR
+
+Bonjour {{ user_name }},
+
+Votre périmètre d'accès dans CODIR a été modifié par {{ actor_name }}.
+
+Nouveau périmètre : {{ perimeter|default:"Accès Groupe transverse." }}
+
+Aucune action de votre part n'est requise. Vos identifiants restent inchangés.
+
+Ouvrir CODIR : {{ login_url }}
+
+--
+Pour toute question, contactez votre administrateur.
+
+CODIR Executive Platform

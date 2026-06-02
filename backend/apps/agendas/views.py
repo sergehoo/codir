@@ -45,6 +45,21 @@ class AgendaViewSet(viewsets.ModelViewSet):
         item = services.add_item(agenda=agenda, data=ser.validated_data, created_by=request.user)
         return Response(AgendaItemSerializer(item).data, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=["post"], url_path="copy-from-previous")
+    def copy_from_previous(self, request, pk=None):
+        """Reporte les items non-clôturés de la séance précédente d'une série.
+
+        Utile pour CODIR récurrent : on hérite des points pending/postponed
+        de la réunion précédente au lieu de retaper l'ODJ.
+        """
+        agenda = self.get_object()
+        result = services.copy_items_from_previous_meeting(agenda=agenda)
+        # Renvoie l'agenda complet (avec ses items) + métadonnées sur la source.
+        return Response({
+            **result,
+            "agenda": AgendaSerializer(agenda).data,
+        })
+
 
 class AgendaItemViewSet(viewsets.ModelViewSet):
     permission_classes = [IsOrganizationMember]

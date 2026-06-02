@@ -48,14 +48,24 @@ def add_participant(meeting: Meeting, *, user=None, external_email=None, externa
 
 @transaction.atomic
 def start_meeting(meeting: Meeting, *, by_user) -> Meeting:
+    """Démarre une réunion (transition SCHEDULED → IN_PROGRESS).
+
+    Note métier (CODIR cyclique) : un CODIR récurrent peut hériter de l'ODJ
+    d'une séance précédente, et certaines réunions de crise démarrent sans
+    ODJ formalisé. On n'impose donc PLUS que l'agenda soit validé pour
+    démarrer. On garantit juste qu'un `Agenda` existe (création paresseuse,
+    vide) pour ne pas casser les downstream qui supposent `meeting.agenda`
+    non null (génération du PV, traçabilité items discutés, etc.).
+    """
     if meeting.status != MeetingStatus.SCHEDULED:
         raise TransitionNotAllowed(
             detail=f"Une réunion doit être 'planifiée' pour être démarrée (statut={meeting.status})."
         )
-    if not getattr(meeting, "agenda", None) or not meeting.agenda.is_validated:
-        raise TransitionNotAllowed(
-            detail="L'ordre du jour doit être validé avant de démarrer la réunion."
-        )
+    # Création paresseuse de l'Agenda si absent.
+    # Import local pour éviter un cycle apps.agendas <-> apps.meetings.
+    if not getattr(meeting, "agenda", None):
+        from apps.agendas.services import get_or_create_agenda
+        get_or_create_agenda(meeting=meeting)
     meeting.status = MeetingStatus.IN_PROGRESS
     meeting.actual_start = timezone.now()
     meeting.save(update_fields=["status", "actual_start", "updated_at"])

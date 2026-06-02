@@ -1,0 +1,33 @@
+{% extends "notifications/emails/base.html" %}
+{% block content %}
+<h1 style="font-family:Georgia,serif;font-size:22px;color:#1a1614;margin:0 0 8px 0;">
+  Votre compte CODIR a été désactivé
+</h1>
+<p style="color:#6b5d4f;font-size:13px;margin:0 0 24px 0;text-transform:uppercase;letter-spacing:1.5px;">
+  Action effectuée par {{ actor_name }}
+</p>
+
+<p style="color:#3a302a;font-size:15px;line-height:1.6;margin:0 0 16px 0;">
+  Bonjour {{ user_name }},
+</p>
+<p style="color:#3a302a;font-size:14px;line-height:1.6;margin:0 0 16px 0;">
+  Votre accès à la plateforme CODIR de {{ organization_name|default:"Kaydan Groupe" }}
+  a été désactivé. Vous ne pourrez plus vous connecter avec vos identifiants
+  jusqu'à la réactivation du compte.
+</p>
+
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%"
+       style="background:#fdf5f0;border:1px solid #f0d5c5;border-left:4px solid #c44e1c;
+              border-radius:4px;margin:20px 0;">
+  <tr>
+    <td style="padding:14px 18px;color:#7d3815;font-size:13px;">
+      Vos données restent intactes côté plateforme. Si cette désactivation est
+      une erreur, contactez votre administrateur pour qu'il réactive votre compte.
+    </td>
+  </tr>
+</table>
+
+<p style="color:#a89e8e;font-size:12px;line-height:1.5;margin:24px 0 0 0;border-top:1px solid #e9e2d8;padding-top:16px;">
+  Cet email est purement informatif. Aucune action n'est requise de votre part.
+</p>
+{% endblock %}

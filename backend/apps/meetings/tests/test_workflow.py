@@ -36,9 +36,26 @@ def test_create_meeting_auto_adds_chair_and_secretary(meeting):
 
 
 @pytest.mark.django_db
-def test_start_meeting_requires_validated_agenda(meeting, user):
-    Agenda.unscoped.create(organization=meeting.organization, meeting=meeting)
+def test_start_meeting_does_not_require_validated_agenda(meeting, user):
+    """CODIR cyclique : démarrer une réunion ne requiert plus que l'ODJ soit validé.
+
+    Une séance peut hériter de l'ODJ d'une réunion précédente, ou démarrer
+    en mode crise sans ODJ formel. La règle assouplie crée juste un agenda
+    paresseusement pour ne pas casser les downstream (PV, etc.).
+    """
+    # Pas d'agenda du tout au départ : start_meeting doit l'auto-créer.
     meeting.status = MeetingStatus.SCHEDULED
+    meeting.save()
+    meeting_services.start_meeting(meeting, by_user=user)
+    meeting.refresh_from_db()
+    assert meeting.status == MeetingStatus.IN_PROGRESS
+    assert hasattr(meeting, "agenda")  # Agenda créé paresseusement
+
+
+@pytest.mark.django_db
+def test_start_meeting_rejects_non_scheduled_status(meeting, user):
+    """L'unique pré-requis qui reste : la réunion DOIT être en statut 'scheduled'."""
+    meeting.status = MeetingStatus.DRAFT  # ou IN_PROGRESS, COMPLETED, etc.
     meeting.save()
     with pytest.raises(Exception):
         meeting_services.start_meeting(meeting, by_user=user)

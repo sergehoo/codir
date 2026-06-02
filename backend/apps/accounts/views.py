@@ -2,17 +2,20 @@
 import logging
 
 from django.contrib.auth import get_user_model
-from rest_framework import viewsets
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from apps.common.permissions import IsOrganizationMember
+from apps.common.permissions import IsOrganizationMember, IsOrganizationOwner
 
+from . import services as account_services
 from .models import Membership, Role
 from .serializers import (
-    MembershipSerializer, RoleSerializer,
+    CreateMemberSerializer, MembershipSerializer,
+    ReassignMembershipSerializer, RoleSerializer,
     TokenObtainPairWithOrgSerializer, UserMiniSerializer, UserSerializer,
 )
 
@@ -248,16 +251,36 @@ class MyMembershipsView(APIView):
         ])
 
 
-class UserViewSet(viewsets.ReadOnlyModelViewSet):
-    """Annuaire des utilisateurs (membres du tenant courant).
+class UserViewSet(viewsets.ModelViewSet):
+    """Annuaire + gestion administrative des utilisateurs du tenant.
 
-    Utilise `UserMiniSerializer` (avec `full_name`) — compatible avec le
-    composant `UserSelect` du frontend. Pagination désactivée.
+    Lecture : tout membre. Écriture (create, deactivate, reset_password) :
+    Owner de l'organisation uniquement (cf. `IsOrganizationOwner`).
+
+    Endpoints :
+    - GET    /auth/users/                       → liste annuaire (UserMini)
+    - POST   /auth/users/                       → crée un user + membership + email credentials
+    - GET    /auth/users/{id}/                  → détail (UserSerializer)
+    - POST   /auth/users/{id}/reset-password/   → reset MDP + email
+    - POST   /auth/users/{id}/deactivate/       → désactive + email
+    - POST   /auth/users/{id}/reactivate/       → réactive + email
     """
 
-    permission_classes = [IsOrganizationMember]
-    serializer_class = UserMiniSerializer
     pagination_class = None
+
+    def get_permissions(self):
+        # SAFE methods (GET/HEAD/OPTIONS) → tout membre.
+        # Écritures et actions admin → owner uniquement.
+        if self.action in ("list", "retrieve"):
+            return [IsOrganizationMember()]
+        return [IsOrganizationOwner()]
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return CreateMemberSerializer
+        if self.action == "retrieve":
+            return UserSerializer
+        return UserMiniSerializer
 
     def get_queryset(self):
         org = getattr(self.request, "organization", None)
@@ -265,9 +288,10 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
             log.warning("UserViewSet.get_queryset: no tenant in request")
             return User.objects.none()
         try:
+            # Inclut les users désactivés (admin doit les voir pour réactiver).
             user_ids = list(
                 Membership.unscoped
-                .filter(organization=org, is_active=True)
+                .filter(organization=org)
                 .values_list("user_id", flat=True)
             )
             return (
@@ -277,6 +301,101 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
         except Exception as exc:
             log.exception("UserViewSet.get_queryset failed: %s", exc)
             return User.objects.none()
+
+    # ─── CREATE : user + membership + email ──────────────────
+
+    def create(self, request, *args, **kwargs):
+        ser = CreateMemberSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        org = getattr(request, "organization", None)
+        if org is None:
+            return Response({"detail": "Tenant requis."}, status=400)
+        d = ser.validated_data
+
+        # Résolution des FK / M2M par ID
+        subsidiary = None
+        if d.get("subsidiary"):
+            from apps.organizations.models import Subsidiary
+            subsidiary = Subsidiary.unscoped.filter(
+                id=d["subsidiary"], organization=org,
+            ).first()
+            if subsidiary is None:
+                return Response({"subsidiary": ["Filiale inconnue."]}, status=400)
+
+        directions = []
+        if d.get("direction_ids"):
+            from apps.governance.models import Direction
+            directions = list(Direction.unscoped.filter(
+                id__in=d["direction_ids"], organization=org,
+            ))
+
+        try:
+            user, membership, _raw = account_services.create_user_with_membership(
+                organization=org, created_by=request.user,
+                email=d["email"],
+                first_name=d.get("first_name", ""),
+                last_name=d.get("last_name", ""),
+                phone_e164=d.get("phone_e164", ""),
+                is_executive=d.get("is_executive", False),
+                is_owner=d.get("is_owner", False),
+                subsidiary=subsidiary,
+                directions=directions,
+                role_codes=d.get("role_codes") or None,
+                send_welcome_email=d.get("send_welcome_email", True),
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        except Exception as exc:  # noqa: BLE001
+            log.exception("create_user_with_membership KO")
+            return Response({"detail": f"Erreur : {exc}"}, status=500)
+
+        # On renvoie le Membership complet (UI a déjà le pattern pour l'afficher)
+        return Response(
+            MembershipSerializer(membership).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    # ─── Reset password ──────────────────────────────────────
+
+    @action(detail=True, methods=["post"], url_path="reset-password")
+    def reset_password(self, request, pk=None):
+        user = self.get_object()
+        org = getattr(request, "organization", None)
+        if org is None:
+            return Response({"detail": "Tenant requis."}, status=400)
+        try:
+            account_services.reset_user_password(
+                user=user, organization=org, actor=request.user,
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.exception("reset_user_password KO")
+            return Response({"detail": f"Erreur : {exc}"}, status=500)
+        return Response({"detail": "Mot de passe réinitialisé. Email envoyé."})
+
+    # ─── Désactivation / Réactivation ────────────────────────
+
+    @action(detail=True, methods=["post"], url_path="deactivate")
+    def deactivate(self, request, pk=None):
+        user = self.get_object()
+        org = getattr(request, "organization", None)
+        if user.id == request.user.id:
+            return Response(
+                {"detail": "Vous ne pouvez pas désactiver votre propre compte."},
+                status=400,
+            )
+        account_services.deactivate_user(
+            user=user, organization=org, actor=request.user,
+        )
+        return Response({"detail": "Compte désactivé."})
+
+    @action(detail=True, methods=["post"], url_path="reactivate")
+    def reactivate(self, request, pk=None):
+        user = self.get_object()
+        org = getattr(request, "organization", None)
+        account_services.reactivate_user(
+            user=user, organization=org, actor=request.user,
+        )
+        return Response({"detail": "Compte réactivé."})
 
 
 class RoleViewSet(viewsets.ReadOnlyModelViewSet):
@@ -296,8 +415,13 @@ class RoleViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class MembershipViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsOrganizationMember]
     serializer_class = MembershipSerializer
+
+    def get_permissions(self):
+        # Lecture pour tout membre, écritures sensibles owner-only.
+        if self.action in ("list", "retrieve"):
+            return [IsOrganizationMember()]
+        return [IsOrganizationOwner()]
 
     def get_queryset(self):
         """Limite aux memberships du tenant courant si présent."""
@@ -322,3 +446,51 @@ class MembershipViewSet(viewsets.ModelViewSet):
                 {"detail": f"Erreur de chargement des membres : {type(exc).__name__}: {exc}"},
                 status=500,
             )
+
+    @action(detail=True, methods=["post"], url_path="reassign")
+    def reassign(self, request, pk=None):
+        """Met à jour le périmètre d'un Membership (filiale + directions + rôles).
+
+        Notifie l'utilisateur que son affectation a été mise à jour.
+        """
+        membership = self.get_object()
+        ser = ReassignMembershipSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        d = ser.validated_data
+        org = membership.organization
+
+        # Résolution FK / M2M
+        subsidiary = membership.subsidiary
+        if "subsidiary" in d:
+            if d["subsidiary"] is None:
+                subsidiary = None
+            else:
+                from apps.organizations.models import Subsidiary
+                subsidiary = Subsidiary.unscoped.filter(
+                    id=d["subsidiary"], organization=org,
+                ).first()
+                if subsidiary is None:
+                    return Response({"subsidiary": ["Filiale inconnue."]}, status=400)
+
+        directions = None
+        if "direction_ids" in d:
+            from apps.governance.models import Direction
+            directions = list(Direction.unscoped.filter(
+                id__in=d["direction_ids"], organization=org,
+            ))
+
+        try:
+            account_services.reassign_membership(
+                membership=membership, actor=request.user,
+                subsidiary=subsidiary if "subsidiary" in d else None,
+                directions=directions,
+                role_codes=d.get("role_codes"),
+                is_owner=d.get("is_owner"),
+                is_executive=d.get("is_executive"),
+                send_email=d.get("send_email", True),
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.exception("reassign_membership KO")
+            return Response({"detail": f"Erreur : {exc}"}, status=500)
+
+        return Response(MembershipSerializer(membership).data)

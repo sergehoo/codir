@@ -1,0 +1,39 @@
+{% extends "notifications/emails/base.html" %}
+{% block content %}
+<h1 style="font-family:Georgia,serif;font-size:22px;color:#1a1614;margin:0 0 8px 0;">
+  Votre compte CODIR a été réactivé
+</h1>
+<p style="color:#6b5d4f;font-size:13px;margin:0 0 24px 0;text-transform:uppercase;letter-spacing:1.5px;">
+  Action effectuée par {{ actor_name }}
+</p>
+
+<p style="color:#3a302a;font-size:15px;line-height:1.6;margin:0 0 16px 0;">
+  Bonjour {{ user_name }},
+</p>
+<p style="color:#3a302a;font-size:14px;line-height:1.6;margin:0 0 16px 0;">
+  Bonne nouvelle — votre accès à la plateforme CODIR de
+  {{ organization_name|default:"Kaydan Groupe" }} a été rétabli. Vous pouvez
+  vous reconnecter avec vos identifiants habituels.
+</p>
+
+{% if perimeter %}
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%"
+       style="background:#f5f1ec;border-radius:4px;margin:16px 0;">
+  <tr>
+    <td style="padding:14px 18px;">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:2px;color:#a89e8e;margin-bottom:6px;">
+        Périmètre actuel
+      </div>
+      <div style="font-size:13px;color:#3a302a;">{{ perimeter }}</div>
+    </td>
+  </tr>
+</table>
+{% endif %}
+
+{% include "notifications/emails/_button.html" with link_url=login_url button_label="Se reconnecter" %}
+
+<p style="color:#a89e8e;font-size:12px;line-height:1.5;margin:24px 0 0 0;border-top:1px solid #e9e2d8;padding-top:16px;">
+  Si vous avez oublié votre mot de passe, contactez votre administrateur
+  pour qu'il le réinitialise.
+</p>
+{% endblock %}

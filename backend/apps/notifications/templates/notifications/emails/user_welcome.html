@@ -1,0 +1,63 @@
+{% extends "notifications/emails/base.html" %}
+{% block content %}
+<h1 style="font-family:Georgia,serif;font-size:24px;color:#1a1614;margin:0 0 8px 0;">
+  Bienvenue sur CODIR{% if user_name %}, {{ user_name }}{% endif %}
+</h1>
+<p style="color:#6b5d4f;font-size:13px;margin:0 0 24px 0;text-transform:uppercase;letter-spacing:1.5px;">
+  Votre compte vient d'être créé par {{ actor_name }}
+</p>
+
+<p style="color:#3a302a;font-size:15px;line-height:1.6;margin:0 0 16px 0;">
+  Vous avez maintenant accès à la plateforme exécutive de
+  <strong>{{ organization_name|default:"Kaydan Groupe" }}</strong>. Pour vous connecter,
+  utilisez les identifiants ci-dessous.
+</p>
+
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%"
+       style="background:#fbf7f1;border:1px solid #e9e2d8;border-left:4px solid #B8693C;
+              border-radius:4px;margin:24px 0;">
+  <tr>
+    <td style="padding:18px 20px;">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:2px;color:#a89e8e;margin-bottom:8px;">
+        Identifiants de connexion
+      </div>
+      <div style="font-size:14px;color:#3a302a;line-height:1.8;">
+        <strong>Email :</strong>
+        <code style="background:#fff;padding:2px 6px;border-radius:3px;
+                     border:1px solid #e9e2d8;font-family:monospace;">{{ user_email }}</code>
+        <br />
+        <strong>Mot de passe temporaire :</strong>
+        <code style="background:#fff;padding:2px 6px;border-radius:3px;
+                     border:1px solid #B8693C;color:#B8693C;font-family:monospace;
+                     font-weight:700;letter-spacing:0.5px;">{{ raw_password }}</code>
+      </div>
+    </td>
+  </tr>
+</table>
+
+<p style="color:#3a302a;font-size:14px;line-height:1.6;margin:16px 0;">
+  ⚠️ <strong>À la première connexion, vous devrez choisir un nouveau mot de passe personnel.</strong>
+  Ce mot de passe temporaire ne vous sera plus jamais envoyé.
+</p>
+
+{% if perimeter %}
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%"
+       style="background:#f5f1ec;border-radius:4px;margin:16px 0;">
+  <tr>
+    <td style="padding:14px 18px;">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:2px;color:#a89e8e;margin-bottom:6px;">
+        Votre périmètre
+      </div>
+      <div style="font-size:13px;color:#3a302a;">{{ perimeter }}</div>
+    </td>
+  </tr>
+</table>
+{% endif %}
+
+{% include "notifications/emails/_button.html" with link_url=login_url button_label="Se connecter" %}
+
+<p style="color:#a89e8e;font-size:12px;line-height:1.5;margin:24px 0 0 0;border-top:1px solid #e9e2d8;padding-top:16px;">
+  Si vous n'êtes pas à l'origine de cette inscription, contactez immédiatement
+  votre administrateur — ne communiquez pas ce mot de passe par téléphone ou messagerie.
+</p>
+{% endblock %}
