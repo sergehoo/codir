@@ -14,7 +14,12 @@ http:
         contentTypeNosniff: true
         browserXssFilter: true
         referrerPolicy: "strict-origin-when-cross-origin"
-        permissionsPolicy: "camera=(), microphone=(), geolocation=()"
+        # Autorisations matérielles :
+        # - microphone=(self)  → enregistrement audio des réunions CODIR (MeetingRecorder).
+        # - camera=()          → pas de webcam (interdit par défaut).
+        # - geolocation=()     → pas de géoloc.
+        # `(self)` = autorise uniquement l'origine du site lui-même (pas les iframes tierces).
+        permissionsPolicy: "camera=(), microphone=(self), geolocation=()"
         customResponseHeaders:
           X-Robots-Tag: "noindex, nofollow"
 
