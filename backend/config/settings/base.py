@@ -359,9 +359,17 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Media (utilisé en fallback uniquement si le storage S3 par défaut échoue —
 # ex: en dev sans MinIO, ou lors d'une coupure S3 transitoire en prod).
-# Doit pointer vers un répertoire writable par l'utilisateur du worker.
+#
+# ⚠️ IMPORTANT : en prod le container Django tourne avec `read_only: true`
+# (sécurité Docker). Seuls les volumes explicitement montés sont writable.
+# Le docker-compose monte le volume `codir_media` sur `/var/www/media:rw` →
+# c'est LE seul endroit où Django peut écrire en fallback.
+#
+# Le défaut `/var/www/media` est compatible :
+# - Prod Docker (volume monté à cet emplacement, owner=app:app)
+# - Dev local : créer le dossier OU surcharger via env MEDIA_ROOT
 MEDIA_URL = "/media/"
-MEDIA_ROOT = env("MEDIA_ROOT", default=str(BASE_DIR / "media"))
+MEDIA_ROOT = env("MEDIA_ROOT", default="/var/www/media")
 
 # ─── CORS ──────────────────────────────────────────────────────────────
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=["http://localhost:5173"])
