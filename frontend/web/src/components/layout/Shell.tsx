@@ -1,4 +1,4 @@
-import { Link, Outlet, useRouter } from '@tanstack/react-router'
+import { Link, Outlet, useRouterState } from '@tanstack/react-router'
 import {
   Bell, Building2, CheckSquare, Gauge, LayoutDashboard, LogOut,
   RotateCcw, Scale, Search, User as UserIcon, Users,
@@ -30,9 +30,17 @@ const SETTINGS_NAV: { to: string; label: string; icon: typeof Gauge }[] = [
   { to: '/profile',                 label: 'Mon profil',        icon: UserIcon },
 ]
 
+// Détection "actif" robuste : match exact OU sous-route (`/foo/bar`),
+// PAS un préfixe arbitraire (`/foo-bar` ne doit pas matcher `/foo`).
+function isActivePath(currentPath: string, to: string): boolean {
+  if (to === '/') return currentPath === '/'
+  return currentPath === to || currentPath.startsWith(to + '/')
+}
+
 export function Shell() {
-  const router = useRouter()
-  const path = router.state.location.pathname
+  // ⚠️ useRouter() ne s'abonne pas aux changements — on utilise useRouterState
+  // avec un selector pour ne re-render que sur changement de pathname.
+  const path = useRouterState({ select: (s) => s.location.pathname })
   const user = useAuthStore((s) => s.user)
   const logout = useAuthStore((s) => s.logout)
   const accessToken = useAuthStore((s) => s.accessToken)
@@ -90,12 +98,14 @@ export function Shell() {
             <span className="divider-accent" /> Pilotage
           </div>
           {NAV.map((n) => {
-            const active = path === n.to || (n.to !== '/' && path.startsWith(n.to))
+            const active = isActivePath(path, n.to)
             return (
               <Link
                 key={n.to} to={n.to}
+                aria-current={active ? 'page' : undefined}
                 className={cn(
                   'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-250 ease-editorial relative text-sm',
+                  'focus:outline-none focus-visible:ring-2 focus-visible:ring-copper-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-bg-subtle',
                   active
                     ? 'bg-copper-500/10 text-copper-400 font-medium'
                     : 'text-fg-muted hover:bg-fg/[0.04] hover:text-fg',
@@ -113,30 +123,47 @@ export function Shell() {
           <div className="text-2xs uppercase tracking-widest text-fg-subtle px-3 pt-7 pb-3 font-semibold flex items-center gap-2.5">
             <span className="divider-accent" /> Inbox
           </div>
-          <Link
-            to="/notifications"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-fg-muted hover:bg-fg/[0.04] hover:text-fg transition text-sm"
-          >
-            <Bell size={16} strokeWidth={1.75} />
-            <span className="flex-1">Notifications</span>
-            {(unread?.unread ?? 0) > 0 && (
-              <span className="text-2xs font-medium bg-copper-500 text-white rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
-                {unread!.unread > 99 ? '99+' : unread!.unread}
-              </span>
-            )}
-          </Link>
+          {(() => {
+            const active = isActivePath(path, '/notifications')
+            return (
+              <Link
+                to="/notifications"
+                aria-current={active ? 'page' : undefined}
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-250 ease-editorial relative text-sm',
+                  'focus:outline-none focus-visible:ring-2 focus-visible:ring-copper-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-bg-subtle',
+                  active
+                    ? 'bg-copper-500/10 text-copper-400 font-medium'
+                    : 'text-fg-muted hover:bg-fg/[0.04] hover:text-fg',
+                )}
+              >
+                {active && (
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-copper-500 rounded-r" />
+                )}
+                <Bell size={16} className="shrink-0" strokeWidth={1.75} />
+                <span className="flex-1">Notifications</span>
+                {(unread?.unread ?? 0) > 0 && (
+                  <span className="text-2xs font-medium bg-copper-500 text-white rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
+                    {unread!.unread > 99 ? '99+' : unread!.unread}
+                  </span>
+                )}
+              </Link>
+            )
+          })()}
 
           {/* ─── Paramètres ─── */}
           <div className="text-2xs uppercase tracking-widest text-fg-subtle px-3 pt-7 pb-3 font-semibold flex items-center gap-2.5">
             <span className="divider-accent" /> Paramètres
           </div>
           {SETTINGS_NAV.map((n) => {
-            const active = path === n.to || (n.to !== '/' && path.startsWith(n.to))
+            const active = isActivePath(path, n.to)
             return (
               <Link
                 key={n.to} to={n.to}
+                aria-current={active ? 'page' : undefined}
                 className={cn(
                   'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-250 ease-editorial relative text-sm',
+                  'focus:outline-none focus-visible:ring-2 focus-visible:ring-copper-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-bg-subtle',
                   active
                     ? 'bg-copper-500/10 text-copper-400 font-medium'
                     : 'text-fg-muted hover:bg-fg/[0.04] hover:text-fg',
