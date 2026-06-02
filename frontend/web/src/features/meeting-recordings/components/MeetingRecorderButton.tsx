@@ -165,59 +165,194 @@ export function MeetingRecorderButton({
   if (!status) return null
 
   return (
-    <div className="p-5 rounded-xl border border-border bg-bg-elevated space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <Sparkles size={16} className="text-copper-500" />
-          <span className="text-sm font-semibold">Pipeline IA</span>
-        </div>
-        <RecordingStatusBadge status={status} />
-      </div>
+    <PipelinePanel
+      status={status}
+      meetingId={meetingId}
+      recordingId={recording?.id}
+      errorMessage={statusQuery.data?.error_message || recording?.error_message}
+      speakersCount={statusQuery.data?.speakers_count ?? 0}
+      hasDecisions={statusQuery.data?.has_decisions_drafts ?? false}
+      hasActions={statusQuery.data?.has_actions_drafts ?? false}
+    />
+  )
+}
 
-      {status === 'failed' && (
-        <div className="p-3 rounded-lg bg-red-500/10 text-red-300 text-xs">
-          {statusQuery.data?.error_message || recording?.error_message || 'Erreur inconnue'}
-        </div>
+
+/* ════════════════════════════════════════════════════════════
+   PipelinePanel : étapes visuelles du traitement IA
+   ════════════════════════════════════════════════════════════ */
+
+interface PipelinePanelProps {
+  status: RecordingStatus
+  meetingId: string
+  recordingId?: string
+  errorMessage?: string
+  speakersCount?: number
+  hasDecisions?: boolean
+  hasActions?: boolean
+}
+
+// Ordre des étapes du pipeline (sert pour l'UI étape par étape)
+const PIPELINE_STEPS: { key: RecordingStatus[]; label: string; icon: any }[] = [
+  { key: ['uploading', 'uploaded', 'processing'], label: 'Préparation audio', icon: Sparkles },
+  { key: ['transcribing'], label: 'Transcription', icon: FileText },
+  { key: ['diarizing'], label: 'Détection des voix', icon: Users },
+  { key: ['waiting_speaker_mapping'], label: 'Identification (vous)', icon: Users },
+  { key: ['generating_final_transcript'], label: 'Transcript final', icon: FileText },
+  { key: ['summarizing'], label: 'Résumé IA', icon: Sparkles },
+  { key: ['extracting_actions'], label: 'Extraction décisions/actions', icon: CheckCircle2 },
+  { key: ['completed'], label: 'Terminé', icon: CheckCircle2 },
+]
+
+function statusToStepIndex(status: RecordingStatus): number {
+  for (let i = 0; i < PIPELINE_STEPS.length; i++) {
+    if (PIPELINE_STEPS[i].key.includes(status)) return i
+  }
+  return 0
+}
+
+function PipelinePanel({
+  status, meetingId, recordingId, errorMessage,
+  speakersCount = 0, hasDecisions = false, hasActions = false,
+}: PipelinePanelProps) {
+  const currentIdx = statusToStepIndex(status)
+  const isFailed = status === 'failed'
+  const isWaitingUser = status === 'waiting_speaker_mapping'
+  const isDone = status === 'completed'
+
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-bg-elevated to-bg-base shadow-sm">
+      {/* Subtle ambient glow tant qu'on traite */}
+      {!isDone && !isFailed && (
+        <div
+          aria-hidden
+          className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-32 bg-copper-500/10 blur-3xl pointer-events-none"
+        />
       )}
 
-      {(status === 'transcribing' || status === 'diarizing'
-        || status === 'processing' || status === 'uploaded'
-        || status === 'generating_final_transcript' || status === 'summarizing'
-        || status === 'extracting_actions') && (
-        <div className="flex items-center gap-2 text-xs text-fg-muted">
-          <Loader2 size={12} className="animate-spin" />
-          Traitement en arrière-plan… vous pouvez fermer cette page.
+      <div className="relative p-6 space-y-5">
+        {/* Header */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <Sparkles size={16} className="text-copper-500" />
+            <span className="text-sm font-semibold tracking-wide">
+              Pipeline IA — Compte rendu automatique
+            </span>
+          </div>
+          <RecordingStatusBadge status={status} />
         </div>
-      )}
 
-      {status === 'waiting_speaker_mapping' && recording && (
-        <Link
-          to="/meetings/$meetingId/recordings/$recordingId/speakers"
-          params={{ meetingId, recordingId: recording.id }}
-          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-copper-500 hover:bg-copper-600 text-white text-sm font-semibold transition"
-        >
-          <Users size={14} /> Identifier les voix détectées
-        </Link>
-      )}
+        {/* Erreur explicite */}
+        {isFailed && (
+          <div className="p-3.5 rounded-lg border border-red-500/30 bg-red-500/10 text-red-200 text-xs">
+            <div className="font-semibold mb-1">Échec du traitement</div>
+            <div className="opacity-90">{errorMessage || "Erreur inconnue — consultez les logs serveur."}</div>
+          </div>
+        )}
 
-      {status === 'completed' && recording && (
-        <div className="flex flex-wrap gap-2">
-          <Link
-            to="/meetings/$meetingId/recordings/$recordingId/summary"
-            params={{ meetingId, recordingId: recording.id }}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold transition"
-          >
-            <FileText size={14} /> Voir le compte rendu IA
-          </Link>
+        {/* Stepper visuel — pas d'étape passée si failed */}
+        {!isFailed && (
+          <ol className="space-y-2.5">
+            {PIPELINE_STEPS.map((step, idx) => {
+              const isPast = idx < currentIdx
+              const isCurrent = idx === currentIdx
+              const Icon = step.icon
+              return (
+                <li
+                  key={idx}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-300",
+                    isPast && "opacity-70",
+                    isCurrent && "bg-copper-500/10 border border-copper-500/30",
+                  )}
+                >
+                  <span className={cn(
+                    "w-7 h-7 rounded-full grid place-items-center shrink-0",
+                    isPast ? "bg-emerald-500/15 text-emerald-400"
+                      : isCurrent ? "bg-copper-500 text-white"
+                      : "bg-fg/10 text-fg-subtle",
+                  )}>
+                    {isPast
+                      ? <CheckCircle2 size={14} />
+                      : isCurrent
+                        ? (isWaitingUser ? <Users size={14} /> : <Loader2 size={14} className="animate-spin" />)
+                        : <Icon size={13} />}
+                  </span>
+                  <span className={cn(
+                    "text-sm",
+                    isPast && "text-fg-muted",
+                    isCurrent && "font-semibold text-fg",
+                    !isPast && !isCurrent && "text-fg-subtle",
+                  )}>
+                    {step.label}
+                  </span>
+                  {isCurrent && !isWaitingUser && (
+                    <span className="ml-auto text-2xs text-copper-400 tracking-widest uppercase font-semibold">
+                      En cours…
+                    </span>
+                  )}
+                </li>
+              )
+            })}
+          </ol>
+        )}
+
+        {/* Stats live quand on a déjà des données */}
+        {(speakersCount > 0 || hasDecisions || hasActions) && (
+          <div className="grid grid-cols-3 gap-2 text-center text-2xs">
+            <div className="p-2.5 rounded-lg bg-bg-base border border-border">
+              <div className="text-xl font-semibold text-copper-400 tabular-nums">{speakersCount}</div>
+              <div className="text-fg-subtle uppercase tracking-wider mt-0.5">Voix détectées</div>
+            </div>
+            <div className="p-2.5 rounded-lg bg-bg-base border border-border">
+              <div className="text-xl font-semibold text-copper-400 tabular-nums">{hasDecisions ? '✓' : '–'}</div>
+              <div className="text-fg-subtle uppercase tracking-wider mt-0.5">Décisions</div>
+            </div>
+            <div className="p-2.5 rounded-lg bg-bg-base border border-border">
+              <div className="text-xl font-semibold text-copper-400 tabular-nums">{hasActions ? '✓' : '–'}</div>
+              <div className="text-fg-subtle uppercase tracking-wider mt-0.5">Actions</div>
+            </div>
+          </div>
+        )}
+
+        {/* CTA contextuels */}
+        {isWaitingUser && recordingId && (
           <Link
             to="/meetings/$meetingId/recordings/$recordingId/speakers"
-            params={{ meetingId, recordingId: recording.id }}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border bg-bg-base hover:bg-fg/5 text-sm font-medium transition"
+            params={{ meetingId, recordingId }}
+            className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl bg-gradient-to-br from-copper-500 to-copper-600 hover:from-copper-600 hover:to-copper-700 text-white text-sm font-semibold shadow-md shadow-copper-500/30 transition-all duration-200"
           >
-            <CheckCircle2 size={14} /> Revoir les voix
+            <Users size={15} /> Identifier les voix détectées →
           </Link>
-        </div>
-      )}
+        )}
+
+        {isDone && recordingId && (
+          <div className="grid grid-cols-2 gap-2">
+            <Link
+              to="/meetings/$meetingId/recordings/$recordingId/summary"
+              params={{ meetingId, recordingId }}
+              className="flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white text-sm font-semibold shadow-md shadow-emerald-500/20 transition-all duration-200"
+            >
+              <FileText size={14} /> Voir le CR
+            </Link>
+            <Link
+              to="/meetings/$meetingId/recordings/$recordingId/speakers"
+              params={{ meetingId, recordingId }}
+              className="flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border border-border bg-bg-base hover:bg-fg/5 text-sm font-medium transition-all duration-200"
+            >
+              <CheckCircle2 size={14} /> Voix
+            </Link>
+          </div>
+        )}
+
+        {/* Info discrète */}
+        {!isFailed && !isWaitingUser && !isDone && (
+          <p className="text-2xs text-fg-subtle text-center">
+            Vous pouvez fermer cette page — le traitement continue côté serveur
+            et vous serez notifié par email.
+          </p>
+        )}
+      </div>
     </div>
   )
 }

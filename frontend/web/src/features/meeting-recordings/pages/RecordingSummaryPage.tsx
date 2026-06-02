@@ -9,6 +9,7 @@ import { AISummaryPanel } from '../components/AISummaryPanel'
 import { ExtractedActionsPanel } from '../components/ExtractedActionsPanel'
 import { ExtractedDecisionsPanel } from '../components/ExtractedDecisionsPanel'
 import { RecordingStatusBadge } from '../components/RecordingStatusBadge'
+import { SmartAudioPlayer } from '../components/SmartAudioPlayer'
 import { TranscriptViewer } from '../components/TranscriptViewer'
 import { useExtractions, useRecordingDetail, useRecordingExtraction } from '../hooks/useRecordingExtraction'
 import { useRecordingStatus } from '../hooks/useRecordingStatus'
@@ -80,6 +81,14 @@ export function RecordingSummaryPage() {
           <Loader2 size={14} className="animate-spin text-copper-500" />
           Traitement IA en cours… cette page se rafraîchit automatiquement.
         </div>
+      )}
+
+      {/* Lecteur audio complet — si on a l'URL de l'audio brut */}
+      {data.audio_url && (
+        <SmartAudioPlayer
+          url={data.audio_url}
+          label="Audio complet de la réunion"
+        />
       )}
 
       {/* Tabs */}

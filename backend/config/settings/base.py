@@ -320,6 +320,12 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+# Media (utilisé en fallback uniquement si le storage S3 par défaut échoue —
+# ex: en dev sans MinIO, ou lors d'une coupure S3 transitoire en prod).
+# Doit pointer vers un répertoire writable par l'utilisateur du worker.
+MEDIA_URL = "/media/"
+MEDIA_ROOT = env("MEDIA_ROOT", default=str(BASE_DIR / "media"))
+
 # ─── CORS ──────────────────────────────────────────────────────────────
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=["http://localhost:5173"])
 CORS_ALLOW_CREDENTIALS = True

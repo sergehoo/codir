@@ -96,34 +96,108 @@ class MeetingRecordingNestedViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["post"], url_path="upload",
             parser_classes=[MultiPartParser, FormParser])
     def upload(self, request, meeting_id=None):
-        """POST /meetings/{id}/recordings/upload/ — attache l'audio + déclenche pipeline."""
-        meeting = _get_meeting_or_404(meeting_id)
-        ser = UploadRecordingSerializer(data=request.data)
-        ser.is_valid(raise_exception=True)
+        """POST /meetings/{id}/recordings/upload/ — attache l'audio + déclenche pipeline.
 
-        rec_id = ser.validated_data.get("recording_id")
-        if rec_id:
-            rec = get_object_or_404(MeetingRecording.objects, id=rec_id, meeting=meeting)
-        else:
-            rec = create_recording(
-                meeting=meeting,
-                recorded_by=request.user,
-                title=ser.validated_data.get("title", ""),
-                consent_acknowledged=ser.validated_data.get("consent_acknowledged", False),
-            )
+        Stratégie d'erreur :
+        - Chaque étape (validation, création, save fichier, queue Celery) est
+          isolée pour pouvoir renvoyer un message précis au front (pas un 500
+          opaque).
+        - Si le save vers le storage par défaut (S3) plante (clés manquantes,
+          bucket inexistant, network), on log l'erreur et on remonte 502 avec
+          un message exploitable plutôt qu'un 500.
+        """
+        meeting = _get_meeting_or_404(meeting_id)
+
+        # ── 1. Validation payload ──────────────────────────────
+        ser = UploadRecordingSerializer(data=request.data)
+        try:
+            ser.is_valid(raise_exception=True)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("upload: validation KO meeting=%s err=%s", meeting_id, exc)
+            raise
 
         audio = ser.validated_data["audio"]
-        update_status(rec, RecordingStatus.UPLOADING)
-        mark_uploaded(
-            rec,
-            file_obj=audio,
-            mime_type=audio.content_type or "",
-            original_filename=getattr(audio, "name", ""),
-            duration_seconds=ser.validated_data.get("duration_seconds"),
+        logger.info(
+            "upload: meeting=%s file=%s size=%s mime=%s user=%s",
+            meeting_id, getattr(audio, "name", "?"), getattr(audio, "size", "?"),
+            audio.content_type, request.user,
         )
 
-        # Déclenche le pipeline async (transcription + diarisation).
-        process_recording_task.delay(str(rec.id))
+        # ── 2. Récupération ou création du recording ───────────
+        rec_id = ser.validated_data.get("recording_id")
+        try:
+            if rec_id:
+                rec = get_object_or_404(
+                    MeetingRecording.objects, id=rec_id, meeting=meeting,
+                )
+            else:
+                rec = create_recording(
+                    meeting=meeting,
+                    recorded_by=request.user,
+                    title=ser.validated_data.get("title", ""),
+                    consent_acknowledged=ser.validated_data.get(
+                        "consent_acknowledged", False,
+                    ),
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("upload: create_recording KO")
+            return Response(
+                {"detail": f"Impossible de créer l'enregistrement : {exc}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        # ── 3. Save du FileField (le point critique) ───────────
+        update_status(rec, RecordingStatus.UPLOADING)
+        try:
+            mark_uploaded(
+                rec,
+                file_obj=audio,
+                mime_type=audio.content_type or "",
+                original_filename=getattr(audio, "name", ""),
+                duration_seconds=ser.validated_data.get("duration_seconds"),
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception(
+                "upload: mark_uploaded KO recording=%s storage=%s",
+                rec.id,
+                type(rec.audio_file.storage).__name__,
+            )
+            # On marque le recording en FAILED pour ne pas le laisser fantôme.
+            try:
+                from .services import mark_failed
+                mark_failed(rec, f"Erreur stockage : {exc}")
+            except Exception:  # noqa: BLE001
+                pass
+            # 502 Bad Gateway : signale clairement que c'est une dépendance
+            # externe (S3) qui est en cause, pas un bug logique.
+            return Response(
+                {
+                    "detail": "Échec de l'enregistrement du fichier audio sur le stockage. "
+                              f"Cause : {type(exc).__name__}: {exc}. "
+                              "Vérifiez les variables d'environnement S3 (S3_ENDPOINT, "
+                              "S3_ACCESS_KEY, S3_SECRET_KEY, RECORDING_S3_BUCKET) ou "
+                              "basculez sur un stockage local en dev.",
+                    "recording_id": str(rec.id),
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        # ── 4. Déclenchement du pipeline Celery ────────────────
+        try:
+            process_recording_task.delay(str(rec.id))
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("upload: enqueue Celery KO recording=%s", rec.id)
+            # On ne marque pas failed : l'audio est uploadé, l'utilisateur
+            # pourra relancer manuellement /recordings/{id}/process/.
+            return Response(
+                {
+                    "detail": "Audio uploadé mais impossible de démarrer la transcription "
+                              f"({exc}). Le worker Celery est-il démarré ?",
+                    "recording_id": str(rec.id),
+                    "recording": MeetingRecordingDetailSerializer(rec).data,
+                },
+                status=status.HTTP_202_ACCEPTED,
+            )
 
         return Response(
             MeetingRecordingDetailSerializer(rec).data,

@@ -3,8 +3,8 @@ import { Mic, Volume2 } from 'lucide-react'
 
 import { cn } from '@/utils/cn'
 
+import { SmartAudioPlayer } from './SmartAudioPlayer'
 import { SpeakerParticipantSelect } from './SpeakerParticipantSelect'
-import { SpeakerSamplePlayer } from './SpeakerSamplePlayer'
 import type { DetectedSpeaker } from '../types/recording.types'
 
 interface Participant {
@@ -66,7 +66,7 @@ export function SpeakerCard({ speaker, participants, onChange, disabled }: Props
       </div>
 
       {sampleUrl ? (
-        <SpeakerSamplePlayer url={sampleUrl} label="Extrait représentatif" className="mb-4" />
+        <SmartAudioPlayer url={sampleUrl} label="Extrait représentatif" compact className="mb-4" />
       ) : (
         <div className="mb-4 flex items-center gap-2 text-2xs text-fg-subtle">
           <Volume2 size={12} /> Extrait audio non disponible pour cette voix.
