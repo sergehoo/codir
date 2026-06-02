@@ -208,10 +208,29 @@ class MeetingRecordingNestedViewSet(viewsets.ViewSet):
 # ─── Flat : /recordings/{id}/... ─────────────────────────────────
 
 class MeetingRecordingViewSet(viewsets.ReadOnlyModelViewSet):
-    """retrieve + update partiel + actions custom sur 1 recording."""
+    """retrieve + update partiel + actions custom sur 1 recording.
+
+    ⚠️ IMPORTANT : on définit `get_queryset()` au lieu de `queryset = ...`.
+
+    Le pattern `queryset = Model.objects.all()` s'évalue au moment de l'import
+    du module — alors que `current_organization` est encore None côté ContextVar
+    de TenantManager. Résultat : le queryset retourne `.none()` et toutes les
+    requêtes (incluant le polling `/status/`) renvoient 404 même si le
+    recording existe.
+
+    `get_queryset(self)` est appelé à chaque requête, après que la middleware
+    tenant a activé l'organisation courante → comportement attendu.
+    """
 
     permission_classes = [IsAuthenticated, CanAccessMeetingRecording]
-    queryset = MeetingRecording.objects.all()
+
+    def get_queryset(self):
+        # Évalué à chaque requête (avec tenant context actif).
+        return (
+            MeetingRecording.objects
+            .select_related("meeting", "recorded_by", "organization")
+            .prefetch_related("speakers", "segments", "extractions")
+        )
 
     def get_serializer_class(self):
         if self.action == "list":

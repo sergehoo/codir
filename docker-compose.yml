@@ -126,6 +126,90 @@ services:
     ulimits:
       nofile: 65535
 
+  # ── MinIO (stockage S3 compatible — audio des réunions, documents) ──
+  # Endpoint S3 sur :9000, console web admin sur :9001 (interne uniquement).
+  # En prod, on expose la console derrière Traefik si l'admin a besoin d'y
+  # accéder (sinon on garde le port interne et on utilise mc client).
+  codirminio:
+    image: minio/minio:RELEASE.2024-12-13T22-19-12Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      TZ: Africa/Abidjan
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?must be set}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?must be set}
+      # Region affiché dans le headers S3 — doit matcher S3_REGION côté Django.
+      MINIO_REGION: ${S3_REGION:-eu-west-1}
+      # URL publique présentée dans les URLs présignées générées par MinIO.
+      # IMPORTANT : doit être l'URL HTTPS accessible aux clients du navigateur,
+      # sinon les <audio src="..."> et fetch() échouent en mixed-content.
+      MINIO_BROWSER_REDIRECT_URL: ${MINIO_CONSOLE_PUBLIC_URL:-}
+      MINIO_SERVER_URL: ${MINIO_PUBLIC_URL:-}
+    volumes:
+      - codir_minio_data:/data
+    networks: [codir_network, proxy]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/minio/health/live || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    logging: *logging_rotated
+    cpus: "1.0"
+    mem_limit: 1024m
+    mem_reservation: 256m
+    labels:
+      # Route Traefik vers l'API S3 (pour URLs présignées côté navigateur)
+      - "traefik.enable=true"
+      - "traefik.docker.network=proxy"
+      # ── Endpoint S3 (codir-storage.<domain>) ──
+      - "traefik.http.routers.minio-s3.rule=Host(`${MINIO_S3_HOST:-storage-codir.datarium-dev.com}`)"
+      - "traefik.http.routers.minio-s3.entrypoints=websecure"
+      - "traefik.http.routers.minio-s3.tls=true"
+      - "traefik.http.routers.minio-s3.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.minio-s3.service=minio-s3"
+      - "traefik.http.services.minio-s3.loadbalancer.server.port=9000"
+      # ── Console admin web — optionnelle ──
+      - "traefik.http.routers.minio-console.rule=Host(`${MINIO_CONSOLE_HOST:-codir-minio-console.datarium-dev.com}`)"
+      - "traefik.http.routers.minio-console.entrypoints=websecure"
+      - "traefik.http.routers.minio-console.tls=true"
+      - "traefik.http.routers.minio-console.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.minio-console.service=minio-console"
+      - "traefik.http.services.minio-console.loadbalancer.server.port=9001"
+
+  # ── MinIO init (one-shot) — crée les buckets au premier démarrage ──
+  # Utilise `mc` (le client MinIO officiel) pour s'assurer que les buckets
+  # nécessaires existent et que leur policy est correcte (private par défaut).
+  # Tourne 1 fois puis exit 0 — `depends_on` côté codirweb attend `service_completed_successfully`.
+  codirminio_init:
+    image: minio/mc:RELEASE.2024-11-21T17-21-54Z
+    restart: "no"
+    depends_on:
+      codirminio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?must be set}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?must be set}
+      S3_BUCKET: ${S3_BUCKET:-codir-dev}
+      RECORDING_S3_BUCKET: ${RECORDING_S3_BUCKET:-codir-recordings-dev}
+    entrypoint: >
+      sh -c "
+        set -e ;
+        echo 'Configuration mc alias…' ;
+        mc alias set codir http://codirminio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" ;
+        echo 'Création bucket documents (S3_BUCKET)…' ;
+        mc mb --ignore-existing codir/\"$$S3_BUCKET\" ;
+        mc anonymous set none codir/\"$$S3_BUCKET\" ;
+        echo 'Création bucket recordings (RECORDING_S3_BUCKET)…' ;
+        mc mb --ignore-existing codir/\"$$RECORDING_S3_BUCKET\" ;
+        mc anonymous set none codir/\"$$RECORDING_S3_BUCKET\" ;
+        echo 'Buckets prêts. Liste :' ;
+        mc ls codir/ ;
+        echo 'OK' ;
+      "
+    networks: [codir_network]
+    logging: *logging_rotated
+
   # ── API Django (Gunicorn) ─────────────────────────────────────
   codirweb:
     build:
@@ -158,6 +242,11 @@ services:
         condition: service_healthy
       codirredis:
         condition: service_healthy
+      # MinIO doit être healthy + buckets créés avant que Django démarre.
+      codirminio:
+        condition: service_healthy
+      codirminio_init:
+        condition: service_completed_successfully
     restart: unless-stopped
     networks: [codir_network, proxy]
     init: true
@@ -264,7 +353,7 @@ services:
     image: ${CODIR_IMAGE:-codir-api:latest}
     command: >
       celery -A config worker
-      -Q default,celery,notifications,reports
+      -Q default,celery,notifications,reports,recordings
       --loglevel=warning
       --concurrency=${CELERY_CONCURRENCY:-2}
       --prefetch-multiplier=1 -Ofair
@@ -279,6 +368,10 @@ services:
         condition: service_healthy
       codirredis:
         condition: service_healthy
+      codirminio:
+        condition: service_healthy
+      codirminio_init:
+        condition: service_completed_successfully
     restart: unless-stopped
     networks: [codir_network]
     healthcheck:
@@ -383,6 +476,7 @@ volumes:
   codir_static:
   codir_media:
   codir_logs:
+  codir_minio_data:
 
 networks:
   codir_network:

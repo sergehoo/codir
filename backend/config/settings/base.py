@@ -289,22 +289,59 @@ CACHES = {
     },
 }
 
-# ─── Storage ───────────────────────────────────────────────────────────
+# ─── Storage S3/MinIO ──────────────────────────────────────────────────
+# Deux endpoints distincts :
+# - S3_ENDPOINT          → URL interne (Django ↔ MinIO via réseau Docker)
+# - S3_PUBLIC_ENDPOINT   → URL publique HTTPS (URLs présignées envoyées au
+#                          navigateur). En dev = même valeur. En prod =
+#                          https://storage.codir.datarium-dev.com (Traefik).
+#
+# `addressing_style=path` est OBLIGATOIRE pour MinIO (qui ne supporte pas
+# le virtual-hosted style par défaut). AWS S3 supporte les deux, donc ça
+# marche dans tous les cas.
+#
+# `signature_version=s3v4` requis par MinIO pour les URLs présignées valides.
+_S3_COMMON_OPTIONS = {
+    "endpoint_url": env("S3_ENDPOINT", default="http://codirminio:9000"),
+    "access_key": env("S3_ACCESS_KEY", default=""),
+    "secret_key": env("S3_SECRET_KEY", default=""),
+    "region_name": env("S3_REGION", default="eu-west-1"),
+    "default_acl": "private",
+    "file_overwrite": False,
+    "addressing_style": "path",
+    "signature_version": "s3v4",
+    # Custom domain : si défini, les URLs publiques sont générées avec ce
+    # host (utile pour servir via Traefik avec un domaine HTTPS).
+    "custom_domain": env("S3_PUBLIC_DOMAIN", default=""),
+    "url_protocol": env("S3_URL_PROTOCOL", default="https:"),
+    # Durée des URLs présignées (audio des recordings, docs PV, etc.).
+    # 1h par défaut — assez pour ouvrir une session de lecture sans
+    # régénérer trop souvent côté UI.
+    "querystring_expire": env.int("S3_PRESIGN_EXPIRE", default=3600),
+}
+
 STORAGES = {
+    # Bucket par défaut : documents, exports PDF, PV, avatars, etc.
     "default": {
         "BACKEND": "storages.backends.s3.S3Storage",
         "OPTIONS": {
+            **_S3_COMMON_OPTIONS,
             "bucket_name": env("S3_BUCKET", default="codir-dev"),
-            "endpoint_url": env("S3_ENDPOINT", default="http://localhost:9000"),
-            "access_key": env("S3_ACCESS_KEY", default=""),
-            "secret_key": env("S3_SECRET_KEY", default=""),
-            "region_name": env("S3_REGION", default="eu-west-1"),
-            "default_acl": "private",
-            "file_overwrite": False,
-            "addressing_style": "path",
         },
     },
     "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    # Bucket dédié aux enregistrements de réunions. Séparé pour permettre
+    # une politique de rétention différente (RECORDING_RAW_RETENTION_DAYS),
+    # des quotas IAM distincts, et un nettoyage indépendant.
+    # Pour l'utiliser : `MeetingRecording.audio_file.storage = recordings_storage`
+    # (déjà géré transparent via STORAGES défaut en bêta).
+    "recordings": {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {
+            **_S3_COMMON_OPTIONS,
+            "bucket_name": env("RECORDING_S3_BUCKET", default="codir-recordings-dev"),
+        },
+    },
 }
 
 # ─── OpenSearch ────────────────────────────────────────────────────────
