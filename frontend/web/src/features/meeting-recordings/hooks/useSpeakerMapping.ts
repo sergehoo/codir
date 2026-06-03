@@ -9,7 +9,11 @@ export function useSpeakers(recordingId: string | undefined | null) {
     queryKey: ['recording', 'speakers', recordingId],
     queryFn: () => recordingsApi.speakers(recordingId!),
     enabled: !!recordingId,
-    staleTime: 30_000,
+    // staleTime court : on veut refetch dès qu'on change de recording
+    // ou qu'on revient sur la page après une regénération en arrière-plan.
+    staleTime: 5_000,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   })
 }
 
