@@ -70,11 +70,20 @@ def _stream_file_response(file_field, *, content_type: str, filename: str):
     """
     from django.http import StreamingHttpResponse, Http404
 
+    bucket = getattr(file_field.storage, "bucket_name", "?")
+    name = file_field.name or "?"
+    logger.info(
+        "_stream_file_response: name=%s bucket=%s storage=%s",
+        name, bucket, type(file_field.storage).__name__,
+    )
     try:
         file_field.open("rb")
     except Exception as exc:  # noqa: BLE001
-        logger.exception("Impossible d'ouvrir le fichier audio : %s", exc)
-        raise Http404("Fichier inaccessible.")
+        logger.exception(
+            "Impossible d'ouvrir le fichier %s (bucket=%s, storage=%s): %s",
+            name, bucket, type(file_field.storage).__name__, exc,
+        )
+        raise Http404(f"Fichier inaccessible (storage={bucket}).")
 
     def _iter_chunks():
         try:
