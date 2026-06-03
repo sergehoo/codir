@@ -352,13 +352,75 @@ class MeetingRecordingViewSet(viewsets.ReadOnlyModelViewSet):
     # accessible publiquement (DNS/cert/firewall). Django lit le fichier
     # depuis le storage interne et le streame au client avec auth + permissions.
 
+    # ─── Streaming audio ──────────────────────────────────────
+    # Note auth : les balises HTML <audio>/<video> n'envoient PAS de header
+    # Authorization → on accepte ALTERNATIVEMENT un token signé en query
+    # string (?token=...). Voir `audio_tokens.verify_audio_token`.
+
+    def get_permissions(self):
+        # Override : pour les routes de stream audio, on contourne le check
+        # JWT habituel (qui retournerait 401) et on délègue à la vérification
+        # token explicite dans la méthode.
+        if self.action in ("stream_audio", "stream_speaker_sample"):
+            from rest_framework.permissions import AllowAny
+            return [AllowAny()]
+        return super().get_permissions()
+
+    def _verify_audio_access(self, request, recording):
+        """Vérifie l'accès au stream via JWT OU token signé.
+
+        Retourne True si OK, sinon retourne une Response 401/403.
+        """
+        from rest_framework.response import Response
+        from .audio_tokens import verify_audio_token
+
+        # Cas A : token signé en query (utilisé par les balises HTML <audio>)
+        token = request.GET.get("token") or request.query_params.get("token")
+        if token:
+            # Le path qu'on a signé est le path complet de la requête actuelle
+            # (sans query string). On reconstruit pour valider.
+            payload = verify_audio_token(token=token, resource_path=request.path)
+            if payload is None:
+                return Response(
+                    {"detail": "Token audio invalide ou expiré."},
+                    status=401,
+                )
+            return True
+
+        # Cas B : Bearer JWT classique (utilisé par fetch() côté API)
+        # On lance manuellement l'authentification + permission DRF.
+        from rest_framework_simplejwt.authentication import JWTAuthentication
+        try:
+            auth = JWTAuthentication().authenticate(request)
+        except Exception:  # noqa: BLE001
+            auth = None
+        if auth is None:
+            return Response(
+                {"detail": "Authentification requise (Bearer ou token)."},
+                status=401,
+            )
+        request.user, _ = auth
+        # Re-check permission sur l'objet recording
+        if not CanAccessMeetingRecording().has_object_permission(
+            request, self, recording,
+        ):
+            return Response({"detail": "Accès refusé."}, status=403)
+        return True
+
     @action(detail=True, methods=["get"], url_path="audio")
     def stream_audio(self, request, pk=None):
-        """GET /recordings/{id}/audio/ — stream l'audio complet de la réunion."""
-        rec = self.get_object()
+        """GET /recordings/{id}/audio/?token=... — stream audio complet."""
+        from django.http import Http404
+        # /!\ get_object() utilise get_queryset() qui scope au tenant courant.
+        # Comme on bypass l'auth ici, on lookup en unscoped puis on valide le token.
+        rec = MeetingRecording.unscoped.filter(id=pk).first()
+        if rec is None:
+            raise Http404("Recording introuvable.")
+        check = self._verify_audio_access(request, rec)
+        if check is not True:
+            return check
         if not rec.audio_file:
-            from django.http import Http404
-            raise Http404("Pas d'audio attaché à cet enregistrement.")
+            raise Http404("Pas d'audio attaché.")
         return _stream_file_response(
             rec.audio_file,
             content_type=rec.mime_type or "audio/webm",
@@ -368,14 +430,19 @@ class MeetingRecordingViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=["get"],
             url_path=r"speakers/(?P<speaker_label>[A-Za-z0-9_-]+)/sample")
     def stream_speaker_sample(self, request, pk=None, speaker_label=None):
-        """GET /recordings/{id}/speakers/{label}/sample/ — extrait audio d'un speaker."""
+        """GET /recordings/{id}/speakers/{label}/sample/?token=... — extrait audio."""
         from django.http import Http404
-        rec = self.get_object()
+        rec = MeetingRecording.unscoped.filter(id=pk).first()
+        if rec is None:
+            raise Http404("Recording introuvable.")
+        check = self._verify_audio_access(request, rec)
+        if check is not True:
+            return check
         speaker = rec.speakers.filter(speaker_label=speaker_label).first()
         if speaker is None:
             raise Http404("Speaker inconnu.")
         if not speaker.sample_audio:
-            raise Http404("Extrait audio non généré pour ce speaker.")
+            raise Http404("Extrait audio non généré.")
         return _stream_file_response(
             speaker.sample_audio,
             content_type="audio/mpeg",

@@ -54,20 +54,25 @@ class DetectedSpeakerSerializer(serializers.ModelSerializer):
                             "updated_at", "sample_audio_url")
 
     def get_sample_audio_url(self, obj):
-        """URL de stream Django (et NON MinIO public).
+        """URL de stream Django avec token signé éphémère (?token=...).
 
-        On retourne une URL `/api/v1/recordings/{rec_id}/speakers/{label}/sample/`
-        servie par Django qui re-stream le fichier depuis le storage interne.
-        Avantages : auth + permissions DRF, pas de dépendance DNS/cert MinIO public,
-        pas de problème de signature/expiration.
+        Le token signé permet à la balise HTML <audio src=...> d'accéder
+        au fichier sans header Authorization (impossible côté <audio>).
+        Validité : 30 min, lié au path + user → impossible à réutiliser.
         """
         if not obj.sample_audio:
             return None
+        from .audio_tokens import generate_audio_token
         request = self.context.get("request")
         path = f"/api/v1/recordings/{obj.recording_id}/speakers/{obj.speaker_label}/sample/"
+        user_id = getattr(getattr(request, "user", None), "id", "anon")
+        token = generate_audio_token(
+            resource_path=path, user_id=user_id, expiry_seconds=30 * 60,
+        )
+        full_path = f"{path}?token={token}"
         if request is not None:
-            return request.build_absolute_uri(path)
-        return path
+            return request.build_absolute_uri(full_path)
+        return full_path
 
 
 class SpeakerMappingInputSerializer(serializers.Serializer):
@@ -128,19 +133,24 @@ class MeetingRecordingListSerializer(serializers.ModelSerializer):
         )
 
     def get_audio_url(self, obj):
-        """URL de stream Django pour l'audio complet (pas MinIO public).
+        """URL de stream Django avec token signé éphémère (?token=...).
 
-        Endpoint : GET /api/v1/recordings/{id}/audio/
-        Sécurisé par DRF (auth + CanAccessMeetingRecording) ; pas besoin
-        que MinIO soit publiquement accessible.
+        Endpoint : GET /api/v1/recordings/{id}/audio/?token=...
+        Le token permet la lecture par <audio> sans Authorization header.
         """
         if not obj.audio_file:
             return None
+        from .audio_tokens import generate_audio_token
         request = self.context.get("request")
         path = f"/api/v1/recordings/{obj.id}/audio/"
+        user_id = getattr(getattr(request, "user", None), "id", "anon")
+        token = generate_audio_token(
+            resource_path=path, user_id=user_id, expiry_seconds=30 * 60,
+        )
+        full_path = f"{path}?token={token}"
         if request is not None:
-            return request.build_absolute_uri(path)
-        return path
+            return request.build_absolute_uri(full_path)
+        return full_path
 
 
 class MeetingRecordingDetailSerializer(MeetingRecordingListSerializer):

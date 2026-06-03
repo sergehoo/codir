@@ -24,18 +24,31 @@ export function SpeakerMappingPage() {
   })
   const recordingQuery = useRecordingDetail(recordingId)
 
-  const participants = useMemo(() => {
-    const list = participantsQuery.data ?? []
-    return list
-      .filter((p: any) => p.user)
-      .map((p: any) => ({
-        id: p.user.id,
-        full_name: p.user.full_name
-          || `${p.user.first_name ?? ''} ${p.user.last_name ?? ''}`.trim()
-          || p.user.email,
-        email: p.user.email,
+  type ResolvedParticipant = {
+    id: string
+    full_name: string
+    email: string
+    role: string
+  }
+
+  const participants = useMemo<ResolvedParticipant[]>(() => {
+    const list = (participantsQuery.data ?? []) as any[]
+    // Le backend renvoie : { user: UUID, user_detail: {id, email, ...}, role }
+    // On utilise user_detail (l'objet) plutôt que user (qui est juste l'UUID).
+    const out: ResolvedParticipant[] = []
+    for (const p of list) {
+      const u = p.user_detail ?? (typeof p.user === 'object' ? p.user : null)
+      if (!u || !u.id) continue
+      out.push({
+        id: u.id,
+        full_name: u.full_name
+          || `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim()
+          || u.email,
+        email: u.email,
         role: p.role,
-      }))
+      })
+    }
+    return out
   }, [participantsQuery.data])
 
   const onConfirmed = () => {
