@@ -434,15 +434,28 @@ class MeetingRecordingViewSet(viewsets.ReadOnlyModelViewSet):
         from django.http import Http404
         rec = MeetingRecording.unscoped.filter(id=pk).first()
         if rec is None:
+            logger.warning("stream_speaker_sample: recording %s introuvable", pk)
             raise Http404("Recording introuvable.")
         check = self._verify_audio_access(request, rec)
         if check is not True:
             return check
         speaker = rec.speakers.filter(speaker_label=speaker_label).first()
         if speaker is None:
+            logger.warning(
+                "stream_speaker_sample: speaker %s introuvable sur recording %s",
+                speaker_label, pk,
+            )
             raise Http404("Speaker inconnu.")
-        if not speaker.sample_audio:
-            raise Http404("Extrait audio non généré.")
+        if not speaker.sample_audio or not speaker.sample_audio.name:
+            logger.warning(
+                "stream_speaker_sample: sample_audio vide pour %s/%s",
+                pk, speaker_label,
+            )
+            raise Http404("Extrait audio non généré (pydub probablement KO lors de la diarisation).")
+        logger.info(
+            "stream_speaker_sample: %s/%s → %s",
+            pk, speaker_label, speaker.sample_audio.name,
+        )
         return _stream_file_response(
             speaker.sample_audio,
             content_type="audio/mpeg",

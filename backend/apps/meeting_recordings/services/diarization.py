@@ -48,10 +48,19 @@ def aggregate_speakers_from_segments(recording: MeetingRecording) -> list[Detect
         )
         ds.save()
 
-        # Extrait audio représentatif
-        sample = extract_speaker_sample(
-            recording, speaker_label=label, segments=segs,
-        )
+        # Extrait audio représentatif — on attrape toute exception pour
+        # ne pas faire planter toute la diarisation si pydub a un souci sur
+        # 1 speaker (les autres doivent pouvoir continuer).
+        try:
+            sample = extract_speaker_sample(
+                recording, speaker_label=label, segments=segs,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception(
+                "extract_speaker_sample a levé une exception pour %s : %s",
+                label, exc,
+            )
+            sample = None
         if sample is not None:
             ds.sample_audio.save(sample.name, sample, save=True)
 

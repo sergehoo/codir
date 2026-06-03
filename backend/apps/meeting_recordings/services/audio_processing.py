@@ -97,11 +97,19 @@ def extract_speaker_sample(
     `segments` = queryset/list de SpeakerSegment pour ce speaker.
     """
     if not _pydub_available():
+        logger.warning("extract_speaker_sample(%s) : pydub indisponible", speaker_label)
         return None
     if not recording.audio_file:
+        logger.warning("extract_speaker_sample(%s) : pas d'audio source", speaker_label)
         return None
     target = target_duration_sec or getattr(
         settings, "SPEAKER_SAMPLE_DURATION_SEC", 8,
+    )
+
+    logger.info(
+        "extract_speaker_sample(%s) : %d segments, target %ds",
+        speaker_label, len(list(segments) if not isinstance(segments, list) else segments),
+        target,
     )
 
     # Tri descendant par durée pour piquer les segments les plus parlés
@@ -143,17 +151,37 @@ def extract_speaker_sample(
                 chunks.append(full[start_ms:end_ms])
                 accumulated_ms += (end_ms - start_ms)
             if not chunks:
-                return None
+                # Audio trop court ou pas de segments → fallback : extraire les
+                # N premières secondes de l'audio complet (le speaker doit
+                # probablement parler dedans).
+                logger.info(
+                    "extract_speaker_sample(%s) : pas de segments utilisables, "
+                    "fallback sur les %ds initiaux de l'audio source",
+                    speaker_label, min(target, len(full) // 1000),
+                )
+                fallback_end = min(len(full), target_ms or 8000)
+                if fallback_end <= 0:
+                    return None
+                chunks = [full[:fallback_end]]
             # Concatène avec un fade-in/out léger entre les morceaux
             sample = chunks[0]
             for c in chunks[1:]:
-                sample = sample.append(c, crossfade=80)
+                # crossfade ne marche que si chaque chunk >= 80ms
+                try:
+                    sample = sample.append(c, crossfade=min(80, len(c) // 2, len(sample) // 2))
+                except Exception:  # noqa: BLE001
+                    sample = sample + c   # concat sans crossfade
             sample = sample.set_channels(1).set_frame_rate(22050)
             buf = io.BytesIO()
             # MP3 garantit la lecture inline dans tous les navigateurs.
             sample.export(buf, format="mp3", bitrate="64k")
-            return ContentFile(buf.getvalue(),
+            output = ContentFile(buf.getvalue(),
                                name=f"sample_{speaker_label}.mp3")
+            logger.info(
+                "extract_speaker_sample(%s) : OK (%d Ko, %dms)",
+                speaker_label, len(buf.getvalue()) // 1024, len(sample),
+            )
+            return output
         finally:
             os.unlink(src_path)
     except Exception as exc:  # noqa: BLE001
