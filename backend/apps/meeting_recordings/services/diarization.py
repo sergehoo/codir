@@ -26,6 +26,11 @@ def aggregate_speakers_from_segments(recording: MeetingRecording) -> list[Detect
 
     Génère aussi un extrait audio si pydub disponible.
     Idempotent : peut être re-joué.
+
+    Fallback : si AssemblyAI n'a renvoyé aucun segment diarisé (audio trop court
+    ou mono-locuteur sans diarisation activée), on crée UN seul speaker fictif
+    SPEAKER_00 couvrant toute la durée de l'audio. Comme ça l'utilisateur peut
+    quand même mapper son enregistrement à un participant.
     """
     segments = list(SpeakerSegment.unscoped.filter(recording=recording))
     grouped: dict[str, list[SpeakerSegment]] = defaultdict(list)
@@ -35,6 +40,38 @@ def aggregate_speakers_from_segments(recording: MeetingRecording) -> list[Detect
     # Reset des DetectedSpeaker existants pour re-créer proprement
     DetectedSpeaker.unscoped.filter(recording=recording).delete()
     out: list[DetectedSpeaker] = []
+
+    # ── Fallback : pas de diarisation AAI (audio court / mono-locuteur) ──
+    # On crée 1 speaker fictif avec un segment couvrant tout l'audio.
+    if not grouped:
+        logger.warning(
+            "Pas de segments diarisés pour recording %s — "
+            "création d'un speaker fallback SPEAKER_00 couvrant tout l'audio.",
+            recording.id,
+        )
+        total = recording.duration_seconds or 0
+        if total > 0:
+            # On crée 1 segment "synthétique" couvrant tout l'audio.
+            seg = SpeakerSegment.unscoped.create(
+                organization=recording.organization,
+                recording=recording,
+                speaker_label="SPEAKER_00",
+                start_time=0.0,
+                end_time=total,
+                text=(recording.transcript_raw or "")[:1000],
+                confidence=1.0,
+            )
+            grouped["SPEAKER_00"] = [seg]
+            # Met à jour transcript_with_speakers pour cohérence frontend
+            recording.transcript_with_speakers = [{
+                "speaker": "SPEAKER_00",
+                "start": 0.0,
+                "end": total,
+                "text": recording.transcript_raw or "",
+                "confidence": 1.0,
+            }]
+            recording.save(update_fields=["transcript_with_speakers", "updated_at"])
+
     for label, segs in sorted(grouped.items()):
         total_dur = sum((s.end_time - s.start_time) for s in segs)
         avg_conf = sum(s.confidence for s in segs) / max(len(segs), 1)
