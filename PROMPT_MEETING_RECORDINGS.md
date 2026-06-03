@@ -831,6 +831,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 - Fix : token signé HMAC en query string `?token=...`.
 - Endpoint stream : `get_permissions` retourne AllowAny + vérification token manuelle.
 
+### 11.7-bis TenantManager et auth alternative
+- Quand l'auth se fait via token signé (PAS JWT), la `TenantMiddleware`
+  ne s'exécute PAS → `current_organization` reste `None` → `TenantManager`
+  retourne `.none()` sur tous les lookups → **404 systématique**.
+- Fix : dans les endpoints stream audio, utiliser `Model.unscoped.filter(...)`
+  partout, JAMAIS `instance.related_set.filter(...)` qui passe par le manager
+  par défaut tenant-aware.
+- Exemple concret : `rec.speakers.filter(...)` → `DetectedSpeaker.unscoped.filter(recording=rec, ...)`
+
 ### 11.8 TanStack Query cache stale
 - Après regénération backend, le frontend peut afficher d'anciens speakers.
 - Fix : `staleTime: 5_000`, `refetchOnMount: 'always'`, `refetchOnWindowFocus: true`.

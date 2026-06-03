@@ -439,8 +439,16 @@ class MeetingRecordingViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=["get"],
             url_path=r"speakers/(?P<speaker_label>[A-Za-z0-9_-]+)/sample")
     def stream_speaker_sample(self, request, pk=None, speaker_label=None):
-        """GET /recordings/{id}/speakers/{label}/sample/?token=... — extrait audio."""
+        """GET /recordings/{id}/speakers/{label}/sample/?token=... — extrait audio.
+
+        ⚠️ AUTH PAR TOKEN : on bypass JWT/permission DRF (AllowAny dans
+        get_permissions). Conséquence : la TenantMiddleware n'a pas activé
+        de tenant context → on DOIT utiliser .unscoped sur TOUS les lookups,
+        sinon le manager TenantManager retourne .none() → 404 systématique.
+        """
         from django.http import Http404
+        from .models import DetectedSpeaker
+
         rec = MeetingRecording.unscoped.filter(id=pk).first()
         if rec is None:
             logger.warning("stream_speaker_sample: recording %s introuvable", pk)
@@ -448,11 +456,15 @@ class MeetingRecordingViewSet(viewsets.ReadOnlyModelViewSet):
         check = self._verify_audio_access(request, rec)
         if check is not True:
             return check
-        speaker = rec.speakers.filter(speaker_label=speaker_label).first()
+
+        # IMPORTANT : .unscoped car pas de tenant context quand auth=token
+        speaker = DetectedSpeaker.unscoped.filter(
+            recording=rec, speaker_label=speaker_label,
+        ).first()
         if speaker is None:
             logger.warning(
-                "stream_speaker_sample: speaker %s introuvable sur recording %s",
-                speaker_label, pk,
+                "stream_speaker_sample: speaker %s introuvable sur recording %s "
+                "(check .unscoped DB)", speaker_label, pk,
             )
             raise Http404("Speaker inconnu.")
         if not speaker.sample_audio or not speaker.sample_audio.name:
