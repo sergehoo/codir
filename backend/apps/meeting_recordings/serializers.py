@@ -54,10 +54,20 @@ class DetectedSpeakerSerializer(serializers.ModelSerializer):
                             "updated_at", "sample_audio_url")
 
     def get_sample_audio_url(self, obj):
-        try:
-            return obj.sample_audio.url if obj.sample_audio else None
-        except Exception:  # noqa: BLE001
+        """URL de stream Django (et NON MinIO public).
+
+        On retourne une URL `/api/v1/recordings/{rec_id}/speakers/{label}/sample/`
+        servie par Django qui re-stream le fichier depuis le storage interne.
+        Avantages : auth + permissions DRF, pas de dépendance DNS/cert MinIO public,
+        pas de problème de signature/expiration.
+        """
+        if not obj.sample_audio:
             return None
+        request = self.context.get("request")
+        path = f"/api/v1/recordings/{obj.recording_id}/speakers/{obj.speaker_label}/sample/"
+        if request is not None:
+            return request.build_absolute_uri(path)
+        return path
 
 
 class SpeakerMappingInputSerializer(serializers.Serializer):
@@ -118,10 +128,19 @@ class MeetingRecordingListSerializer(serializers.ModelSerializer):
         )
 
     def get_audio_url(self, obj):
-        try:
-            return obj.audio_file.url if obj.audio_file else None
-        except Exception:  # noqa: BLE001
+        """URL de stream Django pour l'audio complet (pas MinIO public).
+
+        Endpoint : GET /api/v1/recordings/{id}/audio/
+        Sécurisé par DRF (auth + CanAccessMeetingRecording) ; pas besoin
+        que MinIO soit publiquement accessible.
+        """
+        if not obj.audio_file:
             return None
+        request = self.context.get("request")
+        path = f"/api/v1/recordings/{obj.id}/audio/"
+        if request is not None:
+            return request.build_absolute_uri(path)
+        return path
 
 
 class MeetingRecordingDetailSerializer(MeetingRecordingListSerializer):

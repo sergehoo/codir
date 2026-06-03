@@ -56,6 +56,51 @@ def _get_meeting_or_404(meeting_id):
     return get_object_or_404(Meeting.objects, id=meeting_id)
 
 
+def _stream_file_response(file_field, *, content_type: str, filename: str):
+    """Stream un FileField (MinIO/S3/FS) au navigateur via Django.
+
+    Avantages vs. URL présignée :
+    - Django gère les permissions (sécurité)
+    - Pas besoin que le storage soit accessible publiquement
+    - Pas de problème de signature/expiration
+    - Support du range-request (lecture partielle audio) à terme
+
+    Pour les gros fichiers (>200 Mo), Django stream par chunks ; le navigateur
+    peut lancer la lecture audio dès les premiers Ko reçus.
+    """
+    from django.http import StreamingHttpResponse, Http404
+
+    try:
+        file_field.open("rb")
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Impossible d'ouvrir le fichier audio : %s", exc)
+        raise Http404("Fichier inaccessible.")
+
+    def _iter_chunks():
+        try:
+            while True:
+                chunk = file_field.read(64 * 1024)  # 64 Ko
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            try:
+                file_field.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+    response = StreamingHttpResponse(
+        _iter_chunks(),
+        content_type=content_type,
+    )
+    response["Content-Disposition"] = f'inline; filename="{filename}"'
+    # Cache léger côté navigateur (file content immutable une fois généré)
+    response["Cache-Control"] = "private, max-age=3600"
+    # Header utile pour le lecteur audio HTML5 (autorise le seek si supporté)
+    response["Accept-Ranges"] = "bytes"
+    return response
+
+
 # ─── Nested : /meetings/{meeting_id}/recordings/ ────────────────
 
 class MeetingRecordingNestedViewSet(viewsets.ViewSet):
@@ -72,7 +117,9 @@ class MeetingRecordingNestedViewSet(viewsets.ViewSet):
             .order_by("-created_at")
         )
         return Response(
-            MeetingRecordingListSerializer(qs, many=True).data,
+            MeetingRecordingListSerializer(
+                qs, many=True, context={"request": request},
+            ).data,
         )
 
     @action(detail=False, methods=["post"], url_path="start")
@@ -89,7 +136,7 @@ class MeetingRecordingNestedViewSet(viewsets.ViewSet):
         )
         update_status(rec, RecordingStatus.RECORDING)
         return Response(
-            MeetingRecordingDetailSerializer(rec).data,
+            MeetingRecordingDetailSerializer(rec, context={"request": request}).data,
             status=status.HTTP_201_CREATED,
         )
 
@@ -194,13 +241,15 @@ class MeetingRecordingNestedViewSet(viewsets.ViewSet):
                     "detail": "Audio uploadé mais impossible de démarrer la transcription "
                               f"({exc}). Le worker Celery est-il démarré ?",
                     "recording_id": str(rec.id),
-                    "recording": MeetingRecordingDetailSerializer(rec).data,
+                    "recording": MeetingRecordingDetailSerializer(
+                        rec, context={"request": request},
+                    ).data,
                 },
                 status=status.HTTP_202_ACCEPTED,
             )
 
         return Response(
-            MeetingRecordingDetailSerializer(rec).data,
+            MeetingRecordingDetailSerializer(rec, context={"request": request}).data,
             status=status.HTTP_202_ACCEPTED,
         )
 
@@ -244,7 +293,9 @@ class MeetingRecordingViewSet(viewsets.ReadOnlyModelViewSet):
         if meeting_id:
             qs = qs.filter(meeting_id=meeting_id)
         return Response(
-            MeetingRecordingListSerializer(qs[:50], many=True).data,
+            MeetingRecordingListSerializer(
+                qs[:50], many=True, context={"request": request},
+            ).data,
         )
 
     # ─── Pipeline ────────────────────────────────────────────────
@@ -283,13 +334,53 @@ class MeetingRecordingViewSet(viewsets.ReadOnlyModelViewSet):
     def speakers(self, request, pk=None):
         rec = self.get_object()
         speakers = rec.speakers.all().order_by("speaker_label")
-        return Response(DetectedSpeakerSerializer(speakers, many=True).data)
+        # Le serializer aura besoin de la request pour construire l'URL absolue
+        # du proxy audio (au lieu de l'URL S3/MinIO public).
+        ser = DetectedSpeakerSerializer(
+            speakers, many=True, context={"request": request},
+        )
+        return Response(ser.data)
 
     @action(detail=True, methods=["get"], url_path="segments")
     def segments(self, request, pk=None):
         rec = self.get_object()
         segs = rec.segments.all().order_by("start_time")
         return Response(SpeakerSegmentSerializer(segs, many=True).data)
+
+    # ─── Streaming audio (proxy depuis MinIO interne) ──────────
+    # Permet au navigateur d'écouter l'audio sans dépendre que MinIO soit
+    # accessible publiquement (DNS/cert/firewall). Django lit le fichier
+    # depuis le storage interne et le streame au client avec auth + permissions.
+
+    @action(detail=True, methods=["get"], url_path="audio")
+    def stream_audio(self, request, pk=None):
+        """GET /recordings/{id}/audio/ — stream l'audio complet de la réunion."""
+        rec = self.get_object()
+        if not rec.audio_file:
+            from django.http import Http404
+            raise Http404("Pas d'audio attaché à cet enregistrement.")
+        return _stream_file_response(
+            rec.audio_file,
+            content_type=rec.mime_type or "audio/webm",
+            filename=f"recording-{rec.id}.webm",
+        )
+
+    @action(detail=True, methods=["get"],
+            url_path=r"speakers/(?P<speaker_label>[A-Za-z0-9_-]+)/sample")
+    def stream_speaker_sample(self, request, pk=None, speaker_label=None):
+        """GET /recordings/{id}/speakers/{label}/sample/ — extrait audio d'un speaker."""
+        from django.http import Http404
+        rec = self.get_object()
+        speaker = rec.speakers.filter(speaker_label=speaker_label).first()
+        if speaker is None:
+            raise Http404("Speaker inconnu.")
+        if not speaker.sample_audio:
+            raise Http404("Extrait audio non généré pour ce speaker.")
+        return _stream_file_response(
+            speaker.sample_audio,
+            content_type="audio/mpeg",
+            filename=f"{speaker_label}.mp3",
+        )
 
     @action(detail=True, methods=["post"], url_path="speaker-mapping")
     def speaker_mapping(self, request, pk=None):
