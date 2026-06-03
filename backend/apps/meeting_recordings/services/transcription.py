@@ -50,15 +50,28 @@ def transcribe_recording(recording: MeetingRecording) -> bool:
     """
     aai = _build_aai_client()
     if aai is None:
+        msg = "Client AssemblyAI indisponible (clé manquante ou lib non installée)."
+        logger.error(msg)
+        recording.error_message = msg
+        recording.save(update_fields=["error_message", "updated_at"])
         return False
     if not recording.audio_file:
-        logger.error("recording %s : pas de fichier audio", recording.id)
+        msg = f"Pas de fichier audio attaché au recording {recording.id}"
+        logger.error(msg)
+        recording.error_message = msg
+        recording.save(update_fields=["error_message", "updated_at"])
         return False
 
-    # Best-effort : URL présignée S3 si le storage le supporte, sinon upload direct.
-    audio_input = _resolve_audio_url(recording)
+    # Télécharge l'audio depuis le storage en local — le SDK AAI uploadera
+    # ensuite vers leur infra. Bypass propre de la dépendance MinIO public.
+    audio_input = _download_audio_to_temp(recording)
     if audio_input is None:
+        msg = "Impossible de télécharger l'audio depuis le storage local."
+        logger.error(msg)
+        recording.error_message = msg
+        recording.save(update_fields=["error_message", "updated_at"])
         return False
+    logger.info("Audio téléchargé localement : %s", audio_input)
 
     try:
         # ─── Stratégie 2026 : ne PAS spécifier speech_model ─────
@@ -102,10 +115,10 @@ def transcribe_recording(recording: MeetingRecording) -> bool:
 
         transcriber = aai.Transcriber(config=config)
         logger.info(
-            "AAI transcribe start: recording=%s model=%s lang=%s url=%s",
+            "AAI transcribe start: recording=%s model=%s lang=%s local_path=%s",
             recording.id, model_name or "(défaut serveur)",
             config_kwargs.get("language_code"),
-            audio_input if isinstance(audio_input, str) else "(bytes uploadés)",
+            audio_input,
         )
         transcript = transcriber.transcribe(audio_input)
         if transcript.status == aai.TranscriptStatus.error:
@@ -127,27 +140,68 @@ def transcribe_recording(recording: MeetingRecording) -> bool:
         recording.error_message = f"AAI: {exc}"[:2000]
         recording.save(update_fields=["error_message", "updated_at"])
         return False
+    finally:
+        # Nettoyage systématique du fichier temp téléchargé (qu'on ait
+        # réussi ou échoué). Crucial pour ne pas remplir /tmp sur des
+        # workers qui traitent beaucoup d'audios.
+        import os
+        if isinstance(audio_input, str) and audio_input.startswith("/tmp/"):
+            try:
+                os.unlink(audio_input)
+                logger.debug("Audio temp supprimé : %s", audio_input)
+            except Exception:  # noqa: BLE001
+                pass
 
 
-def _resolve_audio_url(recording: MeetingRecording) -> Optional[str]:
-    """Renvoie une URL accessible publiquement (présignée S3) ou un path local."""
+def _download_audio_to_temp(recording: MeetingRecording) -> Optional[str]:
+    """Télécharge l'audio depuis le storage (MinIO/S3) vers un fichier temp local.
+
+    Stratégie volontaire : on NE PASSE PAS d'URL publique à AssemblyAI car :
+    1. L'URL présignée MinIO requiert que `storage-codir.datarium-dev.com` soit
+       accessible depuis Internet (DNS + certif TLS + Traefik OK) — fragile.
+    2. Un download local + upload AAI direct fonctionne dans tous les cas, même
+       si MinIO est en réseau privé.
+    3. C'est aussi plus sécurisé : l'audio n'est jamais exposé publiquement.
+
+    Le SDK `assemblyai` détecte un path local et upload le fichier sur leur
+    storage interne avant de lancer la transcription.
+
+    Retourne le path absolu du fichier temp. Caller DOIT cleaner via os.unlink().
+    """
+    import tempfile
+    if not recording.audio_file:
+        return None
+
+    # Préserve l'extension (webm/mp3/ogg/...) — utile pour que AAI sniff le type.
+    name = recording.audio_file.name or ""
+    ext = ".webm"
+    if "." in name:
+        ext = "." + name.rsplit(".", 1)[1].lower()
+
     try:
-        # Si le storage gère url() en présigné, AssemblyAI fetch directement.
-        return recording.audio_file.url
-    except Exception:  # noqa: BLE001
-        logger.warning("storage.url() KO — fallback : upload via assemblyai SDK")
-    # Fallback : on lit les octets et on laisse le SDK uploader vers AssemblyAI.
-    try:
+        # Ouvre le fichier depuis le storage Django (S3 ou FileSystem).
         recording.audio_file.open("rb")
         try:
-            data = recording.audio_file.read()
+            with tempfile.NamedTemporaryFile(
+                suffix=ext, delete=False, prefix="aai_",
+            ) as tmp:
+                # Streaming par chunks pour ne pas exploser la RAM sur de longs audios.
+                while True:
+                    chunk = recording.audio_file.read(1024 * 1024)  # 1 Mo
+                    if not chunk:
+                        break
+                    tmp.write(chunk)
+                tmp_path = tmp.name
         finally:
             recording.audio_file.close()
-        # Le SDK assemblyai accepte un path local OU des bytes via Transcriber.transcribe().
-        return data  # type: ignore[return-value]
+        return tmp_path
     except Exception as exc:  # noqa: BLE001
-        logger.exception("Impossible de lire l'audio: %s", exc)
+        logger.exception("Téléchargement audio local KO: %s", exc)
         return None
+
+
+# Alias rétrocompat : l'ancien nom est encore utilisé en cas d'imports externes.
+_resolve_audio_url = _download_audio_to_temp
 
 
 def _persist_utterances(recording: MeetingRecording, transcript) -> None:

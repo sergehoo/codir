@@ -61,36 +61,59 @@ def _fail(rec: MeetingRecording, msg: str):
 )
 def process_recording_task(self, recording_id: str):
     """Point d'entrée du pipeline : enchaîne transcription + diarisation + samples."""
+    logger.info("▶ process_recording_task START rec=%s", recording_id)
     rec = _get(recording_id)
-    if rec is None or rec.is_terminal:
+    if rec is None:
+        logger.error("process_recording_task: recording %s introuvable", recording_id)
+        return "missing"
+    if rec.is_terminal:
+        logger.info("process_recording_task: recording %s déjà terminal (%s)",
+                    recording_id, rec.status)
         return "skipped"
 
     if rec.status not in (RecordingStatus.UPLOADED, RecordingStatus.PROCESSING):
-        # On accepte aussi RECORDING / UPLOADING uniquement si déjà attaché.
         if not rec.audio_file:
             _fail(rec, "Pas de fichier audio attaché — process annulé.")
             return "no-audio"
 
     update_status(rec, RecordingStatus.PROCESSING)
 
-    # 1. Transcription (synchrone Celery — bloque ce worker pendant l'appel AAI)
+    # 1. Transcription — bloque ce worker pendant l'appel AAI (~1× durée audio)
     update_status(rec, RecordingStatus.TRANSCRIBING)
-    if not transcribe_recording(rec):
-        _fail(rec, "Échec transcription AssemblyAI.")
+    logger.info("▶ Transcription AAI rec=%s file=%s", recording_id,
+                rec.audio_file.name if rec.audio_file else "?")
+    try:
+        ok = transcribe_recording(rec)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("transcribe_recording a levé une exception")
+        _fail(rec, f"Transcription : {type(exc).__name__}: {exc}")
+        return "failed"
+    if not ok:
+        # transcribe_recording a stocké l'erreur dans recording.error_message
+        msg = rec.error_message or "Échec transcription AssemblyAI (raison inconnue)."
+        _fail(rec, msg)
         return "failed"
 
-    # 2. Diarisation = simple agrégation des segments AAI déjà annotés
+    # 2. Diarisation = agrégation des segments AAI déjà annotés
     update_status(rec, RecordingStatus.DIARIZING)
-    aggregate_speakers_from_segments(rec)
-    suggest_participants_for_speakers(rec)
+    logger.info("▶ Diarisation rec=%s", recording_id)
+    try:
+        aggregate_speakers_from_segments(rec)
+        suggest_participants_for_speakers(rec)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Diarisation KO")
+        _fail(rec, f"Diarisation : {type(exc).__name__}: {exc}")
+        return "failed"
 
-    # 3. État WAITING_SPEAKER_MAPPING : l'utilisateur prend le relais.
+    # 3. Attente de l'identification utilisateur
     update_status(rec, RecordingStatus.WAITING_SPEAKER_MAPPING)
+    logger.info("✓ process_recording_task DONE rec=%s — en attente mapping",
+                recording_id)
 
     try:
         notify_speaker_mapping_required_task.delay(str(rec.id))
     except Exception:  # noqa: BLE001
-        pass
+        logger.exception("notify_speaker_mapping_required KO (non bloquant)")
     return "waiting_mapping"
 
 
