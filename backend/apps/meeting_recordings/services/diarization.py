@@ -98,8 +98,30 @@ def aggregate_speakers_from_segments(recording: MeetingRecording) -> list[Detect
                 label, exc,
             )
             sample = None
+
         if sample is not None:
-            ds.sample_audio.save(sample.name, sample, save=True)
+            try:
+                ds.sample_audio.save(sample.name, sample, save=True)
+                logger.info(
+                    "Sample audio sauvegardé pour %s : %s (%d bytes)",
+                    label, ds.sample_audio.name, ds.sample_audio.size,
+                )
+            except Exception as exc:  # noqa: BLE001
+                # Upload S3/MinIO a planté — on log clairement mais on continue
+                # pour les autres speakers. L'utilisateur verra le speaker sans
+                # extrait audio écoutable (mais avec stats correctes).
+                logger.exception(
+                    "Échec save() sample_audio pour %s : %s",
+                    label, exc,
+                )
+                # On nettoie le name au cas où Django l'aurait setté avant le save final
+                ds.sample_audio = None
+                ds.save(update_fields=["sample_audio", "updated_at"])
+        else:
+            logger.warning(
+                "Sample audio non généré pour %s (pydub retourne None)",
+                label,
+            )
 
         out.append(ds)
     return out

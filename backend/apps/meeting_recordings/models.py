@@ -19,9 +19,26 @@ from __future__ import annotations
 import uuid
 
 from django.conf import settings
+from django.core.files.storage import storages
 from django.db import models
 
 from core.models import TenantAwareModel, TimestampedModel
+
+
+def _recordings_storage():
+    """Retourne le storage 'recordings' s'il existe, sinon le default.
+
+    Permet aux FileField audio (audio_file, sample_audio, etc.) d'utiliser
+    le bucket `codir-recordings-prod` qui est garanti opérationnel (l'audio
+    source y est déjà uploadé sans souci).
+
+    Fallback safe : si le storage 'recordings' n'est pas défini (settings
+    plus anciens), on utilise le default.
+    """
+    try:
+        return storages["recordings"]
+    except Exception:  # noqa: BLE001
+        return storages["default"]
 
 
 # ─── Enums ────────────────────────────────────────────────────
@@ -112,11 +129,13 @@ class MeetingRecording(TenantAwareModel):
     audio_file = models.FileField(
         upload_to=_audio_upload_path, max_length=600,
         null=True, blank=True,
+        storage=_recordings_storage,
         help_text="Fichier audio source (webm/ogg/wav/mp3). Vide tant qu'aucun upload.",
     )
     audio_normalized = models.FileField(
         upload_to=_audio_upload_path, max_length=600,
         null=True, blank=True,
+        storage=_recordings_storage,
         help_text="Version normalisée wav 16kHz mono (utilisée pour samples speakers).",
     )
 
@@ -241,6 +260,7 @@ class SpeakerSegment(TenantAwareModel):
     audio_excerpt = models.FileField(
         upload_to=_speaker_sample_upload_path, max_length=600,
         null=True, blank=True,
+        storage=_recordings_storage,
     )
 
     class Meta:
@@ -267,6 +287,7 @@ class DetectedSpeaker(TenantAwareModel):
     sample_audio = models.FileField(
         upload_to=_speaker_sample_upload_path, max_length=600,
         null=True, blank=True,
+        storage=_recordings_storage,
         help_text="Extrait audio représentatif pour écoute par l'utilisateur.",
     )
     total_segments = models.PositiveIntegerField(default=0)
