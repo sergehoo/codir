@@ -19,6 +19,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg \
         fonts-liberation \
         tzdata \
+        # WeasyPrint : rendu HTML → PDF (export CR de réunion)
+        libpango-1.0-0 \
+        libpangoft2-1.0-0 \
+        libcairo2 \
+        libgdk-pixbuf-2.0-0 \
+        libffi8 \
+        shared-mime-info \
+        # Fonts pour WeasyPrint (sinon caractères carrés)
+        fonts-dejavu \
         && rm -rf /var/lib/apt/lists/*
 
 # ── Builder ─────────────────────────────────────────────

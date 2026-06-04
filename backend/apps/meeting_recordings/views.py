@@ -618,3 +618,111 @@ class MeetingRecordingViewSet(viewsets.ReadOnlyModelViewSet):
                 logger.exception("push action_plan KO")
                 created.append({"extraction_id": str(ext.id), "error": str(exc)})
         return Response({"created": created})
+
+    # ─── Édition du CR (summary + ai_minutes) ────────────────
+    # L'utilisateur peut ajuster le résumé IA avant export. PATCH partiel,
+    # uniquement chair/secretary/recorded_by autorisés (cf. permission).
+
+    @action(detail=True, methods=["patch"], url_path="minutes")
+    def update_minutes(self, request, pk=None):
+        """PATCH /recordings/{id}/minutes/ — édite summary et/ou ai_minutes.
+
+        Body : { "summary": "...", "ai_minutes": "..." } (les 2 optionnels)
+        """
+        from django.utils import timezone
+        rec = self.get_object()
+        # Vérifie écriture (CanAccessMeetingRecording.has_object_permission)
+        # — la classe permission est déjà appliquée via get_permissions.
+
+        update_fields = []
+        if "summary" in request.data:
+            new_summary = (request.data.get("summary") or "")[:50000]
+            rec.summary = new_summary
+            update_fields.append("summary")
+        if "ai_minutes" in request.data:
+            new_minutes = (request.data.get("ai_minutes") or "")[:200000]
+            rec.ai_minutes = new_minutes
+            update_fields.append("ai_minutes")
+
+        if not update_fields:
+            return Response(
+                {"detail": "Aucun champ à mettre à jour (summary ou ai_minutes)."},
+                status=400,
+            )
+
+        update_fields.append("updated_at")
+        rec.save(update_fields=update_fields)
+
+        # Audit log
+        try:
+            from apps.audit_logs.services import log as audit_log
+            audit_log(
+                action="updated", target=rec,
+                description=f"Compte rendu IA modifié manuellement par {request.user}",
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+        return Response(MeetingRecordingDetailSerializer(
+            rec, context={"request": request},
+        ).data)
+
+    # ─── Exports DOCX / PDF ──────────────────────────────────
+
+    @action(detail=True, methods=["get"], url_path="export/docx")
+    def export_docx(self, request, pk=None):
+        """GET /recordings/{id}/export/docx/ — télécharge le CR au format Word."""
+        from django.http import HttpResponse
+        from .services.export import generate_minutes_docx
+
+        rec = self.get_object()
+        try:
+            data = generate_minutes_docx(rec)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("export_docx KO")
+            return Response(
+                {"detail": f"Erreur génération DOCX : {exc}"},
+                status=500,
+            )
+
+        filename = _slug_filename(rec, "docx")
+        response = HttpResponse(
+            data,
+            content_type=(
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            ),
+        )
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+    @action(detail=True, methods=["get"], url_path="export/pdf")
+    def export_pdf(self, request, pk=None):
+        """GET /recordings/{id}/export/pdf/ — télécharge le CR au format PDF."""
+        from django.http import HttpResponse
+        from .services.export import generate_minutes_pdf
+
+        rec = self.get_object()
+        try:
+            data = generate_minutes_pdf(rec)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("export_pdf KO")
+            return Response(
+                {"detail": f"Erreur génération PDF : {exc}"},
+                status=500,
+            )
+
+        filename = _slug_filename(rec, "pdf")
+        response = HttpResponse(data, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+
+def _slug_filename(rec, ext: str) -> str:
+    """Génère un nom de fichier propre depuis le titre de la réunion."""
+    import re
+    title = (getattr(rec.meeting, "title", "") or "compte-rendu").strip()
+    slug = re.sub(r"[^A-Za-z0-9_\- ]", "", title).strip().replace(" ", "_")[:80]
+    date = ""
+    if getattr(rec.meeting, "scheduled_start", None):
+        date = rec.meeting.scheduled_start.strftime("_%Y-%m-%d")
+    return f"CR_{slug}{date}.{ext}"

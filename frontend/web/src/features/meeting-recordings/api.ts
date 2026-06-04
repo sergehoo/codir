@@ -103,4 +103,29 @@ export const recordingsApi = {
     (await apiClient.post<{ created: Array<{ extraction_id: string; action_plan_id?: string; error?: string }> }>(
       `/recordings/${id}/create-action-plans/`, { extraction_ids: extractionIds },
     )).data,
+
+  /** Met à jour le résumé + minutes (édition manuelle avant export). */
+  updateMinutes: async (id: string, payload: { summary?: string; ai_minutes?: string }) =>
+    (await apiClient.patch<MeetingRecording>(
+      `/recordings/${id}/minutes/`, payload,
+    )).data,
+
+  /** Téléchargement DOCX (déclenche directement le download navigateur). */
+  exportDocxUrl: (id: string) => `/api/v1/recordings/${id}/export/docx/`,
+
+  /** Téléchargement PDF (déclenche directement le download navigateur). */
+  exportPdfUrl: (id: string) => `/api/v1/recordings/${id}/export/pdf/`,
+
+  /**
+   * Téléchargement direct du fichier (DOCX ou PDF) via axios pour conserver
+   * l'auth Bearer. Retourne un Blob qu'on peut transformer en download.
+   */
+  exportDocxBlob: async (id: string) =>
+    (await apiClient.get(`/recordings/${id}/export/docx/`, {
+      responseType: 'blob',
+    })).data as Blob,
+  exportPdfBlob: async (id: string) =>
+    (await apiClient.get(`/recordings/${id}/export/pdf/`, {
+      responseType: 'blob',
+    })).data as Blob,
 }

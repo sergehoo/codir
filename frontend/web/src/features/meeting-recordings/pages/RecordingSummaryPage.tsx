@@ -121,9 +121,11 @@ export function RecordingSummaryPage() {
 
       {tab === 'summary' && (
         <AISummaryPanel
+          recordingId={recordingId}
           summary={data.summary ?? ''}
           minutes={data.ai_minutes}
           onRegenerate={() => extr.regenerateSummary()}
+          onMinutesUpdated={() => rec.refetch()}
           isRegenerating={extr.isRegenerating}
         />
       )}
