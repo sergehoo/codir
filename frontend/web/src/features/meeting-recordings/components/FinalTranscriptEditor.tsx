@@ -63,6 +63,8 @@ export function FinalTranscriptEditor({ segments, onSave, isSaving }: Props) {
             </div>
             {isEditing ? (
               <textarea
+                id={`transcript-seg-${idx}`}
+                name={`transcript_segment_${idx}`}
                 value={seg.text}
                 onChange={(e) => {
                   const v = e.target.value
@@ -70,6 +72,7 @@ export function FinalTranscriptEditor({ segments, onSave, isSaving }: Props) {
                 }}
                 rows={3}
                 className="w-full rounded border border-border bg-bg-base p-2 text-sm focus:outline-none focus:border-copper-500/40"
+                aria-label={`Éditer le texte du segment ${idx + 1}`}
               />
             ) : (
               <div className="text-sm text-fg whitespace-pre-wrap">{seg.text}</div>

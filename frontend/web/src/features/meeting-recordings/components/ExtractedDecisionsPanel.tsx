@@ -96,10 +96,13 @@ export function ExtractedDecisionsPanel({ extractions, onCreate, isCreating }: P
             >
               <div className="flex items-start gap-3">
                 <input
+                  id={`decision-check-${ext.id}`}
+                  name={`decision-${ext.id}`}
                   type="checkbox"
                   className="mt-1 rounded border-border accent-copper-500"
                   checked={isSel}
                   onChange={() => toggle(ext.id)}
+                  aria-label={`Sélectionner la décision : ${p.title || 'sans titre'}`}
                 />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">

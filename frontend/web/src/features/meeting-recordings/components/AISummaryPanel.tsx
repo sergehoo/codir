@@ -241,10 +241,13 @@ export function AISummaryPanel({
             Édition manuelle (format Markdown — ## titres, * gras *, - listes)
           </div>
           <textarea
+            id={`minutes-editor-${recordingId}`}
+            name="ai_minutes"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             className="w-full min-h-[400px] p-3 rounded-lg border border-copper-500/40 bg-bg-base font-mono text-xs leading-relaxed focus:outline-none focus:border-copper-500"
             placeholder="## Résumé exécutif&#10;Trois phrases clés…&#10;&#10;## Décisions actées&#10;- Décision 1&#10;- Décision 2"
+            aria-label="Éditer le compte rendu IA en Markdown"
           />
           <p className="text-2xs text-fg-muted">
             Les modifications seront utilisées pour les exports Word/PDF.

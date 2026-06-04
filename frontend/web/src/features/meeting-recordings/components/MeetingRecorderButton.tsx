@@ -121,8 +121,11 @@ export function MeetingRecorderButton({
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold">Enregistrement IA de la réunion</div>
             <p className="text-xs text-fg-muted mt-1">{CONSENT_TEXT}</p>
-            <label className="flex items-center gap-2 mt-3 cursor-pointer text-xs text-fg">
+            <label className="flex items-center gap-2 mt-3 cursor-pointer text-xs text-fg"
+                   htmlFor={`consent-ack-${meetingId}`}>
               <input
+                id={`consent-ack-${meetingId}`}
+                name="consent_acknowledged"
                 type="checkbox"
                 checked={consentAck}
                 onChange={(e) => setConsentAck(e.target.checked)}
