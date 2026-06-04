@@ -1,9 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
-  endOfDay, endOfWeek, format, isAfter, isBefore, startOfDay, startOfMonth, startOfWeek,
+  endOfDay, endOfWeek, isAfter, isBefore, startOfDay, startOfMonth, startOfWeek,
 } from 'date-fns'
-import { fr } from 'date-fns/locale'
 import { ArrowUpRight, CalendarClock, Filter, MapPin, Plus, Users, Search } from 'lucide-react'
 import { useState } from 'react'
 
@@ -12,6 +11,7 @@ import { PremiumButton } from '@/components/widgets/PremiumButton'
 import { SectionHeader } from '@/components/widgets/SectionHeader'
 import { SkeletonList } from '@/components/widgets/Skeleton'
 import { StatusBadge } from '@/components/widgets/StatusBadge'
+import { safeFormat, toDate } from '@/utils/safeDate'
 
 import { meetingsApi, meetingsKeys } from './api'
 import type { Meeting } from '@/types'
@@ -44,7 +44,9 @@ function groupByPeriod(meetings: Meeting[]): Bucket[] {
   const past: Meeting[] = []
 
   meetings.forEach((m) => {
-    const d = new Date(m.scheduled_start)
+    // safe : si scheduled_start est null/undefined, on met le meeting dans "past"
+    // (au lieu de crasher avec un Invalid Date).
+    const d = toDate(m.scheduled_start) ?? new Date(0)
     if (m.status === 'in_progress') return inProgress.push(m)
     if (m.status === 'completed' || m.status === 'cancelled' || isBefore(d, today)) {
       return past.push(m)
@@ -169,7 +171,7 @@ function MeetingRow({ m, index }: { m: Meeting; index: number }) {
             <StatusBadge status={m.status} className="shrink-0" />
           </div>
           <div className="flex items-center gap-5 text-2xs uppercase tracking-wider text-fg-subtle flex-wrap">
-            <span>{format(new Date(m.scheduled_start), "EEE d MMM · HH:mm", { locale: fr })}</span>
+            <span>{safeFormat(m.scheduled_start, "EEE d MMM · HH:mm", { fallback: 'Date non définie' })}</span>
             {m.location && (
               <span className="inline-flex items-center gap-1"><MapPin size={11} /> {m.location}</span>
             )}
