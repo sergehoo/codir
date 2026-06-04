@@ -1,0 +1,43 @@
+Vos tâches en cours — Synthèse hebdomadaire {{ week_label }}
+
+Bonjour {{ user_name }},
+
+Voici un récapitulatif de vos {{ total }} tâche(s) encore ouverte(s) dans CODIR.
+
+═══════════════════════════════════════════
+RÉSUMÉ
+═══════════════════════════════════════════
+  En retard      : {{ overdue }}
+  Cette semaine  : {{ this_week }}
+  Plus tard      : {{ later }}
+  Sans échéance  : {{ no_date }}
+═══════════════════════════════════════════
+
+{% if overdue_tasks %}━━━ ⚠ EN RETARD ({{ overdue }}) ━━━
+{% for t in overdue_tasks %}
+  • {{ t.title }}
+    Dossier : {{ t.plan_title }} — retard de {{ t.days_late }} jour(s){% if t.priority == 'critical' %} — CRITIQUE{% elif t.priority == 'high' %} — Élevée{% endif %}
+{% endfor %}
+{% endif %}
+{% if this_week_tasks %}━━━ CETTE SEMAINE ({{ this_week }}) ━━━
+{% for t in this_week_tasks %}
+  • {{ t.title }}
+    Dossier : {{ t.plan_title }} — échéance {{ t.due_date }}{% if t.priority == 'critical' %} — CRITIQUE{% elif t.priority == 'high' %} — Élevée{% endif %}
+{% endfor %}
+{% endif %}
+{% if later_tasks %}━━━ PLUS TARD ({{ later }}) ━━━
+{% for t in later_tasks %}
+  • {{ t.title }} — échéance {{ t.due_date }}{% endfor %}
+{% endif %}
+{% if no_date_tasks %}━━━ SANS DATE ({{ no_date }}) ━━━
+{% for t in no_date_tasks %}
+  • {{ t.title }} (pensez à fixer une échéance){% endfor %}
+{% endif %}
+
+Voir mes tâches : {{ link_url }}
+
+--
+Cet email récapitulatif vous parvient chaque vendredi à 9h00. Vous pouvez
+désactiver les notifications hebdomadaires depuis vos préférences dans l'application.
+
+CODIR Executive Platform

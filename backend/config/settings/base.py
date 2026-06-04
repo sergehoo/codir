@@ -248,6 +248,13 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.notifications.tasks.send_manager_daily_summaries_task",
         "schedule": crontab(minute=15, hour=16),
     },
+    # ── Synthèse hebdomadaire utilisateur — vendredi 09h00 ──
+    # Email avec toutes les tâches NON-TERMINÉES groupées par échéance.
+    # CELERY_TIMEZONE = Africa/Abidjan → 9h locale Abidjan.
+    "send-weekly-user-task-digest": {
+        "task": "apps.notifications.tasks.send_weekly_user_task_digest_task",
+        "schedule": crontab(minute=0, hour=9, day_of_week="fri"),
+    },
     # ── EPI Score snapshot quotidien — 06h00 (avant tous les autres) ──
     "snapshot-epi-score-daily": {
         "task": "apps.dashboards.tasks.snapshot_epi_score_daily",

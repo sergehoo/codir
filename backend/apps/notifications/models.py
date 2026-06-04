@@ -44,6 +44,7 @@ class NotificationStatus(models.TextChoices):
 
 class ReminderType(models.TextChoices):
     DAILY_USER = "daily_user", "Rappel quotidien utilisateur"
+    WEEKLY_USER_DIGEST = "weekly_user_digest", "Synthèse hebdomadaire utilisateur"
     MANAGER_SUMMARY = "manager_summary", "Résumé manager"
     DUE_SOON = "due_soon", "Échéance proche"
     OVERDUE = "overdue", "Tâche en retard"
@@ -84,6 +85,8 @@ class NotificationEvent(models.TextChoices):
     USER_REASSIGNED = "user_reassigned", "Affectation mise à jour"
     USER_DEACTIVATED = "user_deactivated", "Compte désactivé"
     USER_REACTIVATED = "user_reactivated", "Compte réactivé"
+    # Digest hebdomadaire utilisateur (vendredi 9h)
+    WEEKLY_USER_DIGEST = "weekly_user_digest", "Synthèse hebdomadaire des tâches"
 
 
 # ─── Notification ─────────────────────────────────────────────

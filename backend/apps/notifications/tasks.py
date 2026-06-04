@@ -20,7 +20,8 @@ from .models import (
 )
 from .services import (
     get_or_create_preference, log_transport, mark_email_sent, render_email,
-    send_user_task_reminder, send_manager_branch_summary,
+    send_user_task_reminder, send_user_weekly_digest,
+    send_manager_branch_summary,
     notify_task_due_soon, notify_task_overdue,
 )
 
@@ -202,6 +203,45 @@ def send_daily_task_reminders_task():
         )
         if result:
             count += 1
+    return count
+
+
+@shared_task
+def send_weekly_user_task_digest_task():
+    """Synthèse hebdomadaire des tâches NON-TERMINÉES (vendredi 9h00 Africa/Abidjan).
+
+    Pour chaque user actif ayant ≥ 1 tâche ouverte (TODO / IN_PROGRESS /
+    BLOCKED / OVERDUE), envoie un email récapitulatif groupé par échéance
+    (en retard, cette semaine, plus tard, sans date).
+
+    Anti-doublon : 1 envoi max par user par semaine (clé = lundi de la semaine).
+    Si la tâche tourne 2× le même vendredi (retry, redémarrage), seul le 1er envoi
+    aboutit — les suivants sont silencieusement ignorés (cf. `prevent_duplicate_reminder`).
+    """
+    from apps.accounts.models import User
+    from apps.action_plans.services import get_user_open_tasks
+
+    count = 0
+    qs = User.objects.filter(is_active=True).exclude(email="")
+    for user in qs:
+        m = user.memberships.filter(is_active=True).first()
+        if not m:
+            continue
+        try:
+            get_or_create_preference(user, organization=m.organization)
+        except Exception:  # noqa: BLE001
+            continue
+        tasks = list(get_user_open_tasks(user, organization=m.organization))
+        if not tasks:
+            continue
+        try:
+            result = send_user_weekly_digest(
+                user=user, organization=m.organization, tasks=tasks,
+            )
+            if result:
+                count += 1
+        except Exception:  # noqa: BLE001
+            logger.exception("Échec digest hebdo pour %s", user.email)
     return count
 
 

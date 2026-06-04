@@ -1,0 +1,141 @@
+{% extends "notifications/emails/base.html" %}
+{% block content %}
+<h1 style="font-family:Georgia,serif;font-size:22px;color:#1a1614;margin:0 0 6px 0;">
+  Vos tâches en cours
+</h1>
+<p style="color:#a89e8e;font-size:12px;text-transform:uppercase;letter-spacing:2px;margin:0 0 22px 0;">
+  Synthèse hebdomadaire — {{ week_label }}
+</p>
+
+<p style="color:#3a302a;font-size:15px;line-height:1.6;margin:0 0 18px 0;">
+  Bonjour {{ user_name }},
+</p>
+<p style="color:#3a302a;font-size:14px;line-height:1.6;margin:0 0 22px 0;">
+  Veuillez trouver ci-dessous la liste des <strong>{{ total }}</strong>
+  tâche{{ total|pluralize }} qui necessitent votre attention {{ total|pluralize }} dans CODIR.
+</p>
+
+{# ── Bandeau stats compact ── #}
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%"
+       style="margin:0 0 24px 0;border-collapse:separate;border-spacing:6px 0;">
+  <tr>
+    <td style="background:{% if overdue %}#fdf0ea{% else %}#f5f1ec{% endif %};
+               border-left:3px solid {% if overdue %}#c44e1c{% else %}#d8cfc1{% endif %};
+               padding:10px 12px;text-align:center;border-radius:3px;width:33%;">
+      <div style="font-size:20px;font-weight:700;color:{% if overdue %}#c44e1c{% else %}#6b5d4f{% endif %};">
+        {{ overdue }}
+      </div>
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#6b5d4f;margin-top:2px;">
+        En retard
+      </div>
+    </td>
+    <td style="background:#fbf7f1;border-left:3px solid #B8693C;
+               padding:10px 12px;text-align:center;border-radius:3px;width:33%;">
+      <div style="font-size:20px;font-weight:700;color:#B8693C;">{{ this_week }}</div>
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#6b5d4f;margin-top:2px;">
+        Cette semaine
+      </div>
+    </td>
+    <td style="background:#f5f1ec;border-left:3px solid #a89e8e;
+               padding:10px 12px;text-align:center;border-radius:3px;width:33%;">
+      <div style="font-size:20px;font-weight:700;color:#6b5d4f;">{{ later|add:no_date }}</div>
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#6b5d4f;margin-top:2px;">
+        À planifier
+      </div>
+    </td>
+  </tr>
+</table>
+
+{# ── Section : En retard ── #}
+{% if overdue_tasks %}
+<h2 style="color:#c44e1c;font-size:14px;text-transform:uppercase;letter-spacing:1.5px;
+           margin:24px 0 10px 0;border-bottom:1px solid #f0d5c5;padding-bottom:6px;">
+  ⚠ En retard ({{ overdue }})
+</h2>
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+  {% for t in overdue_tasks %}
+  <tr>
+    <td style="padding:8px 0;border-bottom:1px solid #f5f1ec;">
+      <div style="font-size:14px;color:#1a1614;font-weight:600;">{{ t.title }}</div>
+      <div style="font-size:11px;color:#a89e8e;margin-top:2px;">
+        Dossier : {{ t.plan_title }} ·
+        <span style="color:#c44e1c;">en retard de {{ t.days_late }} jour{{ t.days_late|pluralize }}</span>
+        {% if t.priority == 'critical' %} · <span style="color:#c44e1c;">CRITIQUE</span>
+        {% elif t.priority == 'high' %} · <span style="color:#B8693C;">Élevée</span>{% endif %}
+      </div>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+{# ── Section : Cette semaine ── #}
+{% if this_week_tasks %}
+<h2 style="color:#B8693C;font-size:14px;text-transform:uppercase;letter-spacing:1.5px;
+           margin:24px 0 10px 0;border-bottom:1px solid #e9d6c5;padding-bottom:6px;">
+  Cette semaine ({{ this_week }})
+</h2>
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+  {% for t in this_week_tasks %}
+  <tr>
+    <td style="padding:8px 0;border-bottom:1px solid #f5f1ec;">
+      <div style="font-size:14px;color:#1a1614;font-weight:500;">{{ t.title }}</div>
+      <div style="font-size:11px;color:#a89e8e;margin-top:2px;">
+        Dossier : {{ t.plan_title }} · échéance {{ t.due_date }}
+        {% if t.priority == 'critical' %} · <span style="color:#c44e1c;">CRITIQUE</span>
+        {% elif t.priority == 'high' %} · <span style="color:#B8693C;">Élevée</span>{% endif %}
+      </div>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+{# ── Section : Plus tard ── #}
+{% if later_tasks %}
+<h2 style="color:#6b5d4f;font-size:14px;text-transform:uppercase;letter-spacing:1.5px;
+           margin:24px 0 10px 0;border-bottom:1px solid #e9e2d8;padding-bottom:6px;">
+  Échéances ultérieures ({{ later }})
+</h2>
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+  {% for t in later_tasks %}
+  <tr>
+    <td style="padding:8px 0;border-bottom:1px solid #f5f1ec;">
+      <div style="font-size:14px;color:#3a302a;">{{ t.title }}</div>
+      <div style="font-size:11px;color:#a89e8e;margin-top:2px;">
+        {{ t.plan_title }} · {{ t.due_date }}
+      </div>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+{# ── Section : Sans date ── #}
+{% if no_date_tasks %}
+<h2 style="color:#a89e8e;font-size:14px;text-transform:uppercase;letter-spacing:1.5px;
+           margin:24px 0 10px 0;border-bottom:1px solid #e9e2d8;padding-bottom:6px;">
+  Sans échéance définie ({{ no_date }})
+</h2>
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+  {% for t in no_date_tasks %}
+  <tr>
+    <td style="padding:8px 0;border-bottom:1px solid #f5f1ec;">
+      <div style="font-size:14px;color:#3a302a;">{{ t.title }}</div>
+      <div style="font-size:11px;color:#a89e8e;margin-top:2px;">
+        {{ t.plan_title }} — pensez à fixer une échéance
+      </div>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+{% include "notifications/emails/_button.html" with link_url=link_url button_label="Voir mes tâches" %}
+
+<p style="color:#a89e8e;font-size:12px;line-height:1.5;margin:24px 0 0 0;
+          border-top:1px solid #e9e2d8;padding-top:16px;">
+  Cet email récapitulatif vous parvient chaque vendredi à 9h00. Vous pouvez
+  désactiver les notifications hebdomadaires depuis vos préférences dans l'application.
+</p>
+{% endblock %}

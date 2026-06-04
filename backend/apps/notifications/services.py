@@ -324,6 +324,101 @@ def send_user_task_reminder(*, user, organization, tasks, time_slot: str | None 
     )
 
 
+def send_user_weekly_digest(*, user, organization, tasks):
+    """Synthèse hebdomadaire des tâches ouvertes d'un utilisateur.
+
+    Envoyée automatiquement chaque vendredi à 9h00 par Celery Beat.
+    `tasks` : itérable d'ActionTask non terminées (TODO / IN_PROGRESS / BLOCKED / OVERDUE).
+
+    Dédup : 1 envoi max par user par semaine (clé = user + reminder_date du lundi).
+    """
+    if not tasks:
+        return None
+
+    # Anti-doublon hebdo : on indexe sur le lundi de la semaine pour qu'un retry
+    # de la tâche le même vendredi ne réenvoie pas.
+    today = timezone.localdate()
+    week_monday = today - timedelta(days=today.weekday())
+    _, created = prevent_duplicate_reminder(
+        user=user, task=None,
+        reminder_type=ReminderType.WEEKLY_USER_DIGEST,
+        reminder_date=week_monday,
+        time_slot=ReminderTimeSlot.ANYTIME,
+    )
+    if not created:
+        return None
+
+    ctx = _build_weekly_digest_context(user, list(tasks))
+    return notify(
+        organization=organization, recipient=user,
+        event=NotificationEvent.WEEKLY_USER_DIGEST,
+        level=NotificationLevel.INFO,
+        priority=NotificationPriority.NORMAL,
+        channel=NotificationChannel.EMAIL,
+        title=f"Vos tâches en cours — semaine du {week_monday.strftime('%d/%m')}",
+        body=(f"{ctx['total']} tâche(s) ouverte(s) — "
+              f"{ctx['overdue']} en retard, {ctx['this_week']} cette semaine."),
+        link_url="/my-tasks", action_url="/my-tasks",
+        metadata={"week": week_monday.isoformat()},
+        send_email=True,
+        email_template="weekly_user_digest",
+        email_context=ctx,
+    )
+
+
+def _build_weekly_digest_context(user, tasks: list) -> dict:
+    """Groupe les tâches par catégorie d'échéance pour l'email digest."""
+    today = timezone.localdate()
+    end_of_week = today + timedelta(days=(6 - today.weekday()))  # dimanche
+
+    overdue = []
+    this_week = []
+    later = []
+    no_date = []
+
+    for t in tasks:
+        item = {
+            "id": str(t.id),
+            "title": t.title or "Sans titre",
+            "due_date": t.due_date.strftime("%d/%m/%Y") if t.due_date else None,
+            "due_date_iso": t.due_date.isoformat() if t.due_date else None,
+            "priority": t.priority,
+            "status": t.status,
+            "plan_title": getattr(t.action_plan, "title", "") or "—",
+            "url": f"/tasks/{t.id}",
+        }
+        if not t.due_date:
+            no_date.append(item)
+        elif t.due_date < today:
+            item["days_late"] = (today - t.due_date).days
+            overdue.append(item)
+        elif t.due_date <= end_of_week:
+            this_week.append(item)
+        else:
+            later.append(item)
+
+    # Tri intra-section par échéance
+    overdue.sort(key=lambda x: x.get("due_date_iso", ""))
+    this_week.sort(key=lambda x: x.get("due_date_iso", ""))
+    later.sort(key=lambda x: x.get("due_date_iso", ""))
+
+    return {
+        "user_name": user.get_full_name() or user.email,
+        "recipient_name": user.get_full_name() or user.email,
+        "user_email": user.email,
+        "total": len(tasks),
+        "overdue": len(overdue),
+        "this_week": len(this_week),
+        "later": len(later),
+        "no_date": len(no_date),
+        "overdue_tasks": overdue,
+        "this_week_tasks": this_week,
+        "later_tasks": later,
+        "no_date_tasks": no_date,
+        "week_label": today.strftime("%d/%m/%Y"),
+    }
+
+
 def send_manager_branch_summary(*, manager, organization, subsidiary=None, direction=None, summary: dict, time_slot: str | None = None):
     today = timezone.localdate()
     slot = time_slot or slot_now()
