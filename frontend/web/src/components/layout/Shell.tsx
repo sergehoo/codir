@@ -1,7 +1,7 @@
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
 import {
   Bell, Building2, CheckSquare, Gauge, LayoutDashboard, LogOut,
-  RotateCcw, Scale, Search, User as UserIcon, Users,
+  RotateCcw, Scale, ScrollText, Search, User as UserIcon, Users,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -23,10 +23,11 @@ const NAV: { to: string; label: string; icon: typeof Gauge }[] = [
 //{ to: '/documents',     label: 'Documents',        icon: FileText },
 ]
 
-const SETTINGS_NAV: { to: string; label: string; icon: typeof Gauge }[] = [
+const SETTINGS_NAV: { to: string; label: string; icon: typeof Gauge; adminOnly?: boolean }[] = [
   { to: '/settings/members',        label: 'Membres CODIR',     icon: Users },
   { to: '/settings/subsidiaries',   label: 'Filiales',          icon: Building2 },
   { to: '/settings/meeting-series', label: 'Séries récurrentes', icon: RotateCcw },
+  { to: '/settings/logs',           label: 'Journal d\'activité', icon: ScrollText, adminOnly: true },
   { to: '/profile',                 label: 'Mon profil',        icon: UserIcon },
 ]
 
@@ -155,7 +156,7 @@ export function Shell() {
           <div className="text-2xs uppercase tracking-widest text-fg-subtle px-3 pt-7 pb-3 font-semibold flex items-center gap-2.5">
             <span className="divider-accent" /> Paramètres
           </div>
-          {SETTINGS_NAV.map((n) => {
+          {SETTINGS_NAV.filter((n) => !n.adminOnly || user?.is_executive).map((n) => {
             const active = isActivePath(path, n.to)
             return (
               <Link

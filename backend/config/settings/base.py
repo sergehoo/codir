@@ -394,7 +394,28 @@ SPECTACULAR_SETTINGS = {
 # ─── Axes (anti brute-force) ───────────────────────────────────────────
 AXES_FAILURE_LIMIT = 5
 AXES_COOLOFF_TIME = timedelta(minutes=15)
-AXES_LOCKOUT_PARAMETERS = ["ip_address", "username"]
+
+# ⚠️ Verrouillage par username UNIQUEMENT.
+#
+# La config initiale ["ip_address", "username"] verrouille indépendamment
+# par IP **ou** par username — derrière un reverse proxy (Traefik), tous les
+# utilisateurs partagent la même IP publique observée par Django : un seul
+# user qui rate 5 fois bloquait toute l'organisation.
+#
+# Pour ré-introduire un contrôle par IP plus tard (couple IP+user, pas OR) :
+#   AXES_LOCKOUT_PARAMETERS = [["ip_address", "username"]]   # liste imbriquée = AND
+#   AXES_IPWARE_PROXY_COUNT = 1
+#   AXES_IPWARE_META_PRECEDENCE_ORDER = ("HTTP_X_FORWARDED_FOR", "REMOTE_ADDR")
+AXES_LOCKOUT_PARAMETERS = ["username"]
+
+# Reset le compteur d'échecs après une connexion réussie — évite qu'un user
+# en début de journée garde un compteur > 0 qui finit par le verrouiller.
+AXES_RESET_ON_SUCCESS = True
+
+# Derrière Traefik, on lit l'IP réelle dans X-Forwarded-For (utile pour les
+# logs même si on ne verrouille plus par IP).
+AXES_IPWARE_PROXY_COUNT = 1
+AXES_IPWARE_META_PRECEDENCE_ORDER = ("HTTP_X_FORWARDED_FOR", "REMOTE_ADDR")
 
 # ─── IA ────────────────────────────────────────────────────────────────
 OPENAI_API_KEY = env("OPENAI_API_KEY", default="")

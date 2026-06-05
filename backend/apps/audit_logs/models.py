@@ -18,6 +18,12 @@ class AuditAction(models.TextChoices):
     CANCELLED = "cancelled", "Annulé"
     LOGIN = "login", "Connexion"
     LOGOUT = "logout", "Déconnexion"
+    LOGIN_FAILED = "login_failed", "Échec de connexion"
+    PASSWORD_RESET = "password_reset", "Réinitialisation mot de passe"
+    USER_CREATED = "user_created", "Compte utilisateur créé"
+    USER_DEACTIVATED = "user_deactivated", "Compte désactivé"
+    USER_REACTIVATED = "user_reactivated", "Compte réactivé"
+    USER_REASSIGNED = "user_reassigned", "Affectation mise à jour"
     CUSTOM = "custom", "Custom"
 
 

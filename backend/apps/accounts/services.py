@@ -147,6 +147,16 @@ def create_user_with_membership(
             kind="created" if raw_password else "reassigned",
         )
 
+    # Audit
+    _audit(
+        action="user_created" if raw_password else "user_reassigned",
+        target=user, actor=created_by, organization=organization,
+        description=(
+            f"Compte créé : {user.email}" if raw_password
+            else f"Affectation : {user.email}"
+        ),
+    )
+
     return user, membership, raw_password
 
 
@@ -177,6 +187,11 @@ def reset_user_password(
             raw_password=raw, membership=None, actor=actor,
             kind="password_reset",
         )
+
+    _audit(
+        action="password_reset", target=user, actor=actor, organization=organization,
+        description=f"MDP réinitialisé pour {user.email}",
+    )
     return raw
 
 
@@ -225,6 +240,13 @@ def reassign_membership(
             raw_password=None, membership=membership, actor=actor,
             kind="reassigned",
         )
+
+    _audit(
+        action="user_reassigned", target=membership.user, actor=actor,
+        organization=membership.organization,
+        description=f"Affectation modifiée : {membership.user.email}",
+        diff={"updated_fields": updated_fields},
+    )
     return membership
 
 
@@ -248,6 +270,11 @@ def deactivate_user(*, user, organization, actor=None, send_email: bool = True):
             raw_password=None, membership=None, actor=actor,
             kind="deactivated",
         )
+
+    _audit(
+        action="user_deactivated", target=user, actor=actor, organization=organization,
+        description=f"Compte désactivé : {user.email}",
+    )
     return user
 
 
@@ -269,7 +296,47 @@ def reactivate_user(*, user, organization, actor=None, send_email: bool = True):
             raw_password=None, membership=None, actor=actor,
             kind="reactivated",
         )
+
+    _audit(
+        action="user_reactivated", target=user, actor=actor, organization=organization,
+        description=f"Compte réactivé : {user.email}",
+    )
     return user
+
+
+# ─── Helper audit centralisé (org explicite, bypass tenant context) ──
+
+def _audit(
+    *, action: str, target=None, actor=None, organization=None,
+    description: str = "", diff: dict | None = None,
+):
+    """Wrapper audit_log qui passe l'org explicitement.
+
+    `audit_logs.services.log` lit l'org depuis ContextVar — pas toujours set
+    quand on est dans un service appelé hors requête HTTP.
+    """
+    try:
+        from django.contrib.contenttypes.models import ContentType
+
+        from apps.audit_logs.models import AuditLog
+        from core.middleware.audit import audit_context
+        from core.managers.tenant import current_organization
+
+        org = organization or current_organization.get()
+        if org is None:
+            return None
+        ctx = audit_context.get() or {}
+        target_type = ContentType.objects.get_for_model(target.__class__) if target else None
+        target_id = str(target.pk) if target else ""
+        target_repr = (str(target)[:300] if target else "")
+        AuditLog.unscoped.create(
+            organization=org, actor=actor, action=action,
+            target_type=target_type, target_id=target_id, target_repr=target_repr,
+            description=description, diff_json=diff or {},
+            ip=ctx.get("ip"), user_agent=ctx.get("user_agent", ""),
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("audit failed (action=%s)", action)
 
 
 # ─── Helper notification email centralisé ─────────────────────
