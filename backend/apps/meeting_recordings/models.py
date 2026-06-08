@@ -188,6 +188,17 @@ class MeetingRecording(TenantAwareModel):
         help_text="Si renseigné : l'audio brut a été purgé (rétention).",
     )
 
+    # ── Options pipeline ──
+    skip_speaker_detection = models.BooleanField(
+        default=False,
+        help_text=(
+            "Si True : on saute la diarisation (détection des voix) et l'étape "
+            "d'identification utilisateur. Le résumé IA est généré directement "
+            "depuis le texte brut, sans attribution par speaker. Utile pour les "
+            "audios mono-locuteur ou quand on veut accélérer le pipeline (×2-3 plus rapide)."
+        ),
+    )
+
     class Meta:
         ordering = ["-created_at"]
         indexes = [

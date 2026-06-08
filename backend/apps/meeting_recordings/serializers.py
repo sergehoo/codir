@@ -175,6 +175,7 @@ class StartRecordingSerializer(serializers.Serializer):
     """POST /meetings/{id}/recordings/start/"""
     title = serializers.CharField(max_length=250, required=False, allow_blank=True)
     consent_acknowledged = serializers.BooleanField(default=False)
+    skip_speaker_detection = serializers.BooleanField(default=False)
 
 
 class InitChunkedUploadSerializer(serializers.Serializer):
@@ -196,6 +197,7 @@ class InitChunkedUploadSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=250, required=False, allow_blank=True)
     duration_seconds = serializers.FloatField(required=False, min_value=0)
     consent_acknowledged = serializers.BooleanField(default=False)
+    skip_speaker_detection = serializers.BooleanField(default=False)
 
     def validate_total_size_bytes(self, value):
         from django.conf import settings
@@ -230,6 +232,7 @@ class UploadRecordingSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=250, required=False, allow_blank=True)
     duration_seconds = serializers.FloatField(required=False, min_value=0)
     consent_acknowledged = serializers.BooleanField(default=False)
+    skip_speaker_detection = serializers.BooleanField(default=False)
 
     def validate_audio(self, value):
         from django.conf import settings

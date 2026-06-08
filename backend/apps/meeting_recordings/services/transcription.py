@@ -104,9 +104,15 @@ def transcribe_recording(recording: MeetingRecording) -> bool:
         # Si tu veux forcer un modèle spécifique, définis ASSEMBLYAI_MODEL
         # dans .env.prod (ex: "universal-2", "slam-1") ET assure-toi que la
         # version du SDK assemblyai installée le supporte.
+        # ⚡ skip_speaker_detection : si activé, on demande à AAI de PAS faire
+        # la diarisation. AAI traite alors l'audio ~2× plus vite (pas de
+        # clustering speakers + pas d'utterances structurées). Le pipeline
+        # Celery enchaîne ensuite directement transcript → résumé sans
+        # passer par l'étape WAITING_SPEAKER_MAPPING.
+        wants_speakers = not bool(getattr(recording, "skip_speaker_detection", False))
         config_kwargs = dict(
             language_code=getattr(settings, "ASSEMBLYAI_LANGUAGE", "fr"),
-            speaker_labels=True,
+            speaker_labels=wants_speakers,
             # Garde les mots exacts (CR exécutif) sans masquage profanité
             filter_profanity=False,
             # punctuate=True et format_text=True sont les défauts → texte lisible

@@ -56,6 +56,7 @@ def init_chunked_upload(
     title: str = "",
     duration_seconds: Optional[float] = None,
     consent_acknowledged: bool = False,
+    skip_speaker_detection: bool = False,
 ) -> tuple[MeetingRecording, int, int]:
     """Crée le MeetingRecording cible et retourne (rec, chunk_size, total_chunks).
 
@@ -85,6 +86,7 @@ def init_chunked_upload(
         original_filename=filename[:300],
         mime_type=content_type[:80],
         file_size=total_size_bytes,
+        skip_speaker_detection=bool(skip_speaker_detection),
     )
     if consent_acknowledged:
         rec.consent_acknowledged_at = timezone.now()

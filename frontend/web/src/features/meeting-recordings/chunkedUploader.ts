@@ -27,6 +27,8 @@ export interface ChunkedUploaderOptions {
   title?: string
   durationSeconds?: number
   consentAcknowledged?: boolean
+  /** Si true : le serveur saute la diarisation (gain 2-3× sur le temps total). */
+  skipSpeakerDetection?: boolean
 
   /** Taille d'un chunk en octets (défaut : 50 Mo). */
   chunkSizeBytes?: number
@@ -108,11 +110,15 @@ async function withRetry<T>(
 }
 
 export class ChunkedUploader {
-  private opts: Required<Omit<ChunkedUploaderOptions, 'contentType' | 'title' | 'durationSeconds' | 'consentAcknowledged' | 'onProgress' | 'onChunkComplete' | 'abortSignal'>> & {
+  private opts: Required<Omit<ChunkedUploaderOptions,
+    'contentType' | 'title' | 'durationSeconds' | 'consentAcknowledged'
+    | 'skipSpeakerDetection' | 'onProgress' | 'onChunkComplete' | 'abortSignal'
+  >> & {
     contentType?: string
     title?: string
     durationSeconds?: number
     consentAcknowledged?: boolean
+    skipSpeakerDetection?: boolean
     onProgress?: (percent: number) => void
     onChunkComplete?: (chunkIndex: number, totalChunks: number) => void
     abortSignal?: AbortSignal
@@ -132,6 +138,7 @@ export class ChunkedUploader {
       title: opts.title,
       durationSeconds: opts.durationSeconds,
       consentAcknowledged: opts.consentAcknowledged,
+      skipSpeakerDetection: opts.skipSpeakerDetection,
       onProgress: opts.onProgress,
       onChunkComplete: opts.onChunkComplete,
       abortSignal: opts.abortSignal,
@@ -154,6 +161,7 @@ export class ChunkedUploader {
           title: this.opts.title ?? '',
           duration_seconds: this.opts.durationSeconds,
           consent_acknowledged: this.opts.consentAcknowledged ?? false,
+          skip_speaker_detection: this.opts.skipSpeakerDetection ?? false,
         },
         { timeout: 30_000 },
       ).then(r => r.data),

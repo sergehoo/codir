@@ -43,6 +43,7 @@ export const recordingsApi = {
       title?: string
       durationSeconds?: number
       consentAcknowledged?: boolean
+      skipSpeakerDetection?: boolean
       onProgress?: (percent: number) => void
     } = {},
   ): Promise<MeetingRecording> => {
@@ -65,6 +66,7 @@ export const recordingsApi = {
       title: opts.title,
       durationSeconds: opts.durationSeconds,
       consentAcknowledged: opts.consentAcknowledged,
+      skipSpeakerDetection: opts.skipSpeakerDetection,
       onProgress: opts.onProgress,
       onChunkComplete: opts.onChunkComplete,
       abortSignal: opts.abortSignal,
@@ -81,6 +83,7 @@ export const recordingsApi = {
       title?: string
       durationSeconds?: number
       consentAcknowledged?: boolean
+      skipSpeakerDetection?: boolean
       onProgress?: (percent: number) => void
     } = {},
   ) => {
@@ -89,6 +92,7 @@ export const recordingsApi = {
     if (opts.title) form.append('title', opts.title)
     if (opts.durationSeconds != null) form.append('duration_seconds', String(opts.durationSeconds))
     form.append('consent_acknowledged', String(opts.consentAcknowledged ?? false))
+    form.append('skip_speaker_detection', String(opts.skipSpeakerDetection ?? false))
     // Extension cohérente avec le type MIME — important pour AssemblyAI.
     const filename = audioBlob.type.includes('webm') ? 'recording.webm'
       : audioBlob.type.includes('ogg') ? 'recording.ogg'

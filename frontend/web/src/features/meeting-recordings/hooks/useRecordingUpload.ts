@@ -23,6 +23,7 @@ export function useRecordingUpload(meetingId: string) {
       title?: string
       durationSeconds?: number
       consentAcknowledged?: boolean
+      skipSpeakerDetection?: boolean
     }) => {
       setProgress(0)
       setChunkInfo(null)
@@ -36,6 +37,7 @@ export function useRecordingUpload(meetingId: string) {
         title: vars.title,
         durationSeconds: vars.durationSeconds,
         consentAcknowledged: vars.consentAcknowledged,
+        skipSpeakerDetection: vars.skipSpeakerDetection,
         onProgress: setProgress,
         onChunkComplete: isChunked
           ? (idx, total) => setChunkInfo({ current: idx + 1, total })

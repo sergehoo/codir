@@ -15,10 +15,16 @@ from ..models import MeetingRecording, RecordingStatus
 def create_recording(
     *, meeting, recorded_by, title: str = "",
     consent_acknowledged: bool = False,
+    skip_speaker_detection: bool = False,
 ) -> MeetingRecording:
     """Crée un MeetingRecording vide en statut CREATED.
 
     Le fichier audio est attaché ultérieurement par `mark_uploaded()`.
+
+    `skip_speaker_detection` : si True, le pipeline Celery sautera la
+    diarisation et l'étape WAITING_SPEAKER_MAPPING (gain ~2-3× sur le temps
+    total). Utile pour audios mono-locuteur ou quand l'identification n'est
+    pas critique.
     """
     rec = MeetingRecording(
         organization=meeting.organization,
@@ -27,6 +33,7 @@ def create_recording(
         title=title or f"Enregistrement {meeting.title}"[:250],
         status=RecordingStatus.CREATED,
         started_at=timezone.now(),
+        skip_speaker_detection=bool(skip_speaker_detection),
     )
     if consent_acknowledged:
         rec.consent_acknowledged_at = timezone.now()

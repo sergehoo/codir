@@ -94,6 +94,33 @@ def process_recording_task(self, recording_id: str):
         _fail(rec, msg)
         return "failed"
 
+    # ⚡ Fast-path : si l'utilisateur a coché "skip voix", on saute la
+    # diarisation ET l'étape WAITING_SPEAKER_MAPPING. On enchaîne directement
+    # generate_final_transcript (no-op si transcript_with_speakers vide) +
+    # résumé IA. Pipeline 2-3× plus rapide pour les audios mono-locuteur ou
+    # quand on ne veut pas attribuer les passages par speaker.
+    if getattr(rec, "skip_speaker_detection", False):
+        logger.info("⚡ skip_speaker_detection=True : pipeline accéléré rec=%s",
+                    recording_id)
+        try:
+            # Génère un transcript final basique depuis le texte brut.
+            update_status(rec, RecordingStatus.GENERATING_FINAL_TRANSCRIPT)
+            generate_final_transcript(rec)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Final transcript (skip mode) KO")
+            _fail(rec, f"Transcript final : {type(exc).__name__}: {exc}")
+            return "failed"
+
+        # Chaîne directement le résumé + extractions (qui termine en COMPLETED).
+        try:
+            summarize_recording_task.delay(str(rec.id))
+        except Exception:  # noqa: BLE001
+            logger.exception("summarize_recording enqueue KO (skip mode)")
+            # On ne marque pas failed : le résumé peut être relancé manuellement.
+        logger.info("✓ process_recording_task DONE rec=%s — fast-path lancé",
+                    recording_id)
+        return "skipped_speakers"
+
     # 2. Diarisation = agrégation des segments AAI déjà annotés
     update_status(rec, RecordingStatus.DIARIZING)
     logger.info("▶ Diarisation rec=%s", recording_id)

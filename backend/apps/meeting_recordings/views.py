@@ -142,6 +142,7 @@ class MeetingRecordingNestedViewSet(viewsets.ViewSet):
             recorded_by=request.user,
             title=ser.validated_data.get("title", ""),
             consent_acknowledged=ser.validated_data.get("consent_acknowledged", False),
+            skip_speaker_detection=ser.validated_data.get("skip_speaker_detection", False),
         )
         update_status(rec, RecordingStatus.RECORDING)
         return Response(
@@ -193,6 +194,9 @@ class MeetingRecordingNestedViewSet(viewsets.ViewSet):
                     title=ser.validated_data.get("title", ""),
                     consent_acknowledged=ser.validated_data.get(
                         "consent_acknowledged", False,
+                    ),
+                    skip_speaker_detection=ser.validated_data.get(
+                        "skip_speaker_detection", False,
                     ),
                 )
         except Exception as exc:  # noqa: BLE001
@@ -776,6 +780,7 @@ def init_chunked(request, meeting_id):
             title=ser.validated_data.get("title", ""),
             duration_seconds=ser.validated_data.get("duration_seconds"),
             consent_acknowledged=ser.validated_data.get("consent_acknowledged", False),
+            skip_speaker_detection=ser.validated_data.get("skip_speaker_detection", False),
         )
     except ValueError as exc:
         return Response({"detail": str(exc)}, status=400)

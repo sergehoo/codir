@@ -51,6 +51,10 @@ export function MeetingRecorderButton({
   )
   // Mode "idle" : laisse choisir entre capter le micro ou téléverser un fichier.
   const [inputMode, setInputMode] = useState<'record' | 'upload'>('record')
+  // ⚡ Skip diarisation : si coché, le pipeline saute la détection des voix
+  // ET l'étape d'identification utilisateur → CR généré direct, ~2-3× plus vite.
+  // Default OFF pour préserver la qualité (diarisation = attribution par speaker).
+  const [skipSpeakerDetection, setSkipSpeakerDetection] = useState(false)
   // Si l'upload échoue, on garde le Blob audio en mémoire pour permettre un retry
   // sans re-enregistrer la réunion (l'audio capturé est précieux).
   const [savedBlob, setSavedBlob] = useState<Blob | null>(null)
@@ -83,6 +87,7 @@ export function MeetingRecorderButton({
         recordingId: recording?.id,
         durationSeconds: mr.durationMs / 1000,
         consentAcknowledged: consentAck,
+        skipSpeakerDetection,
       })
       setRecording(created)
       onRecordingCreated?.(created)
@@ -127,6 +132,7 @@ export function MeetingRecorderButton({
         recordingId: recording?.id,
         durationSeconds,
         consentAcknowledged: consentAck,
+        skipSpeakerDetection,
         title,
       } as any)  // upload accepte Blob ; File hérite de Blob
       setRecording(created)
@@ -191,6 +197,31 @@ export function MeetingRecorderButton({
             </label>
           </div>
         </div>
+
+        {/* ─── Option vitesse : skip détection des voix ─── */}
+        <label
+          htmlFor={`skip-speakers-${meetingId}`}
+          className="flex items-start gap-2.5 p-3 rounded-lg border border-border bg-bg-elevated cursor-pointer hover:border-copper-500/30 transition"
+        >
+          <input
+            id={`skip-speakers-${meetingId}`}
+            name="skip_speaker_detection"
+            type="checkbox"
+            checked={skipSpeakerDetection}
+            onChange={(e) => setSkipSpeakerDetection(e.target.checked)}
+            className="rounded border-border accent-copper-500 mt-0.5"
+          />
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-semibold text-fg flex items-center gap-1.5">
+              ⚡ Mode rapide — passer la détection des voix
+            </div>
+            <p className="text-2xs text-fg-muted mt-0.5 leading-relaxed">
+              {skipSpeakerDetection
+                ? "Le CR sera généré ~2-3× plus vite, sans attribution par locuteur (texte brut)."
+                : "Décoche si tu veux gagner du temps : le CR sera prêt directement, sans étape d'identification des voix."}
+            </p>
+          </div>
+        </label>
 
         {/* ─── Toggle : Enregistrer en direct OU Téléverser un fichier ─── */}
         <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-bg-base border border-border">
