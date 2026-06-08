@@ -73,6 +73,25 @@ def transcribe_recording(recording: MeetingRecording) -> bool:
         return False
     logger.info("Audio téléchargé localement : %s", audio_input)
 
+    # ─── Pre-downsample Opus mono 16kHz 24kbps ─────────────
+    # Réduit la taille de 3-5× pour les longs audios (CODIR de 1h+).
+    # → Upload AAI plus rapide
+    # → AAI traite l'audio léger plus vite
+    # → Qualité transcription/diarisation identique (voix utilise < 8kHz)
+    # En cas d'échec (ffmpeg manquant, audio corrompu), on garde l'audio source.
+    from .audio_processing import compress_for_transcription
+    compressed_path = compress_for_transcription(audio_input)
+    if compressed_path:
+        # On bascule l'input AAI sur la version compressée et on supprime
+        # le téléchargement original immédiatement (économie disque).
+        try:
+            import os as _os
+            _os.unlink(audio_input)
+        except Exception:  # noqa: BLE001
+            pass
+        audio_input = compressed_path
+        logger.info("AAI utilisera la version compressée : %s", audio_input)
+
     try:
         # ─── Stratégie 2026 : ne PAS spécifier speech_model ─────
         # AssemblyAI a déprécié `speech_model="best"` (envoie 400 erreur).

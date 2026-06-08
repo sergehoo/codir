@@ -28,6 +28,93 @@ def _pydub_available() -> bool:
         return False
 
 
+def compress_for_transcription(src_path: str) -> Optional[str]:
+    """Convertit l'audio source en Opus mono 16kHz 24kbps (optimisé voix).
+
+    Gain typique :
+      - 1h30 webm 256 kbps stéréo (≈150 Mo) → Opus 16kHz 24kbps mono (≈16 Mo)
+      - Upload AAI 5× plus rapide + AAI traite plus vite l'input léger
+      - Qualité de transcription/diarisation identique (la voix utilise <8kHz)
+
+    Stratégie :
+      - On utilise ffmpeg en subprocess (plus rapide et stable que pydub pour
+        du transcodage massif). pydub est utilisé ailleurs pour les samples
+        speakers où on a besoin d'API Python.
+      - Si ffmpeg n'est pas installé, on retourne None et le caller utilise
+        l'audio source non compressé (fallback gracieux).
+
+    Retourne le path d'un fichier .ogg temp ou None si échec.
+    Le caller est responsable du cleanup (os.unlink).
+    """
+    import shutil
+    import subprocess
+
+    if not shutil.which("ffmpeg"):
+        logger.warning("ffmpeg introuvable — pas de compression pre-AAI.")
+        return None
+
+    if not os.path.exists(src_path):
+        logger.warning("compress_for_transcription : src introuvable %s", src_path)
+        return None
+
+    src_size = os.path.getsize(src_path)
+
+    # Sortie .ogg (container Ogg/Opus) — AAI le supporte nativement
+    with tempfile.NamedTemporaryFile(
+        suffix=".ogg", delete=False, prefix="aai_opus_",
+    ) as dst:
+        dst_path = dst.name
+
+    # ffmpeg : -ac 1 = mono, -ar 16000 = 16kHz, libopus 24kbps optimisé voice
+    cmd = [
+        "ffmpeg", "-y", "-loglevel", "error",
+        "-i", src_path,
+        "-vn",                  # ignore vidéo (cas webm avec piste vidéo)
+        "-c:a", "libopus",
+        "-application", "voip", # mode voix : meilleur tradeoff voix/débit
+        "-b:a", "24k",
+        "-ac", "1",
+        "-ar", "16000",
+        dst_path,
+    ]
+    try:
+        logger.info("compress_for_transcription : start (%.1f Mo source)", src_size / 1024 / 1024)
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=600,
+        )
+        if proc.returncode != 0:
+            logger.warning(
+                "ffmpeg compress KO (rc=%s): %s",
+                proc.returncode, (proc.stderr or "")[:500],
+            )
+            try:
+                os.unlink(dst_path)
+            except Exception:  # noqa: BLE001
+                pass
+            return None
+        dst_size = os.path.getsize(dst_path)
+        ratio = (src_size / dst_size) if dst_size else 0
+        logger.info(
+            "compress_for_transcription : OK (%.1f Mo → %.1f Mo, gain %.1f×)",
+            src_size / 1024 / 1024, dst_size / 1024 / 1024, ratio,
+        )
+        return dst_path
+    except subprocess.TimeoutExpired:
+        logger.error("ffmpeg compress timeout (>10 min) — fallback source.")
+        try:
+            os.unlink(dst_path)
+        except Exception:  # noqa: BLE001
+            pass
+        return None
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("ffmpeg compress crash: %s", exc)
+        try:
+            os.unlink(dst_path)
+        except Exception:  # noqa: BLE001
+            pass
+        return None
+
+
 def get_audio_duration(file_path_or_obj) -> float:
     """Retourne la durée en secondes via pydub. 0 si erreur (best-effort)."""
     if not _pydub_available():
