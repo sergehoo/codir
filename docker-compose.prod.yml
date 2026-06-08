@@ -277,6 +277,20 @@ services:
       - traefik.http.routers.codir-auth.middlewares=codir-sec-headers@docker,codir-compress@docker,codir-rl-auth@docker
       - traefik.http.routers.codir-auth.priority=200
 
+      # ── Routeur UPLOAD audio (gros payloads, sans rate-limit, sans compression) ──
+      # Priorité 150 → matche AVANT le routeur API générique (100).
+      # Pas de codir-rl (les 250 req burst dépassés inutilement par un upload
+      # multipart chunked) ni codir-compress (compresser de l'audio déjà
+      # compressé est contre-productif). Pas de buffering Traefik → stream
+      # direct vers Django, RAM low côté Traefik.
+      - traefik.http.routers.codir-upload.rule=Host(`${CODIR_API_HOST}`) && (PathRegexp(`^/api/v1/meetings/[^/]+/recordings/`) || PathPrefix(`/api/v1/recordings/`))
+      - traefik.http.routers.codir-upload.entrypoints=websecure
+      - traefik.http.routers.codir-upload.tls=true
+      - traefik.http.routers.codir-upload.tls.certresolver=lets
+      - traefik.http.routers.codir-upload.service=codir-api-svc
+      - traefik.http.routers.codir-upload.middlewares=codir-sec-headers@docker
+      - traefik.http.routers.codir-upload.priority=150
+
       # ── Routeur API générique ────────────────────────────────
       # NB: PathPrefix `/admin` (sans slash) pour matcher aussi /admin → Django admin
       - traefik.http.routers.codir-api.rule=Host(`${CODIR_API_HOST}`) && (PathPrefix(`/api`) || PathPrefix(`/admin`) || PathPrefix(`/docs`) || PathPrefix(`/health`) || PathPrefix(`/static`) || PathPrefix(`/media`))
