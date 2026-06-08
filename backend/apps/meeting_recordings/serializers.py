@@ -240,11 +240,21 @@ class UploadRecordingSerializer(serializers.Serializer):
                 f"Fichier trop volumineux ({value.size / 1024 / 1024:.1f} Mo). "
                 f"Limite : {max_mb} Mo.",
             )
-        allowed_prefixes = ("audio/", "video/webm", "video/mp4")  # webm peut être audio
+        # Validation MIME tolérante : on accepte audio/* (mp3, m4a, wav, aac,
+        # ogg, opus, flac, webm…), video/webm et video/mp4 (souvent contenant
+        # de l'audio AAC), et application/octet-stream (Firefox/Safari
+        # peuvent envoyer ça pour des fichiers locaux sans MIME connu).
+        # En dernier recours, on tolère un content_type vide — le pipeline
+        # détectera le format réel via ffmpeg / AssemblyAI plus tard.
+        allowed_prefixes = (
+            "audio/", "video/webm", "video/mp4", "video/mpeg",
+            "application/octet-stream", "application/ogg",
+        )
         ctype = (value.content_type or "").lower()
         if ctype and not any(ctype.startswith(p) for p in allowed_prefixes):
             raise serializers.ValidationError(
-                f"Type MIME non supporté : {ctype}. Attendu : audio/* ou video/webm.",
+                f"Type MIME non supporté : {ctype}. "
+                "Formats acceptés : mp3, m4a, wav, aac, ogg, opus, flac, webm, mp4.",
             )
         return value
 

@@ -10,7 +10,9 @@
 // Le composant gère lui-même le consentement : on ne déclenche getUserMedia
 // QU'APRÈS que l'utilisateur ait validé la bannière "Réunion enregistrée".
 import { Link } from '@tanstack/react-router'
-import { AlertTriangle, CheckCircle2, FileText, Loader2, Mic, Sparkles, Users } from 'lucide-react'
+import {
+  AlertTriangle, CheckCircle2, FileText, Loader2, Mic, Sparkles, Upload, Users,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -22,6 +24,7 @@ import { useRecordingUpload } from '../hooks/useRecordingUpload'
 import type { MeetingRecording, RecordingStatus } from '../types/recording.types'
 
 import { AudioPermissionAlert } from './AudioPermissionAlert'
+import { FileUploadCard } from './FileUploadCard'
 import { RecordingControlPanel } from './RecordingControlPanel'
 import { RecordingStatusBadge } from './RecordingStatusBadge'
 import { RecordingUploadProgress } from './RecordingUploadProgress'
@@ -46,6 +49,8 @@ export function MeetingRecorderButton({
   const [phase, setPhase] = useState<'idle' | 'capturing' | 'uploading' | 'processing' | 'done'>(
     existingRecording ? statusToPhase(existingRecording.status) : 'idle',
   )
+  // Mode "idle" : laisse choisir entre capter le micro ou téléverser un fichier.
+  const [inputMode, setInputMode] = useState<'record' | 'upload'>('record')
   // Si l'upload échoue, on garde le Blob audio en mémoire pour permettre un retry
   // sans re-enregistrer la réunion (l'audio capturé est précieux).
   const [savedBlob, setSavedBlob] = useState<Blob | null>(null)
@@ -107,6 +112,39 @@ export function MeetingRecorderButton({
     await doUpload(blob)
   }
 
+  /** Upload depuis un fichier externe (FileUploadCard). */
+  const handleFileUpload = async (file: File, durationSeconds?: number) => {
+    setPhase('uploading')
+    setUploadError(null)
+    try {
+      const created = await upload.upload({
+        blob: file,
+        recordingId: recording?.id,
+        durationSeconds,
+        consentAcknowledged: consentAck,
+        title: file.name,
+      } as any)  // upload accepte Blob ; File hérite de Blob
+      setRecording(created)
+      onRecordingCreated?.(created)
+      setSavedBlob(null)
+      setPhase('processing')
+    } catch (err: any) {
+      // Garde le fichier pour permettre un retry depuis l'UI d'erreur.
+      setSavedBlob(file)
+      const data = err?.response?.data
+      const msg = data?.detail
+        ?? (typeof data === 'string' ? data : null)
+        ?? err?.message
+        ?? "Erreur réseau inconnue."
+      setUploadError(msg)
+      toast.error("Échec de l'envoi du fichier", {
+        description: msg.length > 300 ? msg.slice(0, 300) + '…' : msg,
+        duration: 10000,
+      })
+      setPhase('uploading')
+    }
+  }
+
   const handleRetryUpload = () => {
     if (savedBlob) doUpload(savedBlob)
   }
@@ -119,7 +157,7 @@ export function MeetingRecorderButton({
         <div className="flex items-start gap-3 p-4 rounded-xl border border-copper-500/30 bg-copper-500/5">
           <Sparkles size={20} className="text-copper-500 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold">Enregistrement IA de la réunion</div>
+            <div className="text-sm font-semibold">Compte rendu IA de la réunion</div>
             <p className="text-xs text-fg-muted mt-1">{CONSENT_TEXT}</p>
             <label className="flex items-center gap-2 mt-3 cursor-pointer text-xs text-fg"
                    htmlFor={`consent-ack-${meetingId}`}>
@@ -136,27 +174,81 @@ export function MeetingRecorderButton({
           </div>
         </div>
 
-        {mr.permissionError && (
-          <AudioPermissionAlert
-            message={mr.permissionError}
-            onRetry={() => { mr.reset(); setConsentAck(consentAck) }}
-          />
+        {/* ─── Toggle : Enregistrer en direct OU Téléverser un fichier ─── */}
+        <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-bg-base border border-border">
+          <button
+            type="button"
+            onClick={() => setInputMode('record')}
+            className={cn(
+              'inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition',
+              inputMode === 'record'
+                ? 'bg-copper-500 text-white shadow-sm'
+                : 'text-fg-muted hover:text-fg hover:bg-fg/5',
+            )}
+          >
+            <Mic size={13} /> Enregistrer en direct
+          </button>
+          <button
+            type="button"
+            onClick={() => setInputMode('upload')}
+            className={cn(
+              'inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition',
+              inputMode === 'upload'
+                ? 'bg-copper-500 text-white shadow-sm'
+                : 'text-fg-muted hover:text-fg hover:bg-fg/5',
+            )}
+          >
+            <Upload size={13} /> Téléverser un fichier
+          </button>
+        </div>
+
+        {/* ─── Mode "Enregistrer en direct" ─── */}
+        {inputMode === 'record' && (
+          <>
+            {mr.permissionError && (
+              <AudioPermissionAlert
+                message={mr.permissionError}
+                onRetry={() => { mr.reset(); setConsentAck(consentAck) }}
+              />
+            )}
+
+            <button
+              type="button"
+              disabled={!consentAck}
+              onClick={handleStart}
+              className={cn(
+                'w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl',
+                'text-sm font-semibold transition shadow-sm',
+                consentAck
+                  ? 'bg-copper-500 hover:bg-copper-600 text-white'
+                  : 'bg-fg/10 text-fg-muted cursor-not-allowed',
+              )}
+            >
+              <Mic size={16} /> Démarrer l'enregistrement
+            </button>
+            {!consentAck && (
+              <p className="text-2xs text-fg-subtle text-center">
+                Cochez la case de consentement pour activer le bouton.
+              </p>
+            )}
+          </>
         )}
 
-        <button
-          type="button"
-          disabled={!consentAck}
-          onClick={handleStart}
-          className={cn(
-            'w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl',
-            'text-sm font-semibold transition shadow-sm',
-            consentAck
-              ? 'bg-copper-500 hover:bg-copper-600 text-white'
-              : 'bg-fg/10 text-fg-muted cursor-not-allowed',
-          )}
-        >
-          <Mic size={16} /> Démarrer l'enregistrement
-        </button>
+        {/* ─── Mode "Téléverser un fichier" ─── */}
+        {inputMode === 'upload' && (
+          <>
+            <FileUploadCard
+              consentAck={consentAck}
+              isUploading={upload.isUploading}
+              onUpload={handleFileUpload}
+            />
+            {!consentAck && (
+              <p className="text-2xs text-fg-subtle text-center">
+                Cochez la case de consentement pour activer l'envoi.
+              </p>
+            )}
+          </>
+        )}
       </div>
     )
   }
@@ -217,14 +309,22 @@ export function MeetingRecorderButton({
     // Cas 2 : upload en cours normal
     return (
       <div className="p-5 rounded-xl border border-border bg-bg-elevated space-y-3">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <Loader2 size={16} className="animate-spin text-copper-500" />
-          Envoi de l'audio au serveur…
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Loader2 size={16} className="animate-spin text-copper-500" />
+            Envoi de l'audio au serveur…
+          </div>
+          {upload.chunkInfo && (
+            <span className="text-2xs uppercase tracking-wider text-copper-400 font-semibold">
+              Chunk {upload.chunkInfo.current} / {upload.chunkInfo.total}
+            </span>
+          )}
         </div>
         <RecordingUploadProgress percent={upload.progress} />
         <p className="text-xs text-fg-muted">
-          Ne fermez pas cette page. L'enregistrement sera transcrit automatiquement
-          dès que l'upload sera terminé.
+          {upload.chunkInfo
+            ? "Upload chunked en cours — 4 chunks envoyés en parallèle. La reprise est automatique en cas de coupure."
+            : "Ne fermez pas cette page. L'enregistrement sera transcrit automatiquement dès que l'upload sera terminé."}
         </p>
       </div>
     )
