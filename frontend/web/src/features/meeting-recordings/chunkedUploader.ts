@@ -257,6 +257,11 @@ export class ChunkedUploader {
       `/recordings/upload/${recordingId}/chunks/${chunkIndex}/`,
       form,
       {
+        // ⚠ Le client axios a Content-Type=application/json par défaut.
+        // Sans `undefined` ici, axios sérialiserait FormData en JSON et le
+        // chunk binaire deviendrait `{}` → 400 backend. Avec undefined,
+        // axios détecte FormData et génère multipart/form-data avec boundary.
+        headers: { 'Content-Type': undefined as unknown as string },
         timeout: 5 * 60 * 1000,  // 5 min par chunk
         signal: this.opts.abortSignal as any,
       },

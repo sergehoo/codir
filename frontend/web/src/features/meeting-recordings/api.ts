@@ -99,9 +99,13 @@ export const recordingsApi = {
       `/meetings/${meetingId}/recordings/upload/`,
       form,
       {
-        // ⚠ Ne PAS forcer Content-Type ici : axios doit générer la boundary
-        // multipart automatiquement à partir du FormData. Forcer le header
-        // perd la boundary → le backend ne sait pas parser → 400/aborted.
+        // ⚠ Notre apiClient a un défaut `Content-Type: application/json`.
+        // Si on ne le neutralise pas explicitement, axios sérialise le
+        // FormData en JSON et le File devient `{}` → 400 backend ("audio
+        // is required"). On passe Content-Type=undefined pour qu'axios
+        // détecte FormData et génère lui-même `multipart/form-data;
+        // boundary=...` correctement.
+        headers: { 'Content-Type': undefined as unknown as string },
         // 10 min : autorise les uploads > 1h d'enregistrement sur connexions
         // lentes. Aligné sur proxy_read_timeout nginx (600s) et gunicorn timeout.
         timeout: 10 * 60 * 1000,
