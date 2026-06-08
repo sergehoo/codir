@@ -102,20 +102,43 @@ def generate_final_transcript(recording: MeetingRecording) -> list[dict]:
 
 
 def format_transcript_for_llm(recording: MeetingRecording, *, max_chars: int = 60000) -> str:
-    """Convertit transcript_final en texte plain "Nom : phrase".
+    """Convertit le transcript disponible en texte plain pour les prompts IA.
+
+    Cascade de sources (du plus structuré au moins) :
+      1. `transcript_final`            → "Nom display : phrase"   (après mapping user)
+      2. `transcript_with_speakers`    → "SPEAKER_00 : phrase"    (AAI avec diarisation,
+                                          avant mapping manuel)
+      3. `transcript_raw`              → texte brut sans speakers (mode
+                                          skip_speaker_detection — aucun mapping possible)
 
     Tronque proprement à `max_chars` (limite raisonnable Claude/DeepSeek).
-    Utilisé en entrée des prompts IA.
     """
-    lines: list[str] = []
-    total = 0
-    for seg in recording.transcript_final or []:
-        line = f"{seg.get('speaker', '?')} : {seg.get('text', '').strip()}"
-        if not line.strip():
-            continue
-        if total + len(line) + 1 > max_chars:
-            lines.append("[…transcription tronquée…]")
-            break
-        lines.append(line)
-        total += len(line) + 1
-    return "\n".join(lines)
+    # ── 1. Mapping final déjà fait
+    segments = recording.transcript_final or []
+    if not segments:
+        # ── 2. Diarisation AAI sans mapping
+        segments = recording.transcript_with_speakers or []
+
+    if segments:
+        lines: list[str] = []
+        total = 0
+        for seg in segments:
+            text = (seg.get("text", "") or "").strip()
+            if not text:
+                continue
+            speaker = seg.get("speaker", "?")
+            line = f"{speaker} : {text}"
+            if total + len(line) + 1 > max_chars:
+                lines.append("[…transcription tronquée…]")
+                break
+            lines.append(line)
+            total += len(line) + 1
+        return "\n".join(lines)
+
+    # ── 3. Fallback texte brut (mode skip_speaker_detection)
+    raw = (recording.transcript_raw or "").strip()
+    if not raw:
+        return ""
+    if len(raw) > max_chars:
+        return raw[:max_chars] + "\n[…transcription tronquée…]"
+    return raw

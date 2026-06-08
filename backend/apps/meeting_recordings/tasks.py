@@ -193,9 +193,34 @@ def summarize_recording_task(self, recording_id: str):
     if rec is None:
         return "missing"
     update_status(rec, RecordingStatus.SUMMARIZING)
+
+    # Diagnostic préalable : si AUCUN transcript dispo, c'est probablement
+    # que la transcription a échoué ou produit un audio inaudible. Inutile
+    # d'appeler les LLM dans ce cas — message d'erreur précis pour le user.
+    has_text = bool(
+        (rec.transcript_raw or "").strip()
+        or (rec.transcript_with_speakers or [])
+        or (rec.transcript_final or [])
+    )
+    if not has_text:
+        _fail(
+            rec,
+            "Aucun texte transcrit n'est disponible. L'audio est peut-être "
+            "silencieux, corrompu, ou la transcription AssemblyAI a renvoyé "
+            "un résultat vide. Vérifiez le fichier audio source.",
+        )
+        return "failed"
+
     text = generate_summary(rec)
     if not text:
-        _fail(rec, "LLM résumé indisponible (Claude + DeepSeek KO).")
+        # Distingue : transcript vide vs LLM KO. Avec le check ci-dessus,
+        # si on arrive ici c'est forcément un échec LLM (clés/réseau/quota).
+        _fail(
+            rec,
+            "Génération du résumé impossible. Les 2 LLM (Claude + DeepSeek) "
+            "ont échoué. Causes probables : clés API invalides/quota dépassé, "
+            "panne réseau, ou modèle dépréciée. Vérifiez les logs serveur.",
+        )
         return "failed"
 
     # Chaîne extraction décisions + actions
