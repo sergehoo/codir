@@ -117,12 +117,17 @@ export function MeetingRecorderButton({
     setPhase('uploading')
     setUploadError(null)
     try {
+      // Titre : on tronque à 240 chars (max_length backend = 250) et on retire
+      // l'extension pour avoir un titre lisible côté UI.
+      const baseName = file.name.replace(/\.[^/.]+$/, '').trim()
+      const title = (baseName || 'Audio importé').slice(0, 240)
+
       const created = await upload.upload({
         blob: file,
         recordingId: recording?.id,
         durationSeconds,
         consentAcknowledged: consentAck,
-        title: file.name,
+        title,
       } as any)  // upload accepte Blob ; File hérite de Blob
       setRecording(created)
       onRecordingCreated?.(created)
@@ -132,7 +137,20 @@ export function MeetingRecorderButton({
       // Garde le fichier pour permettre un retry depuis l'UI d'erreur.
       setSavedBlob(file)
       const data = err?.response?.data
-      const msg = data?.detail
+      // Récupère le message le plus précis possible :
+      // 1. detail (erreur globale)
+      // 2. première erreur de champ (ex: audio[0])
+      // 3. message JS
+      let msg = data?.detail
+      if (!msg && data && typeof data === 'object') {
+        for (const [field, errs] of Object.entries(data)) {
+          if (Array.isArray(errs) && errs.length) {
+            msg = `${field} : ${errs[0]}`
+            break
+          }
+        }
+      }
+      msg = msg
         ?? (typeof data === 'string' ? data : null)
         ?? err?.message
         ?? "Erreur réseau inconnue."
