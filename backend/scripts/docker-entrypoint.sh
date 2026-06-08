@@ -59,11 +59,16 @@ case "$MODE" in
     ;;
   prod)
     echo "[entrypoint] Starting Gunicorn"
+    # --timeout 600 : autorise les uploads d'enregistrements jusqu'à ~600 Mo
+    # sans que le worker soit killé. Sans cette option, la valeur par défaut
+    # (30s) tue toute requête longue → uploads avortés à mi-chemin.
+    # --limit-request-line 8190 (default) reste suffisant, ce sont des POST.
     exec gunicorn config.wsgi:application \
       --bind 0.0.0.0:8000 \
       --workers "${GUNICORN_WORKERS:-4}" \
       --worker-class gthread \
       --threads "${GUNICORN_THREADS:-8}" \
+      --timeout "${GUNICORN_TIMEOUT:-600}" \
       --max-requests 10000 \
       --max-requests-jitter 500 \
       --graceful-timeout 30 \

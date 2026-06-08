@@ -42,7 +42,12 @@ export const recordingsApi = {
       `/meetings/${meetingId}/recordings/upload/`,
       form,
       {
-        headers: { 'Content-Type': 'multipart/form-data' },
+        // ⚠ Ne PAS forcer Content-Type ici : axios doit générer la boundary
+        // multipart automatiquement à partir du FormData. Forcer le header
+        // perd la boundary → le backend ne sait pas parser → 400/aborted.
+        // 10 min : autorise les uploads > 1h d'enregistrement sur connexions
+        // lentes. Aligné sur proxy_read_timeout nginx (600s) et gunicorn timeout.
+        timeout: 10 * 60 * 1000,
         onUploadProgress: (e) => {
           if (opts.onProgress && e.total) {
             opts.onProgress(Math.round((e.loaded / e.total) * 100))

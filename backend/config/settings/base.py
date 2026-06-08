@@ -446,6 +446,16 @@ DEEPSEEK_MODEL = env("DEEPSEEK_MODEL", default="deepseek-chat")
 RECORDING_S3_BUCKET = env("RECORDING_S3_BUCKET", default="codir-recordings-dev")
 # Limite upload : 4h x 256 kbps Opus webm ≈ 460 Mo. On laisse 600 Mo de marge.
 MAX_RECORDING_UPLOAD_MB = env.int("MAX_RECORDING_UPLOAD_MB", default=600)
+
+# ─── Upload Django (aligné sur MAX_RECORDING_UPLOAD_MB) ────────────────
+# Sans cela, Django refuse les requêtes > 2.5 Mo par défaut (la valeur de
+# DATA_UPLOAD_MAX_MEMORY_SIZE par défaut), même si le serializer accepte 600 Mo.
+DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_RECORDING_UPLOAD_MB * 1024 * 1024
+# Au-delà de cette taille, les fichiers uploadés sont écrits sur disque via
+# TemporaryFileUploadHandler — évite de saturer la RAM avec un audio de 500 Mo.
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5 Mo → spill to /tmp au-delà
+# Augmente la limite du nombre de fields (formulaires d'upload chunked éventuels).
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 2000
 # Durée d'extrait audio par speaker (en secondes) — sample d'identification UI.
 SPEAKER_SAMPLE_DURATION_SEC = env.int("SPEAKER_SAMPLE_DURATION_SEC", default=8)
 # Rétention audio brut (jours). 0 = pas de purge auto.
