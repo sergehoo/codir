@@ -31,16 +31,33 @@ CSRF_COOKIE_SAMESITE = "Lax"
 # IMPORTANT : on garde la structure 2-storages (default + recordings) définie
 # dans base.py, et on ajoute simplement les options spécifiques prod.
 
+# Détection MinIO vs AWS S3 réel : si S3_ENDPOINT est défini ET ne pointe pas
+# vers amazonaws.com, on est sur un S3-compatible self-hosted (MinIO, Ceph, ...)
+# qui ne supporte généralement PAS le chiffrement KMS server-side.
+_S3_ENDPOINT_RAW = env("S3_ENDPOINT", default="")  # noqa: F405
+_IS_AWS_S3 = (not _S3_ENDPOINT_RAW) or ("amazonaws.com" in _S3_ENDPOINT_RAW.lower())
+
 # Server-Side Encryption : par défaut désactivé (compat MinIO self-hosted).
-# Activer uniquement sur AWS S3 où SSE-S3 / SSE-KMS sont supportés nativement.
-# Pour activer : S3_SSE=AES256 dans .env.prod (cas AWS) — laisser vide pour MinIO.
-_SSE_MODE = env("S3_SSE", default="")  # noqa: F405
+# Pour activer sur AWS uniquement : S3_SSE=AES256 dans .env.prod
+_SSE_MODE_RAW = env("S3_SSE", default="")  # noqa: F405
+
+# ⚠ Garde-fou : sur un endpoint non-AWS, on IGNORE S3_SSE même s'il est défini.
+# C'est l'erreur récurrente : un opérateur copie .env d'AWS vers un déploiement
+# MinIO, oublie S3_SSE=AES256, et tous les uploads plantent en 502
+# "NotImplemented: Server side encryption specified but KMS is not configured".
+if _SSE_MODE_RAW and not _IS_AWS_S3:
+    import logging as _log
+    _log.getLogger(__name__).warning(
+        "S3_SSE=%s ignoré : endpoint=%s n'est pas AWS S3. MinIO ne supporte "
+        "pas le chiffrement KMS server-side. Pour le forcer, retirez "
+        "cette garde dans prod.py.", _SSE_MODE_RAW, _S3_ENDPOINT_RAW,
+    )
+_SSE_MODE = _SSE_MODE_RAW if _IS_AWS_S3 else ""
 
 # Construction conditionnelle de object_parameters (chiffrement + cache headers)
 _S3_OBJECT_PARAMS = {}
 if _SSE_MODE:
-    # AES256 (SSE-S3) ou aws:kms — AWS uniquement, NE PAS utiliser avec MinIO
-    # standard. Si tu actives ça par erreur sur MinIO → erreur NotImplemented.
+    # AES256 (SSE-S3) ou aws:kms — AWS uniquement.
     _S3_OBJECT_PARAMS["ServerSideEncryption"] = _SSE_MODE
 
 _S3_COMMON_OPTIONS = {

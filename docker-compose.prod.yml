@@ -46,7 +46,11 @@ x-common-env: &common-env
   S3_SECRET_KEY: ${S3_SECRET_KEY:?must be set}
   S3_BUCKET: ${S3_BUCKET:?must be set}
   S3_REGION: ${S3_REGION:-eu-west-1}
-  S3_SSE: ${S3_SSE:-AES256}
+  # ⚠ Défaut VIDE (pas AES256) : seul AWS S3 supporte SSE nativement.
+  # Sur MinIO/self-hosted, SSE force MinIO à demander une clé KMS et plante :
+  # "NotImplemented: Server side encryption specified but KMS is not configured".
+  # Pour activer SSE sur AWS uniquement : S3_SSE=AES256 dans .env.prod
+  S3_SSE: ${S3_SSE:-}
   # Email
   EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.smtp.EmailBackend}
   EMAIL_HOST: ${EMAIL_HOST:?must be set}
