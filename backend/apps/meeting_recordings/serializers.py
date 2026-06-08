@@ -177,6 +177,48 @@ class StartRecordingSerializer(serializers.Serializer):
     consent_acknowledged = serializers.BooleanField(default=False)
 
 
+class InitChunkedUploadSerializer(serializers.Serializer):
+    """POST /meetings/{id}/recordings/upload/init/ — démarre un upload chunked.
+
+    Le client annonce filename + taille totale ; le serveur retourne :
+      - recording_id (UUID)
+      - chunk_size_bytes (taille des chunks à utiliser)
+      - total_chunks (combien de PUT attendus)
+    """
+    filename = serializers.CharField(max_length=300)
+    total_size_bytes = serializers.IntegerField(min_value=1)
+    content_type = serializers.CharField(max_length=80, required=False, allow_blank=True)
+    chunk_size_bytes = serializers.IntegerField(
+        min_value=1024 * 1024,  # 1 Mo
+        max_value=100 * 1024 * 1024,  # 100 Mo
+        required=False,
+    )
+    title = serializers.CharField(max_length=250, required=False, allow_blank=True)
+    duration_seconds = serializers.FloatField(required=False, min_value=0)
+    consent_acknowledged = serializers.BooleanField(default=False)
+
+    def validate_total_size_bytes(self, value):
+        from django.conf import settings
+        max_mb = getattr(settings, "MAX_RECORDING_UPLOAD_MB", 600)
+        if value > max_mb * 1024 * 1024:
+            raise serializers.ValidationError(
+                f"Fichier trop volumineux ({value / 1024 / 1024:.1f} Mo). "
+                f"Limite : {max_mb} Mo.",
+            )
+        return value
+
+
+class ChunkUploadSerializer(serializers.Serializer):
+    """PUT /recordings/upload/{rec_id}/chunks/{index}/ — chunk binaire."""
+    chunk = serializers.FileField()
+    expected_size = serializers.IntegerField(required=False, min_value=0)
+
+
+class CompleteChunkedUploadSerializer(serializers.Serializer):
+    """POST /recordings/upload/{rec_id}/complete/ — finalise."""
+    total_chunks = serializers.IntegerField(min_value=1)
+
+
 class UploadRecordingSerializer(serializers.Serializer):
     """POST /meetings/{id}/recordings/upload/ — multipart.
 

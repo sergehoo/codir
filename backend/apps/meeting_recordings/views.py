@@ -23,7 +23,7 @@ from rest_framework.views import APIView
 from .models import (
     AIExtractionStatus, AIExtractionType,
     DetectedSpeaker, MeetingRecording, RecordingAIExtraction,
-    RecordingStatus, SpeakerSegment,
+    RecordingChunk, RecordingStatus, SpeakerSegment,
 )
 from .permissions import CanAccessMeetingRecording, CanRecordOnMeeting
 from .serializers import (
@@ -726,3 +726,241 @@ def _slug_filename(rec, ext: str) -> str:
     if getattr(rec.meeting, "scheduled_start", None):
         date = rec.meeting.scheduled_start.strftime("_%Y-%m-%d")
     return f"CR_{slug}{date}.{ext}"
+
+
+# ─── Chunked upload : 4 endpoints ───────────────────────────────
+#
+# Flux client :
+#   1. POST   /meetings/{meeting_id}/recordings/upload/init/
+#         → { recording_id, chunk_size_bytes, total_chunks }
+#   2. PUT    /recordings/upload/{recording_id}/chunks/{index}/  (multipart)
+#         → { uploaded_chunks: [0,1,2,...] }
+#         (envoyés en parallèle par le client — pool de 4)
+#   3. GET    /recordings/upload/{recording_id}/status/
+#         → état complet (pour reprise après coupure)
+#   4. POST   /recordings/upload/{recording_id}/complete/
+#         → MeetingRecording final + pipeline Celery déclenché
+
+def init_chunked(request, meeting_id):
+    """POST /meetings/{meeting_id}/recordings/upload/init/"""
+    from .serializers import InitChunkedUploadSerializer
+    from .services.chunked_upload import init_chunked_upload, DEFAULT_CHUNK_SIZE_BYTES
+
+    if request.method != "POST":
+        return Response({"detail": "Méthode non autorisée"}, status=405)
+    if not request.user.is_authenticated:
+        return Response({"detail": "Authentification requise"}, status=401)
+
+    # Vérification accès / tenant via CanRecordOnMeeting (logique réutilisée)
+    perm = CanRecordOnMeeting()
+    # Construit un faux view pour la perm
+    class _V:
+        kwargs = {"meeting_id": meeting_id}
+    if not perm.has_permission(request, _V()):
+        return Response({"detail": str(getattr(perm, "message", "Refusé."))}, status=403)
+
+    meeting = _get_meeting_or_404(meeting_id)
+    ser = InitChunkedUploadSerializer(data=request.data)
+    ser.is_valid(raise_exception=True)
+
+    try:
+        rec, chunk_size, total_chunks = init_chunked_upload(
+            meeting=meeting,
+            recorded_by=request.user,
+            filename=ser.validated_data["filename"],
+            total_size_bytes=ser.validated_data["total_size_bytes"],
+            content_type=ser.validated_data.get("content_type", ""),
+            chunk_size_bytes=ser.validated_data.get(
+                "chunk_size_bytes", DEFAULT_CHUNK_SIZE_BYTES,
+            ),
+            title=ser.validated_data.get("title", ""),
+            duration_seconds=ser.validated_data.get("duration_seconds"),
+            consent_acknowledged=ser.validated_data.get("consent_acknowledged", False),
+        )
+    except ValueError as exc:
+        return Response({"detail": str(exc)}, status=400)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("init_chunked KO meeting=%s", meeting_id)
+        return Response(
+            {"detail": f"Impossible d'initialiser l'upload : {exc}"},
+            status=500,
+        )
+
+    return Response(
+        {
+            "recording_id": str(rec.id),
+            "chunk_size_bytes": chunk_size,
+            "total_chunks": total_chunks,
+            "expected_total_bytes": rec.file_size,
+        },
+        status=status.HTTP_201_CREATED,
+    )
+
+
+def upload_chunk(request, recording_id, chunk_index):
+    """PUT /recordings/upload/{recording_id}/chunks/{chunk_index}/
+
+    Body : binaire (multipart `chunk` field).
+    """
+    from .serializers import ChunkUploadSerializer
+    from .services.chunked_upload import save_chunk
+
+    if request.method != "PUT":
+        return Response({"detail": "Méthode non autorisée"}, status=405)
+    if not request.user.is_authenticated:
+        return Response({"detail": "Authentification requise"}, status=401)
+
+    rec = MeetingRecording.unscoped.filter(id=recording_id).first()
+    if rec is None:
+        return Response({"detail": "Enregistrement introuvable"}, status=404)
+
+    # Vérif tenant manuelle
+    from apps.accounts.models import Membership
+    ok = Membership.unscoped.filter(
+        user=request.user, organization=rec.organization, is_active=True,
+    ).exists()
+    if not ok:
+        return Response(
+            {"detail": "Vous n'êtes pas membre de cette organisation."},
+            status=403,
+        )
+
+    ser = ChunkUploadSerializer(data=request.data)
+    ser.is_valid(raise_exception=True)
+
+    try:
+        chunk = save_chunk(
+            recording=rec,
+            chunk_index=int(chunk_index),
+            chunk_file=ser.validated_data["chunk"],
+            expected_size=ser.validated_data.get("expected_size"),
+        )
+    except ValueError as exc:
+        return Response({"detail": str(exc)}, status=400)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception(
+            "upload_chunk KO rec=%s idx=%s", recording_id, chunk_index,
+        )
+        return Response(
+            {"detail": f"Erreur sauvegarde chunk : {exc}"},
+            status=502,
+        )
+
+    # On renvoie un payload léger : ce chunk + liste des indices déjà reçus.
+    received = list(
+        RecordingChunk.unscoped
+        .filter(recording=rec)
+        .order_by("index")
+        .values_list("index", flat=True)
+    )
+    return Response(
+        {
+            "recording_id": str(rec.id),
+            "chunk_index": chunk.index,
+            "size": chunk.size,
+            "checksum": chunk.checksum,
+            "uploaded_chunks": received,
+            "uploaded_count": len(received),
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+def get_chunked_status(request, recording_id):
+    """GET /recordings/upload/{recording_id}/status/"""
+    from .services.chunked_upload import get_upload_status
+
+    if request.method != "GET":
+        return Response({"detail": "Méthode non autorisée"}, status=405)
+    if not request.user.is_authenticated:
+        return Response({"detail": "Authentification requise"}, status=401)
+
+    rec = MeetingRecording.unscoped.filter(id=recording_id).first()
+    if rec is None:
+        return Response({"detail": "Enregistrement introuvable"}, status=404)
+
+    from apps.accounts.models import Membership
+    ok = Membership.unscoped.filter(
+        user=request.user, organization=rec.organization, is_active=True,
+    ).exists()
+    if not ok:
+        return Response({"detail": "Accès refusé"}, status=403)
+
+    return Response(get_upload_status(rec), status=status.HTTP_200_OK)
+
+
+def complete_chunked(request, recording_id):
+    """POST /recordings/upload/{recording_id}/complete/"""
+    from .serializers import CompleteChunkedUploadSerializer
+    from .services.chunked_upload import finalize_chunked_upload
+
+    if request.method != "POST":
+        return Response({"detail": "Méthode non autorisée"}, status=405)
+    if not request.user.is_authenticated:
+        return Response({"detail": "Authentification requise"}, status=401)
+
+    rec = MeetingRecording.unscoped.filter(id=recording_id).first()
+    if rec is None:
+        return Response({"detail": "Enregistrement introuvable"}, status=404)
+
+    from apps.accounts.models import Membership
+    ok = Membership.unscoped.filter(
+        user=request.user, organization=rec.organization, is_active=True,
+    ).exists()
+    if not ok:
+        return Response({"detail": "Accès refusé"}, status=403)
+
+    ser = CompleteChunkedUploadSerializer(data=request.data)
+    ser.is_valid(raise_exception=True)
+
+    try:
+        rec = finalize_chunked_upload(
+            recording=rec,
+            total_chunks=ser.validated_data["total_chunks"],
+        )
+    except ValueError as exc:
+        return Response({"detail": str(exc)}, status=400)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("complete_chunked KO rec=%s", recording_id)
+        return Response(
+            {"detail": f"Erreur finalisation : {exc}"},
+            status=502,
+        )
+
+    return Response(
+        MeetingRecordingDetailSerializer(rec, context={"request": request}).data,
+        status=status.HTTP_202_ACCEPTED,
+    )
+
+
+# Wrappers DRF function-based pour brancher dans urls.py
+from rest_framework.decorators import (
+    api_view, parser_classes as _parser_classes, permission_classes as _permission_classes,
+)
+
+
+@api_view(["POST"])
+@_parser_classes([JSONParser])
+@_permission_classes([IsAuthenticated])
+def chunked_upload_init_view(request, meeting_id):
+    return init_chunked(request, meeting_id)
+
+
+@api_view(["PUT"])
+@_parser_classes([MultiPartParser, FormParser])
+@_permission_classes([IsAuthenticated])
+def chunked_upload_chunk_view(request, recording_id, chunk_index):
+    return upload_chunk(request, recording_id, chunk_index)
+
+
+@api_view(["GET"])
+@_permission_classes([IsAuthenticated])
+def chunked_upload_status_view(request, recording_id):
+    return get_chunked_status(request, recording_id)
+
+
+@api_view(["POST"])
+@_parser_classes([JSONParser])
+@_permission_classes([IsAuthenticated])
+def chunked_upload_complete_view(request, recording_id):
+    return complete_chunked(request, recording_id)

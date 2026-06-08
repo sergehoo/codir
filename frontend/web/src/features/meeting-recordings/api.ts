@@ -1,9 +1,22 @@
 // API client meeting_recordings — wrappers axios typés.
 import { apiClient } from '@/api/client'
+
+import { ChunkedUploader, type ChunkedUploaderOptions } from './chunkedUploader'
 import type {
   DetectedSpeaker, MeetingRecording, RecordingAIExtraction,
   RecordingStatusPayload, SpeakerMappingInput, SpeakerSegment,
 } from './types/recording.types'
+
+/**
+ * Seuil de bascule single-shot → chunked.
+ *
+ * En dessous : un seul POST multipart (simple, latence faible).
+ * Au-dessus : on découpe en chunks de 50 Mo, 4 en parallèle, retry par chunk.
+ *
+ * Calé sur 50 Mo : couvre un audio ~25 min @ 256 kbps. Au-delà, le chunked
+ * est plus fiable (résiste aux coupures, retry granulaire).
+ */
+export const CHUNKED_UPLOAD_THRESHOLD = 50 * 1024 * 1024
 
 export const recordingsApi = {
   // ─── Nested under meeting ────────────────────────────────
@@ -15,7 +28,51 @@ export const recordingsApi = {
       `/meetings/${meetingId}/recordings/start/`, payload,
     )).data,
 
-  /** Upload du Blob audio en multipart. Optionnellement attaché à un recording_id pré-créé. */
+  /**
+   * Upload chunked (≥ 50 Mo) ou single-shot (< 50 Mo).
+   *
+   * Bascule automatique selon la taille du Blob :
+   *   - < 50 Mo : un seul POST multipart classique
+   *   - ≥ 50 Mo : pipeline chunked (init → N×PUT en parallèle → complete)
+   */
+  uploadAuto: async (
+    meetingId: string,
+    audioBlob: Blob,
+    opts: Omit<ChunkedUploaderOptions, 'blob' | 'meetingId' | 'filename'> & {
+      recordingId?: string  // ignoré en chunked (le serveur crée son propre rec)
+      title?: string
+      durationSeconds?: number
+      consentAcknowledged?: boolean
+      onProgress?: (percent: number) => void
+    } = {},
+  ): Promise<MeetingRecording> => {
+    const filename = audioBlob.type.includes('webm') ? 'recording.webm'
+      : audioBlob.type.includes('ogg') ? 'recording.ogg'
+      : audioBlob.type.includes('mp4') ? 'recording.m4a'
+      : 'recording.audio'
+
+    if (audioBlob.size < CHUNKED_UPLOAD_THRESHOLD) {
+      // Path court : on délègue à upload() (compatible existant)
+      return recordingsApi.upload(meetingId, audioBlob, opts)
+    }
+
+    // Chunked
+    const uploader = new ChunkedUploader({
+      blob: audioBlob,
+      meetingId,
+      filename,
+      contentType: audioBlob.type,
+      title: opts.title,
+      durationSeconds: opts.durationSeconds,
+      consentAcknowledged: opts.consentAcknowledged,
+      onProgress: opts.onProgress,
+      onChunkComplete: opts.onChunkComplete,
+      abortSignal: opts.abortSignal,
+    })
+    return uploader.run()
+  },
+
+  /** Upload du Blob audio en multipart single-shot (cas legacy / petits fichiers). */
   upload: async (
     meetingId: string,
     audioBlob: Blob,
