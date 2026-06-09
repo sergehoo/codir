@@ -392,6 +392,10 @@ export function MeetingRecorderButton({
       speakersCount={statusQuery.data?.speakers_count ?? 0}
       hasDecisions={statusQuery.data?.has_decisions_drafts ?? false}
       hasActions={statusQuery.data?.has_actions_drafts ?? false}
+      stepLabel={statusQuery.data?.step_label}
+      stepProgress={statusQuery.data?.step_progress}
+      overallProgress={statusQuery.data?.overall_progress}
+      etaSeconds={statusQuery.data?.eta_seconds ?? null}
     />
   )
 }
@@ -409,6 +413,10 @@ interface PipelinePanelProps {
   speakersCount?: number
   hasDecisions?: boolean
   hasActions?: boolean
+  stepLabel?: string
+  stepProgress?: number
+  overallProgress?: number
+  etaSeconds?: number | null
 }
 
 // Ordre des étapes du pipeline (sert pour l'UI étape par étape)
@@ -433,6 +441,7 @@ function statusToStepIndex(status: RecordingStatus): number {
 function PipelinePanel({
   status, meetingId, recordingId, errorMessage,
   speakersCount = 0, hasDecisions = false, hasActions = false,
+  stepLabel, stepProgress, overallProgress, etaSeconds,
 }: PipelinePanelProps) {
   const currentIdx = statusToStepIndex(status)
   const isFailed = status === 'failed'
@@ -460,6 +469,49 @@ function PipelinePanel({
           </div>
           <RecordingStatusBadge status={status} />
         </div>
+
+        {/* ─── Progression globale + ETA ─── */}
+        {!isFailed && !isDone && !isWaitingUser && (stepLabel || typeof overallProgress === 'number') && (
+          <div className="space-y-2.5 p-3 rounded-lg bg-bg-base border border-border">
+            <div className="flex items-center justify-between gap-3 text-xs">
+              <div className="font-semibold text-fg">
+                {stepLabel || 'En cours…'}
+                {typeof stepProgress === 'number' && (
+                  <span className="ml-2 text-copper-400 tabular-nums">{stepProgress}%</span>
+                )}
+              </div>
+              {etaSeconds !== null && etaSeconds !== undefined && etaSeconds > 0 && (
+                <div className="text-2xs uppercase tracking-wider text-fg-muted">
+                  ~ {formatEta(etaSeconds)} restantes
+                </div>
+              )}
+            </div>
+            {/* Barre étape courante */}
+            <div className="h-1.5 bg-bg-elevated rounded-full overflow-hidden">
+              <div
+                className="h-full bg-copper-500 transition-all duration-700 ease-out"
+                style={{ width: `${stepProgress ?? 0}%` }}
+              />
+            </div>
+            {/* Barre overall */}
+            {typeof overallProgress === 'number' && (
+              <div className="flex items-center gap-2 mt-1">
+                <div className="text-2xs uppercase tracking-wider text-fg-subtle min-w-[60px]">
+                  Global
+                </div>
+                <div className="flex-1 h-1 bg-bg-elevated rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500/70 transition-all duration-700 ease-out"
+                    style={{ width: `${overallProgress}%` }}
+                  />
+                </div>
+                <div className="text-2xs text-fg-muted tabular-nums min-w-[35px] text-right">
+                  {overallProgress}%
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Erreur explicite */}
         {isFailed && (
@@ -582,4 +634,18 @@ function statusToPhase(status: RecordingStatus): 'idle' | 'capturing' | 'uploadi
   if (status === 'uploading') return 'uploading'
   if (status === 'completed' || status === 'failed') return 'done'
   return 'processing'
+}
+
+/** Format ETA en français : "5min", "1h 12min", "45s". */
+function formatEta(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '0s'
+  if (seconds < 60) return `${Math.round(seconds)}s`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) {
+    const restSec = Math.round(seconds % 60)
+    return restSec ? `${minutes}min ${restSec}s` : `${minutes}min`
+  }
+  const hours = Math.floor(minutes / 60)
+  const restMin = minutes % 60
+  return restMin ? `${hours}h ${restMin}min` : `${hours}h`
 }

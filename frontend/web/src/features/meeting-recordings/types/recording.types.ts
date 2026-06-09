@@ -131,6 +131,13 @@ export interface RecordingStatusPayload {
   has_decisions_drafts: boolean
   has_actions_drafts: boolean
   error_message: string
+  // Progression estimée (calculée côté backend)
+  step_index?: number          // 1-based
+  total_steps?: number
+  step_label?: string          // "Transcription", "Détection des voix", etc.
+  step_progress?: number       // 0..100 sur l'étape courante
+  overall_progress?: number    // 0..100 sur tout le pipeline
+  eta_seconds?: number | null  // temps restant estimé sur l'étape (null si bloqué user)
 }
 
 export interface SpeakerMappingInput {

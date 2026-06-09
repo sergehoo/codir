@@ -321,8 +321,16 @@ class MeetingRecordingViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=["get"], url_path="status")
     def status_(self, request, pk=None):
-        """GET /recordings/{id}/status/ — polling léger pour le front."""
+        """GET /recordings/{id}/status/ — polling léger pour le front.
+
+        Inclut une estimation de progression par étape (step_progress) +
+        progression globale (overall_progress) + ETA. Le calcul est basé sur
+        la durée audio + le temps écoulé depuis le début de l'étape courante.
+        """
+        from .services.progress import compute_progress
+
         rec = self.get_object()
+        progress = compute_progress(rec)
         return Response({
             "id": str(rec.id),
             "status": rec.status,
@@ -339,6 +347,13 @@ class MeetingRecordingViewSet(viewsets.ReadOnlyModelViewSet):
                 status=AIExtractionStatus.DRAFT,
             ).exists(),
             "error_message": rec.error_message,
+            # ── Progression estimée ──
+            "step_index": progress["step_index"],
+            "total_steps": progress["total_steps"],
+            "step_label": progress["step_label"],
+            "step_progress": progress["step_progress"],
+            "overall_progress": progress["overall_progress"],
+            "eta_seconds": progress["eta_seconds"],
         })
 
     # ─── Speakers ────────────────────────────────────────────────
