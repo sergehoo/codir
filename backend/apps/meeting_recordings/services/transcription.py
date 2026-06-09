@@ -73,24 +73,35 @@ def transcribe_recording(recording: MeetingRecording) -> bool:
         return False
     logger.info("Audio téléchargé localement : %s", audio_input)
 
-    # ─── Pre-downsample Opus mono 16kHz 24kbps ─────────────
-    # Réduit la taille de 3-5× pour les longs audios (CODIR de 1h+).
-    # → Upload AAI plus rapide
-    # → AAI traite l'audio léger plus vite
-    # → Qualité transcription/diarisation identique (voix utilise < 8kHz)
-    # En cas d'échec (ffmpeg manquant, audio corrompu), on garde l'audio source.
-    from .audio_processing import compress_for_transcription
-    compressed_path = compress_for_transcription(audio_input)
-    if compressed_path:
-        # On bascule l'input AAI sur la version compressée et on supprime
-        # le téléchargement original immédiatement (économie disque).
-        try:
-            import os as _os
-            _os.unlink(audio_input)
-        except Exception:  # noqa: BLE001
-            pass
-        audio_input = compressed_path
-        logger.info("AAI utilisera la version compressée : %s", audio_input)
+    # ─── Pre-downsample Opus 24kbps — UNIQUEMENT si pas de diarisation ─────
+    # ⚠ La diarisation AAI a besoin de :
+    #   - stéréo (la spatialisation aide à séparer les voix)
+    #   - fréquences > 8 kHz (timbres distincts)
+    # Si on compresse en mono 16kHz, AAI ne distingue plus les voix → 1 seul
+    # speaker détecté même pour un CODIR à 5 personnes. On ne compresse donc
+    # QUE quand `skip_speaker_detection=True` (l'utilisateur ne veut pas la
+    # diarisation et accepte le trade-off vitesse vs précision speakers).
+    wants_speakers_for_compress = not bool(
+        getattr(recording, "skip_speaker_detection", False)
+    )
+    if wants_speakers_for_compress:
+        logger.info(
+            "Pre-downsample skip : diarisation demandée (rec=%s). "
+            "AAI reçoit l'audio source pour préserver la qualité voix.",
+            recording.id,
+        )
+    else:
+        # Mode rapide : compression sans diarisation → on peut aller en mono 16kHz
+        from .audio_processing import compress_for_transcription
+        compressed_path = compress_for_transcription(audio_input)
+        if compressed_path:
+            try:
+                import os as _os
+                _os.unlink(audio_input)
+            except Exception:  # noqa: BLE001
+                pass
+            audio_input = compressed_path
+            logger.info("AAI utilisera la version compressée : %s", audio_input)
 
     try:
         # ─── Stratégie 2026 : ne PAS spécifier speech_model ─────
@@ -157,6 +168,31 @@ def transcribe_recording(recording: MeetingRecording) -> bool:
         recording.transcript_raw = transcript.text or ""
         # Hydrate segments
         _persist_utterances(recording, transcript)
+
+        # Diagnostic : combien de speakers AAI a-t-il détectés ?
+        # Si on a demandé speaker_labels=True mais qu'AAI renvoie 1 seul speaker
+        # alors que la réunion en a clairement plusieurs, c'est un signal que :
+        #   - L'audio est mono très compressé (la diarisation marche mieux en stéréo)
+        #   - Les voix se ressemblent ou s'interrompent trop souvent
+        #   - Le micro était unique (1 seul flux) et AAI ne distingue pas les locuteurs
+        unique_speakers = set()
+        for u in (getattr(transcript, "utterances", None) or []):
+            unique_speakers.add(str(u.speaker))
+        logger.info(
+            "AAI transcribe DONE: rec=%s speakers_detected=%d (wanted=%s) utterances=%d text=%d chars",
+            recording.id, len(unique_speakers), wants_speakers,
+            len(getattr(transcript, "utterances", None) or []),
+            len(recording.transcript_raw),
+        )
+        if wants_speakers and len(unique_speakers) <= 1:
+            logger.warning(
+                "AAI rec=%s : 1 seul speaker détecté malgré speaker_labels=True. "
+                "Causes probables : audio mono ré-encodé (compress pre-AAI), "
+                "voix similaires, ou enregistrement à 1 micro. "
+                "L'utilisateur peut ré-uploader sans pré-compression ou utiliser le mode rapide.",
+                recording.id,
+            )
+
         recording.save(update_fields=["transcript_raw",
                                       "transcript_with_speakers", "updated_at"])
         return True

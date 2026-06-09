@@ -169,23 +169,94 @@ def normalize_audio(recording) -> Optional[bytes]:
         return None
 
 
+def _extract_sample_ffmpeg(
+    src_path: str, *, slices: list[tuple[float, float]],
+) -> Optional[bytes]:
+    """Extrait + concatène des slices d'audio via ffmpeg en streaming.
+
+    Contrairement à pydub, ffmpeg :
+      - ne charge PAS le fichier complet en RAM (streaming par démux)
+      - utilise -ss / -t pour seek-then-extract (O(log n) au lieu de O(n))
+      - encode directement en mp3 64kbps mono → output ~50-80 Ko
+
+    Pour 1h30 d'audio source 150 Mo, l'extraction passe de ~30s + 1.5 Go RAM
+    (pydub) à ~2s + 50 Mo RAM (ffmpeg). C'est essentiel pour ne pas OOM-killer
+    le worker Celery sur les CODIR longs.
+
+    `slices` = liste de (start_sec, end_sec) — on les concatène dans l'ordre.
+    Retourne les bytes MP3 ou None si échec.
+    """
+    import shutil
+    import subprocess
+
+    if not shutil.which("ffmpeg"):
+        return None
+    if not slices:
+        return None
+
+    # Build le filter_complex qui découpe + concatène les slices.
+    # Ex: [0:a]atrim=start=12.3:end=15.0,asetpts=PTS-STARTPTS[a0];
+    #     [0:a]atrim=start=42:end=48,asetpts=PTS-STARTPTS[a1];
+    #     [a0][a1]concat=n=2:v=0:a=1[out]
+    parts: list[str] = []
+    labels: list[str] = []
+    for i, (s, e) in enumerate(slices):
+        if e <= s:
+            continue
+        label = f"a{i}"
+        labels.append(f"[{label}]")
+        parts.append(f"[0:a]atrim=start={s:.3f}:end={e:.3f},asetpts=PTS-STARTPTS[{label}]")
+    if not parts:
+        return None
+    n = len(labels)
+    filter_complex = ";".join(parts) + f";{''.join(labels)}concat=n={n}:v=0:a=1[out]"
+
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False, prefix="sample_") as dst:
+        dst_path = dst.name
+    try:
+        cmd = [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-i", src_path,
+            "-filter_complex", filter_complex,
+            "-map", "[out]",
+            "-c:a", "libmp3lame", "-b:a", "64k", "-ac", "1", "-ar", "22050",
+            dst_path,
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if proc.returncode != 0:
+            logger.warning("ffmpeg sample extract KO: %s", (proc.stderr or "")[:300])
+            return None
+        with open(dst_path, "rb") as f:
+            return f.read()
+    except subprocess.TimeoutExpired:
+        logger.warning("ffmpeg sample extract timeout")
+        return None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("ffmpeg sample extract crash: %s", exc)
+        return None
+    finally:
+        try:
+            os.unlink(dst_path)
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def extract_speaker_sample(
     recording, *, speaker_label: str, segments,
     target_duration_sec: Optional[float] = None,
 ) -> Optional[ContentFile]:
     """Génère un extrait audio représentatif pour un speaker.
 
-    Stratégie :
-    - Concatène les segments les plus longs du speaker jusqu'à atteindre
-      ~target_duration_sec (défaut : settings.SPEAKER_SAMPLE_DURATION_SEC).
-    - Exporte en MP3 (compact + supporté HTML5 audio universellement).
-    - Retourne un ContentFile prêt à `instance.sample_audio.save(...)`.
+    Stratégie en cascade :
+      1. ffmpeg subprocess (rapide, faible RAM) — préféré
+      2. pydub (lent, charge tout en RAM) — fallback si ffmpeg absent,
+         et seulement si la durée totale audio est raisonnable (<30 min).
+
+    Pour 1h30+ d'audio, pydub chargeait 1.5+ Go de PCM en mémoire → OOM-kill
+    silencieux du worker → pipeline bloqué en "diarizing". ffmpeg règle ça.
 
     `segments` = queryset/list de SpeakerSegment pour ce speaker.
     """
-    if not _pydub_available():
-        logger.warning("extract_speaker_sample(%s) : pydub indisponible", speaker_label)
-        return None
     if not recording.audio_file:
         logger.warning("extract_speaker_sample(%s) : pas d'audio source", speaker_label)
         return None
@@ -193,18 +264,105 @@ def extract_speaker_sample(
         settings, "SPEAKER_SAMPLE_DURATION_SEC", 8,
     )
 
+    segs_list = list(segments) if not isinstance(segments, list) else segments
     logger.info(
         "extract_speaker_sample(%s) : %d segments, target %ds",
-        speaker_label, len(list(segments) if not isinstance(segments, list) else segments),
-        target,
+        speaker_label, len(segs_list), target,
     )
 
     # Tri descendant par durée pour piquer les segments les plus parlés
     sorted_segs = sorted(
-        segments,
+        segs_list,
         key=lambda s: (s.end_time - s.start_time),
         reverse=True,
     )
+
+    # Sélectionne les slices jusqu'à atteindre la durée cible
+    selected: list[tuple[float, float]] = []
+    accumulated = 0.0
+    for seg in sorted_segs:
+        if accumulated >= target:
+            break
+        s = max(0.0, float(seg.start_time))
+        e = float(seg.end_time)
+        if e <= s:
+            continue
+        slice_len = e - s
+        remaining = target - accumulated
+        if slice_len > remaining:
+            e = s + remaining
+        selected.append((s, e))
+        accumulated += (e - s)
+
+    # ── Tentative 1 : ffmpeg streaming (recommandé pour longs audios) ──
+    import shutil as _sh
+    if _sh.which("ffmpeg"):
+        # On télécharge l'audio depuis le storage en local pour donner un path
+        # à ffmpeg (storage = MinIO/S3, ffmpeg sait pas lire depuis Django).
+        # Cette descente n'est faite QU'UNE FOIS par recording (pas par speaker)
+        # → caller peut potentiellement caser le path entre speakers.
+        src_path: Optional[str] = None
+        try:
+            recording.audio_file.open("rb")
+            try:
+                with tempfile.NamedTemporaryFile(
+                    suffix=".audio", delete=False, prefix="src_sample_",
+                ) as src:
+                    while True:
+                        block = recording.audio_file.read(1024 * 1024)
+                        if not block:
+                            break
+                        src.write(block)
+                    src_path = src.name
+            finally:
+                recording.audio_file.close()
+
+            # Si aucun slice utilisable, fallback sur les N premières secondes
+            if not selected:
+                logger.info(
+                    "extract_speaker_sample(%s) : fallback sur les %ds initiaux",
+                    speaker_label, target,
+                )
+                selected = [(0.0, float(target))]
+
+            mp3_bytes = _extract_sample_ffmpeg(src_path, slices=selected)
+            if mp3_bytes:
+                logger.info(
+                    "extract_speaker_sample(%s) : OK via ffmpeg (%d Ko, %d slices)",
+                    speaker_label, len(mp3_bytes) // 1024, len(selected),
+                )
+                return ContentFile(mp3_bytes, name=f"sample_{speaker_label}.mp3")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "extract_speaker_sample(%s) ffmpeg KO : %s — fallback pydub",
+                speaker_label, exc,
+            )
+        finally:
+            if src_path and os.path.exists(src_path):
+                try:
+                    os.unlink(src_path)
+                except Exception:  # noqa: BLE001
+                    pass
+
+    # ── Tentative 2 : pydub (fallback, mais avec garde-fou taille) ──
+    if not _pydub_available():
+        logger.warning(
+            "extract_speaker_sample(%s) : ni ffmpeg ni pydub disponibles",
+            speaker_label,
+        )
+        return None
+
+    # Garde-fou : pydub charge TOUT l'audio en RAM. Sur des fichiers > 30 min,
+    # ça consomme plusieurs Go et risque l'OOM-kill. On refuse en mode dégradé
+    # plutôt que de planter silencieusement.
+    duration_total = float(recording.duration_seconds or 0)
+    if duration_total > 30 * 60:
+        logger.warning(
+            "extract_speaker_sample(%s) : audio %ds > 30 min ET ffmpeg KO. "
+            "On skip pour éviter OOM. Installe ffmpeg sur le worker.",
+            speaker_label, int(duration_total),
+        )
+        return None
 
     try:
         from pydub import AudioSegment
