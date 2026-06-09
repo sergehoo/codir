@@ -124,6 +124,21 @@ def aggregate_speakers_from_segments(recording: MeetingRecording) -> list[Detect
             )
 
         out.append(ds)
+
+    # ⚡ Reconnaissance vocale incrémentale : pour chaque speaker on tente
+    # de matcher avec un VoiceProfile existant (appris sur les mappings
+    # passés). Met à jour speaker.suggested_participant + voice_match_confidence.
+    # No-op gracieux si resemblyzer n'est pas installé.
+    try:
+        from .voice_embedding import apply_voice_recognition
+        n_matches = apply_voice_recognition(recording)
+        if n_matches > 0:
+            logger.info(
+                "Voice recognition : %d/%d speakers reconnus pour rec=%s",
+                n_matches, len(out), recording.id,
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Voice recognition KO (non bloquant) : %s", exc)
     return out
 
 

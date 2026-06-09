@@ -94,3 +94,14 @@ anthropic==0.51.0
 openai==1.99.6
 python-magic==0.4.27
 pydub==0.25.1
+# ──────────────────────────────────────────────────────────────
+# Reconnaissance vocale incrémentale (VoiceProfile)
+# ──────────────────────────────────────────────────────────────
+# Resemblyzer : embedding speaker 256-dim CPU-friendly (Apache 2.0).
+# librosa : décodage audio (dépendance Resemblyzer).
+# Le modèle pré-entraîné (~17 Mo) est téléchargé au 1er run du worker.
+# Désactivable via RECORDING_VOICE_RECOGNITION=False si pas voulu.
+resemblyzer==0.1.4
+librosa==0.10.2
+numpy==1.26.4
+scipy==1.13.1

@@ -1,5 +1,5 @@
 // Card de voix détectée : durée, segments, extrait audio, select participant.
-import { Mic, Volume2 } from 'lucide-react'
+import { Mic, Sparkles, Volume2 } from 'lucide-react'
 
 import { cn } from '@/utils/cn'
 
@@ -47,13 +47,25 @@ export function SpeakerCard({ speaker, participants, onChange, disabled }: Props
           <Mic size={16} />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold tabular-nums">
               {speaker.speaker_label}
             </span>
             {speaker.is_confirmed && (
               <span className="text-2xs uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400">
                 confirmé
+              </span>
+            )}
+            {/* ⚡ Badge "voix reconnue" basé sur Resemblyzer */}
+            {!speaker.is_confirmed
+             && speaker.voice_match_confidence >= 0.75
+             && speaker.suggested_participant && (
+              <span
+                className="inline-flex items-center gap-1 text-2xs uppercase tracking-wider px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-300 border border-violet-500/30"
+                title={`Match Resemblyzer : ${Math.round(speaker.voice_match_confidence * 100)}% de similarité avec la voix de ${speaker.suggested_participant.full_name || speaker.suggested_participant.email}.`}
+              >
+                <Sparkles size={9} strokeWidth={2.5} />
+                Voix reconnue {Math.round(speaker.voice_match_confidence * 100)}%
               </span>
             )}
           </div>

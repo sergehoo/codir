@@ -47,11 +47,13 @@ class DetectedSpeakerSerializer(serializers.ModelSerializer):
             "id", "speaker_label", "display_name", "sample_audio",
             "sample_audio_url", "total_segments", "total_duration",
             "confidence", "suggested_participant", "mapped_participant",
-            "is_confirmed", "created_at", "updated_at",
+            "is_confirmed", "voice_match_confidence",
+            "created_at", "updated_at",
         )
         read_only_fields = ("id", "speaker_label", "total_segments",
-                            "total_duration", "confidence", "created_at",
-                            "updated_at", "sample_audio_url")
+                            "total_duration", "confidence",
+                            "voice_match_confidence",
+                            "created_at", "updated_at", "sample_audio_url")
 
     def get_sample_audio_url(self, obj):
         """URL de stream Django avec token signé éphémère (?token=...).

@@ -49,6 +49,34 @@ def map_speaker_to_participant(
         confirmed_by=confirmed_by,
         notes=notes[:300],
     )
+
+    # ⚡ Apprentissage incrémental : on extrait l'embedding de la voix de
+    # ce speaker depuis son sample_audio et on l'ajoute au VoiceProfile
+    # du user mappé. Sur les prochaines réunions, cette voix sera
+    # automatiquement suggérée à ce user. No-op gracieux si resemblyzer KO.
+    try:
+        from .voice_embedding import (
+            add_sample_to_user_profile, compute_embedding_for_speaker,
+        )
+        emb = compute_embedding_for_speaker(sp)
+        if emb:
+            # quality_score basé sur la durée parlée (plus = mieux), clamp 0.3..1.0
+            qual = max(0.3, min(1.0, (sp.total_duration or 8) / 60.0))
+            add_sample_to_user_profile(
+                user=participant,
+                organization=recording.organization,
+                embedding=emb,
+                source_recording=recording,
+                source_speaker_label=speaker_label,
+                quality_score=qual,
+                added_by=confirmed_by,
+            )
+            logger.info(
+                "VoiceProfile enrichi pour user=%s via mapping rec=%s speaker=%s",
+                participant.id, recording.id, speaker_label,
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Apprentissage voix KO (non bloquant) : %s", exc)
     return sp
 
 

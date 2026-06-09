@@ -48,6 +48,7 @@ export interface DetectedSpeaker {
   suggested_participant: UserMini | null
   mapped_participant: UserMini | null
   is_confirmed: boolean
+  voice_match_confidence: number  // 0..1 cosine similarity au VoiceProfile suggéré
   created_at: string
   updated_at: string
 }

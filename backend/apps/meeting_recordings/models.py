@@ -320,6 +320,16 @@ class DetectedSpeaker(TenantAwareModel):
         help_text="True quand l'utilisateur a explicitement validé l'association.",
     )
 
+    # ── Auto-suggestion via VoiceProfile (Resemblyzer embeddings) ──
+    voice_match_confidence = models.FloatField(
+        default=0.0,
+        help_text=(
+            "Score de matching avec un VoiceProfile existant (0..1). "
+            "0 = pas de match au-dessus du seuil. > 0.75 = match confiant. "
+            "Renseigné automatiquement après diarisation si Resemblyzer dispo."
+        ),
+    )
+
     class Meta:
         ordering = ["recording_id", "speaker_label"]
         unique_together = [("recording", "speaker_label")]
@@ -412,3 +422,88 @@ class RecordingAIExtraction(TenantAwareModel):
 
     def __str__(self):
         return f"{self.extraction_type} #{self.id} ({self.status})"
+
+
+# ─── VoiceProfile : mémoire des voix par user ────────────────
+#
+# Quand un utilisateur valide qu'un SPEAKER_XX = un participant donné,
+# on extrait l'embedding vectoriel de la voix (256-dim via Resemblyzer)
+# et on l'ajoute au VoiceProfile de ce participant. Sur les futures
+# réunions, après diarisation, on compare chaque nouvelle voix à tous
+# les VoiceProfile de l'org pour pré-suggérer le bon participant.
+
+class VoiceProfile(TenantAwareModel):
+    """Profil vocal d'un utilisateur dans une organisation.
+
+    Stocke une moyenne pondérée des embeddings extraits à chaque mapping
+    confirmé. Plus on a de samples, plus l'embedding moyen est précis et
+    le matching futur est fiable.
+    """
+
+    user = models.ForeignKey(
+        "accounts.User", on_delete=models.CASCADE, related_name="voice_profiles",
+    )
+    # Vecteur moyen (256-dim float32 sérialisé en JSON). On stocke en JSON pour
+    # éviter pgvector et garder portable PG/SQLite. Pas indexé : on fait du
+    # nearest-neighbour brute-force en Python (ok pour 5-50 voix par org).
+    embedding = models.JSONField(
+        default=list, blank=True,
+        help_text="Vecteur moyen 256-dim (Resemblyzer). Vide si pas encore appris.",
+    )
+    sample_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Nombre d'extraits cumulés pour calculer l'embedding moyen.",
+    )
+    last_updated_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(
+        default=True,
+        help_text="False pour désactiver le matching auto sur ce user (RGPD opt-out).",
+    )
+
+    class Meta:
+        ordering = ["user_id"]
+        unique_together = [("organization", "user")]
+        indexes = [
+            models.Index(fields=["organization", "is_active"]),
+        ]
+
+    def __str__(self):
+        return f"VoiceProfile({self.user_id}, samples={self.sample_count})"
+
+
+class VoiceProfileSample(TenantAwareModel):
+    """Trace les embeddings individuels qui ont contribué à un VoiceProfile.
+
+    Sert à : auditer la provenance, recalculer la moyenne, exclure un sample
+    bruité, ou désapprendre suite à une erreur de mapping.
+    """
+
+    voice_profile = models.ForeignKey(
+        VoiceProfile, on_delete=models.CASCADE, related_name="samples",
+    )
+    # Origine du sample
+    source_recording = models.ForeignKey(
+        MeetingRecording, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="voice_samples_contributed",
+    )
+    source_speaker_label = models.CharField(max_length=40, blank=True)
+
+    embedding = models.JSONField(default=list, blank=True)
+    quality_score = models.FloatField(
+        default=1.0,
+        help_text="Estimation qualité (durée + SNR). Pondère la moyenne.",
+    )
+    added_by = models.ForeignKey(
+        "accounts.User", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="voice_samples_added",
+        help_text="Qui a validé le mapping qui a permis d'apprendre cette voix.",
+    )
+
+    class Meta:
+        ordering = ["voice_profile_id", "-created_at"]
+        indexes = [
+            models.Index(fields=["voice_profile", "-created_at"]),
+        ]
+
+    def __str__(self):
+        return f"Sample for {self.voice_profile_id} (rec={self.source_recording_id})"
