@@ -31,6 +31,12 @@ class LoginView(TokenObtainPairView):
         - Si user.mfa_enabled = True → retourne {mfa_required: True, challenge_token}
     Étape 2 (challenge_token + code TOTP) :
         - POST /auth/mfa/verify/ → retourne {access, refresh}
+
+    Pre-checks explicites avant SimpleJWT pour des messages d'erreur précis :
+      - 400 si email/password manquants
+      - 403 + code=account_disabled si user désactivé (avec contact admin)
+      - 423 + code=account_locked si verrouillé par axes (avec délai restant)
+      - 401 + code=invalid_credentials sinon (sans révéler si email existe)
     """
     serializer_class = TokenObtainPairWithOrgSerializer
 
@@ -39,15 +45,77 @@ class LoginView(TokenObtainPairView):
         from . import mfa
 
         email = (request.data.get("email") or "").lower().strip()
-        if not email:
-            return super().post(request, *args, **kwargs)
+        password = request.data.get("password") or ""
 
-        # Vérification password via serializer standard
+        # ─── 1. Validation basique champs requis ───────────────
+        if not email or not password:
+            return Response(
+                {
+                    "detail": "Email et mot de passe requis.",
+                    "code": "missing_fields",
+                },
+                status=drf_status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ─── 2. Vérif si compte verrouillé par axes (brute-force) ──
+        # On regarde AccessAttempt qui tracke les échecs récents.
+        try:
+            from axes.models import AccessAttempt
+            from django.conf import settings as dj_settings
+            failure_limit = getattr(dj_settings, "AXES_FAILURE_LIMIT", 5)
+            attempt = AccessAttempt.objects.filter(username=email).first()
+            if attempt and attempt.failures_since_start >= failure_limit:
+                cooloff = getattr(dj_settings, "AXES_COOLOFF_TIME", None)
+                wait_min = int(cooloff.total_seconds() / 60) if cooloff else 15
+                return Response(
+                    {
+                        "detail": (
+                            f"Compte verrouillé après {attempt.failures_since_start} "
+                            f"tentatives. Réessayez dans ~{wait_min} min ou contactez "
+                            f"votre administrateur pour débloquer immédiatement."
+                        ),
+                        "code": "account_locked",
+                        "failures": attempt.failures_since_start,
+                        "wait_minutes": wait_min,
+                    },
+                    status=423,  # HTTP 423 Locked (RFC 4918)
+                )
+        except Exception:  # noqa: BLE001
+            pass  # axes non installé ou query KO — on continue, pas bloquant
+
+        # ─── 3. Pre-check existence du user + état actif ──────
+        # Important : on ne révèle PAS si l'email existe (sinon enum d'users).
+        # MAIS si le user existe et est inactif, c'est un cas spécifique qui
+        # mérite un message clair pour le user honnête (et l'attaquant aurait
+        # de toute façon la même info via tentatives répétées).
+        user_lookup = User.objects.filter(email__iexact=email).first()
+        if user_lookup and not user_lookup.is_active:
+            log.info("Login refusé : compte désactivé email=%s", email)
+            return Response(
+                {
+                    "detail": (
+                        "Votre compte a été désactivé. Contactez votre "
+                        "administrateur CODIR pour le réactiver."
+                    ),
+                    "code": "account_disabled",
+                },
+                status=drf_status.HTTP_403_FORBIDDEN,
+            )
+
+        # ─── 4. Vérification password via SimpleJWT ───────────
         response = super().post(request, *args, **kwargs)
         if response.status_code != drf_status.HTTP_200_OK:
-            return response
+            # SimpleJWT renvoie 401 avec un message peu utile.
+            # On remplace par un message clair + code applicatif.
+            return Response(
+                {
+                    "detail": "Email ou mot de passe incorrect.",
+                    "code": "invalid_credentials",
+                },
+                status=drf_status.HTTP_401_UNAUTHORIZED,
+            )
 
-        # Password OK — check MFA
+        # ─── 5. Password OK — check MFA ───────────────────────
         user = User.objects.filter(email=email).first()
         if user and user.mfa_enabled and user.mfa_method == "totp":
             return Response({
@@ -56,6 +124,15 @@ class LoginView(TokenObtainPairView):
                 "method": "totp",
                 "email": email,
             }, status=drf_status.HTTP_200_OK)
+
+        # ─── 6. Avertissement si MDP à changer ────────────────
+        if user and getattr(user, "must_change_password", False):
+            # On ajoute un flag dans la réponse, sans bloquer la session.
+            # Le frontend peut afficher un nudge "Changez votre MDP".
+            data = response.data if hasattr(response, "data") else {}
+            if isinstance(data, dict):
+                data["must_change_password"] = True
+                response.data = data
 
         return response
 
