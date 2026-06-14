@@ -20,8 +20,14 @@ export type ActionPlanStats = {
 }
 
 export const actionPlansApi = {
-  list: async () =>
-    (await apiClient.get<Paginated<ActionPlan> | ActionPlan[]>('/action-plans/')).data,
+  list: async (filters: { decision?: string; standalone?: boolean } = {}) => {
+    const params: Record<string, string> = {}
+    if (filters.decision) params.decision = filters.decision
+    if (filters.standalone !== undefined) params.standalone = String(filters.standalone)
+    return (await apiClient.get<Paginated<ActionPlan> | ActionPlan[]>(
+      '/action-plans/', { params },
+    )).data
+  },
   retrieve: async (id: string) =>
     (await apiClient.get<ActionPlan>(`/action-plans/${id}/`)).data,
   stats: async () =>
@@ -108,7 +114,11 @@ export const meetingsExportApi = {
 
 export const plansKeys = {
   all: ['action-plans'] as const,
-  list: () => [...plansKeys.all, 'list'] as const,
+  list: (filters?: { decision?: string; standalone?: boolean }) =>
+    filters
+      ? [...plansKeys.all, 'list', filters] as const
+      : [...plansKeys.all, 'list'] as const,
+  byDecision: (decisionId: string) => [...plansKeys.all, 'byDecision', decisionId] as const,
   detail: (id: string) => [...plansKeys.all, 'detail', id] as const,
   tasks: (id: string) => [...plansKeys.all, 'tasks', id] as const,
   stats: () => [...plansKeys.all, 'stats'] as const,

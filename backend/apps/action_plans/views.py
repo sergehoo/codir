@@ -34,10 +34,32 @@ class ActionPlanViewSet(viewsets.ModelViewSet):
     ordering = ["-created_at"]
 
     def get_queryset(self):
-        return ActionPlan.objects.select_related("owner", "decision").prefetch_related("tasks")
+        qs = ActionPlan.objects.select_related("owner", "decision").prefetch_related("tasks")
+        # Filtre standalone via query param (?standalone=true|false)
+        standalone = self.request.query_params.get("standalone")
+        if standalone is not None:
+            if standalone.lower() in ("1", "true", "yes"):
+                qs = qs.filter(decision__isnull=True)
+            elif standalone.lower() in ("0", "false", "no"):
+                qs = qs.filter(decision__isnull=False)
+        return qs
 
     def get_serializer_class(self):
         return ActionPlanListSerializer if self.action == "list" else ActionPlanDetailSerializer
+
+    def perform_create(self, serializer):
+        """Injecte automatiquement l'organisation + owner depuis la requête.
+
+        Le ModelViewSet par défaut ne setterait pas ces champs → IntegrityError
+        sur organization NOT NULL. On accepte aussi un `decision` (UUID) en
+        payload pour rattacher le plan à une décision, ou un plan standalone
+        si decision est null/absent.
+        """
+        kwargs = {"organization": self.request.organization}
+        # Si pas de owner explicite, on prend l'utilisateur courant
+        if not serializer.validated_data.get("owner"):
+            kwargs["owner"] = self.request.user
+        serializer.save(**kwargs)
 
     @action(detail=True, methods=["get", "post"])
     def tasks(self, request, pk=None):

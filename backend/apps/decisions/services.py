@@ -121,8 +121,14 @@ def convert_to_action_plan(*, decision: Decision, actor, title: str = "",
         raise TransitionNotAllowed(
             detail="La décision doit être validée pour générer un plan d'action."
         )
-    if hasattr(decision, "action_plan"):
-        return decision.action_plan
+    # ⚠ Anciennement : si un plan existe déjà, on retourne le même (idempotent).
+    # Maintenant que la relation est 1-à-N, ce raccourci est moins évident.
+    # On garde l'idempotence pour le 1er appel "convert" (utilisé par les flows
+    # existants) mais on permet la création multiple via l'endpoint
+    # POST /action-plans/ direct (decision_id en payload).
+    existing = decision.action_plans.order_by("created_at").first()
+    if existing is not None:
+        return existing
 
     plan = ActionPlan.unscoped.create(
         organization=decision.organization,

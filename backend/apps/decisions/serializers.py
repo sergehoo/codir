@@ -61,7 +61,9 @@ class DecisionDetailSerializer(DecisionListSerializer):
         ]
 
     def get_has_action_plan(self, obj):
-        return hasattr(obj, "action_plan")
+        # related_name est devenu "action_plans" (pluriel) après la migration
+        # OneToOneField → ForeignKey. On vérifie qu'au moins un plan est lié.
+        return obj.action_plans.exists()
 
 
 class DecisionCreateSerializer(serializers.ModelSerializer):

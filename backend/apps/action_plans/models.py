@@ -7,8 +7,16 @@ from core.models import TenantAwareModel
 
 
 class ActionPlan(TenantAwareModel):
-    decision = models.OneToOneField(
-        "decisions.Decision", on_delete=models.CASCADE, related_name="action_plan"
+    # ⚠ Historiquement OneToOneField (1 décision = 1 plan max). Migré en
+    # ForeignKey + null=True pour autoriser :
+    #   - plusieurs plans par décision (court terme + moyen terme, etc.)
+    #   - plans standalone sans décision parente
+    # `related_name="action_plans"` (pluriel) — `decision.action_plans.all()`.
+    decision = models.ForeignKey(
+        "decisions.Decision",
+        on_delete=models.CASCADE,
+        related_name="action_plans",
+        null=True, blank=True,
     )
     title = models.CharField(max_length=300)
     description_md = models.TextField(blank=True)

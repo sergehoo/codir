@@ -4,7 +4,7 @@ import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import {
   ArrowLeft, ArrowUpRight, CheckCircle2, Loader2, Lock, MessageSquare,
-  Pencil, PlayCircle, Send, Sparkles, Trash2, XCircle,
+  Pencil, PlayCircle, Plus, Send, Sparkles, Trash2, XCircle,
 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -13,7 +13,9 @@ import { Modal } from '@/components/widgets/Modal'
 import { PremiumButton } from '@/components/widgets/PremiumButton'
 import { PriorityBadge } from '@/components/widgets/PriorityBadge'
 import { StatusBadge } from '@/components/widgets/StatusBadge'
+import { actionPlansApi, plansKeys } from '@/features/action-plans/api'
 import { useAuthStore } from '@/stores/auth'
+import type { ActionPlan } from '@/types'
 
 import { decisionsApi, decisionsKeys } from './api'
 
@@ -206,6 +208,9 @@ export function DecisionDetailPage() {
               <p className="text-fg-subtle text-sm italic">Aucune description fournie.</p>
             )}
           </section>
+
+          {/* Plans d'action liés */}
+          <LinkedActionPlans decisionId={id} canManage={!!canEdit} />
 
           {/* Commentaires */}
           <section className="card p-6">
@@ -444,6 +449,363 @@ function EditDecisionModal({
           <PremiumButton
             type="submit"
             disabled={!title.trim() || update.isPending}
+            iconLeft={update.isPending ? <Loader2 size={14} className="animate-spin" /> : <Pencil size={14} />}
+          >
+            {update.isPending ? 'Mise à jour…' : 'Enregistrer'}
+          </PremiumButton>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+
+/* ════════════════════════════════════════════════════════════
+   LinkedActionPlans — liste les plans rattachés + CRUD inline
+   ════════════════════════════════════════════════════════════ */
+
+function LinkedActionPlans({
+  decisionId, canManage,
+}: { decisionId: string; canManage: boolean }) {
+  const qc = useQueryClient()
+  const [newOpen, setNewOpen] = useState(false)
+  const [editing, setEditing] = useState<ActionPlan | null>(null)
+
+  const { data, isLoading } = useQuery({
+    queryKey: plansKeys.byDecision(decisionId),
+    queryFn: () => actionPlansApi.list({ decision: decisionId }),
+  })
+  const plans = (Array.isArray(data) ? data : (data?.results ?? [])) as ActionPlan[]
+
+  const deletePlan = useMutation({
+    mutationFn: (planId: string) => actionPlansApi.remove(planId),
+    onSuccess: () => {
+      toast.success('Plan supprimé.')
+      qc.invalidateQueries({ queryKey: plansKeys.all })
+      qc.invalidateQueries({ queryKey: decisionsKeys.detail(decisionId) })
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.detail ?? 'Suppression refusée.'),
+  })
+
+  function confirmDelete(plan: ActionPlan) {
+    if (window.confirm(`Supprimer le plan « ${plan.title} » et toutes ses tâches ?\n\nCette action est irréversible.`)) {
+      deletePlan.mutate(plan.id)
+    }
+  }
+
+  return (
+    <section className="card p-6">
+      <div className="text-2xs uppercase tracking-widest text-fg-muted font-semibold mb-4 flex items-center gap-3">
+        <span className="divider-accent" /> Plans d'action liés
+        <span className="ml-auto chip-quiet">{plans.length}</span>
+        {canManage && (
+          <button
+            type="button"
+            onClick={() => setNewOpen(true)}
+            className="ml-2 inline-flex items-center gap-1 text-2xs uppercase tracking-wider px-2 py-1 rounded-md bg-copper-500/15 hover:bg-copper-500/25 text-copper-400 border border-copper-500/30 font-semibold"
+          >
+            <Plus size={11} /> Nouveau plan
+          </button>
+        )}
+      </div>
+
+      {isLoading && (
+        <div className="text-fg-subtle text-sm italic">Chargement…</div>
+      )}
+
+      {!isLoading && plans.length === 0 && (
+        <div className="text-fg-subtle text-sm italic py-4 text-center">
+          Aucun plan d'action rattaché à cette décision.
+          {canManage && (
+            <button
+              type="button"
+              onClick={() => setNewOpen(true)}
+              className="block mx-auto mt-2 text-copper-400 hover:underline text-xs font-semibold"
+            >
+              + Créer le premier plan d'action
+            </button>
+          )}
+        </div>
+      )}
+
+      {plans.length > 0 && (
+        <ul className="space-y-2">
+          {plans.map((p) => (
+            <li key={p.id} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-bg-elevated">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-sm font-semibold text-fg truncate">{p.title}</span>
+                  <StatusBadge status={p.status} />
+                </div>
+                <div className="flex items-center gap-3 text-2xs text-fg-muted">
+                  <span className="tabular-nums">{p.progress_percent}% avancement</span>
+                  {p.target_end_date && (
+                    <span>· échéance {format(new Date(p.target_end_date), 'd MMM yyyy', { locale: fr })}</span>
+                  )}
+                  {(p as any).tasks_count !== undefined && (
+                    <span>· {(p as any).tasks_count} tâche{(p as any).tasks_count > 1 ? 's' : ''}</span>
+                  )}
+                </div>
+                <div className="mt-1.5 h-1 bg-bg-base rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-copper-500 transition-all"
+                    style={{ width: `${p.progress_percent}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-1 shrink-0">
+                <Link
+                  to="/action-plans/$id"
+                  params={{ id: p.id }}
+                  className="p-1.5 rounded hover:bg-fg/10 text-fg-muted hover:text-fg"
+                  title="Ouvrir le plan"
+                >
+                  <ArrowUpRight size={14} />
+                </Link>
+                {canManage && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setEditing(p)}
+                      className="p-1.5 rounded hover:bg-fg/10 text-fg-muted hover:text-fg"
+                      title="Modifier"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => confirmDelete(p)}
+                      disabled={deletePlan.isPending}
+                      className="p-1.5 rounded hover:bg-danger/10 text-fg-muted hover:text-danger disabled:opacity-50"
+                      title="Supprimer"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Modals */}
+      <NewPlanForDecisionModal
+        open={newOpen}
+        onClose={() => setNewOpen(false)}
+        decisionId={decisionId}
+      />
+      <EditActionPlanModal
+        open={!!editing}
+        onClose={() => setEditing(null)}
+        plan={editing}
+      />
+    </section>
+  )
+}
+
+function NewPlanForDecisionModal({
+  open, onClose, decisionId,
+}: { open: boolean; onClose: () => void; decisionId: string }) {
+  const qc = useQueryClient()
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [targetEndDate, setTargetEndDate] = useState('')
+
+  const create = useMutation({
+    mutationFn: () => actionPlansApi.create({
+      title: title.trim(),
+      description_md: description.trim() || undefined,
+      target_end_date: targetEndDate || undefined,
+      decision: decisionId,
+    } as any),
+    onSuccess: () => {
+      toast.success('Plan créé et rattaché à la décision.')
+      qc.invalidateQueries({ queryKey: plansKeys.all })
+      qc.invalidateQueries({ queryKey: decisionsKeys.detail(decisionId) })
+      setTitle(''); setDescription(''); setTargetEndDate('')
+      onClose()
+    },
+    onError: (e: any) => {
+      const data = e?.response?.data
+      const msg = data?.detail
+        || (data && typeof data === 'object'
+          ? Object.entries(data).map(([k, v]: [string, any]) => `${k}: ${Array.isArray(v) ? v[0] : v}`).join(' · ')
+          : null)
+        || e?.message || 'Erreur création.'
+      toast.error(msg)
+    },
+  })
+
+  return (
+    <Modal open={open} onClose={onClose} title="Nouveau plan d'action" size="md">
+      <form
+        onSubmit={(e) => { e.preventDefault(); if (title.trim()) create.mutate() }}
+        className="space-y-4"
+      >
+        <p className="text-xs text-fg-muted">
+          Ce plan sera automatiquement rattaché à la décision courante.
+        </p>
+        <div>
+          <label htmlFor="np-title" className="text-2xs uppercase tracking-wider text-fg-muted font-semibold block mb-1.5">
+            Titre <span className="text-danger">*</span>
+          </label>
+          <input
+            id="np-title" name="title" type="text" required autoFocus
+            value={title} onChange={(e) => setTitle(e.target.value)}
+            className="w-full px-3 py-2 rounded-md bg-bg-elevated border border-border text-sm focus:border-copper-500/50 outline-none"
+            maxLength={300}
+          />
+        </div>
+        <div>
+          <label htmlFor="np-desc" className="text-2xs uppercase tracking-wider text-fg-muted font-semibold block mb-1.5">
+            Description
+          </label>
+          <textarea
+            id="np-desc" name="description"
+            value={description} onChange={(e) => setDescription(e.target.value)}
+            className="w-full px-3 py-2 rounded-md bg-bg-elevated border border-border text-sm min-h-[80px] focus:border-copper-500/50 outline-none resize-y"
+            rows={3}
+          />
+        </div>
+        <div>
+          <label htmlFor="np-end" className="text-2xs uppercase tracking-wider text-fg-muted font-semibold block mb-1.5">
+            Échéance cible
+          </label>
+          <input
+            id="np-end" name="target_end_date" type="date"
+            value={targetEndDate} onChange={(e) => setTargetEndDate(e.target.value)}
+            className="w-full px-3 py-2 rounded-md bg-bg-elevated border border-border text-sm focus:border-copper-500/50 outline-none"
+          />
+        </div>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-fg-muted hover:text-fg rounded-md">
+            Annuler
+          </button>
+          <PremiumButton
+            type="submit"
+            disabled={!title.trim() || create.isPending}
+            iconLeft={create.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+          >
+            {create.isPending ? 'Création…' : 'Créer le plan'}
+          </PremiumButton>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function EditActionPlanModal({
+  open, onClose, plan,
+}: { open: boolean; onClose: () => void; plan: ActionPlan | null }) {
+  const qc = useQueryClient()
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [targetEndDate, setTargetEndDate] = useState('')
+  const [status, setStatus] = useState<string>('open')
+
+  // Resync quand on change de plan
+  useState(() => {
+    if (plan) {
+      setTitle(plan.title)
+      setDescription((plan as any).description_md ?? '')
+      setTargetEndDate(plan.target_end_date ?? '')
+      setStatus(plan.status)
+    }
+    return undefined
+  })
+
+  const update = useMutation({
+    mutationFn: () => {
+      if (!plan) throw new Error('no plan')
+      return actionPlansApi.update(plan.id, {
+        title: title.trim(),
+        description_md: description,
+        target_end_date: targetEndDate || null,
+        status,
+      } as any)
+    },
+    onSuccess: () => {
+      toast.success('Plan mis à jour.')
+      qc.invalidateQueries({ queryKey: plansKeys.all })
+      if (plan?.decision) {
+        qc.invalidateQueries({ queryKey: decisionsKeys.detail(plan.decision as any) })
+      }
+      onClose()
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.detail ?? 'Modification refusée.'),
+  })
+
+  if (!plan) return null
+
+  return (
+    <Modal open={open} onClose={onClose} title={`Modifier — ${plan.title.slice(0, 40)}`} size="md">
+      <form
+        onSubmit={(e) => { e.preventDefault(); if (title.trim()) update.mutate() }}
+        className="space-y-4"
+      >
+        <div>
+          <label htmlFor="ep-title" className="text-2xs uppercase tracking-wider text-fg-muted font-semibold block mb-1.5">
+            Titre <span className="text-danger">*</span>
+          </label>
+          <input
+            id="ep-title" name="title" type="text" required
+            value={title || plan.title} onChange={(e) => setTitle(e.target.value)}
+            className="w-full px-3 py-2 rounded-md bg-bg-elevated border border-border text-sm focus:border-copper-500/50 outline-none"
+            maxLength={300}
+          />
+        </div>
+        <div>
+          <label htmlFor="ep-desc" className="text-2xs uppercase tracking-wider text-fg-muted font-semibold block mb-1.5">
+            Description
+          </label>
+          <textarea
+            id="ep-desc" name="description"
+            value={description ?? ((plan as any).description_md ?? '')}
+            onChange={(e) => setDescription(e.target.value)}
+            className="w-full px-3 py-2 rounded-md bg-bg-elevated border border-border text-sm min-h-[100px] focus:border-copper-500/50 outline-none resize-y"
+            rows={4}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="ep-status" className="text-2xs uppercase tracking-wider text-fg-muted font-semibold block mb-1.5">
+              Statut
+            </label>
+            <select
+              id="ep-status" name="status"
+              value={status || plan.status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="w-full px-3 py-2 rounded-md bg-bg-elevated border border-border text-sm focus:border-copper-500/50 outline-none"
+            >
+              <option value="open">Ouvert</option>
+              <option value="in_progress">En cours</option>
+              <option value="blocked">Bloqué</option>
+              <option value="completed">Terminé</option>
+              <option value="cancelled">Annulé</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="ep-end" className="text-2xs uppercase tracking-wider text-fg-muted font-semibold block mb-1.5">
+              Échéance cible
+            </label>
+            <input
+              id="ep-end" name="target_end_date" type="date"
+              value={(targetEndDate || plan.target_end_date) ?? ''}
+              onChange={(e) => setTargetEndDate(e.target.value)}
+              className="w-full px-3 py-2 rounded-md bg-bg-elevated border border-border text-sm focus:border-copper-500/50 outline-none"
+            />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-fg-muted hover:text-fg rounded-md">
+            Annuler
+          </button>
+          <PremiumButton
+            type="submit"
+            disabled={update.isPending}
             iconLeft={update.isPending ? <Loader2 size={14} className="animate-spin" /> : <Pencil size={14} />}
           >
             {update.isPending ? 'Mise à jour…' : 'Enregistrer'}
