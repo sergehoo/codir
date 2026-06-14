@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { ArrowUpRight, Calendar, Diamond, Sparkles } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { AtelierGauge } from '@/components/widgets/AtelierGauge'
 import { KaydanLogo } from '@/components/widgets/KaydanLogo'
@@ -57,7 +58,33 @@ export function DashboardPage() {
                 Trois sujets demandent votre attention ce matin.
               </p>
             </div>
-            <PremiumButton variant="secondary" size="md" iconLeft={<Sparkles size={15} />}>
+            <PremiumButton
+              variant="secondary" size="md"
+              iconLeft={<Sparkles size={15} />}
+              onClick={() => {
+                // Placeholder : ouvrira l'Assistant IA latéral quand il sera
+                // implémenté. Pour l'instant on génère un briefing rapide à
+                // partir des KPIs déjà chargés côté frontend.
+                if (!k) {
+                  toast.info('Briefing indisponible — données pas encore chargées.')
+                  return
+                }
+                const lines = [
+                  '📋 Briefing du jour',
+                  '',
+                  `🗓 Réunions à venir : ${k.upcoming_meetings ?? 0}`,
+                  `📌 Décisions en attente : ${k.pending_decisions ?? 0}`,
+                  `⚠ Tâches en retard : ${k.overdue_tasks ?? 0}`,
+                  `✅ Mes tâches actives : ${k.my_tasks_open ?? 0}`,
+                  '',
+                  'Bientôt : Assistant IA conversationnel pour aller plus loin.',
+                ]
+                toast.message('Bonjour ' + (user?.first_name || ''), {
+                  description: lines.join('\n'),
+                  duration: 15000,
+                })
+              }}
+            >
               Briefing du jour
             </PremiumButton>
           </div>

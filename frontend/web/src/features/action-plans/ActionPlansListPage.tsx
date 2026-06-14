@@ -4,7 +4,7 @@ import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import {
   AlertTriangle, Archive, ArrowUpRight, CheckCircle2, CheckSquare,
-  ChevronDown, ChevronRight, Pencil, Plus, Presentation, Trash2,
+  ChevronDown, ChevronRight, Loader2, Pencil, Plus, Presentation, Trash2,
 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -109,6 +109,7 @@ export function ActionPlansListPage() {
 
   const [showHistory, setShowHistory] = useState(false)
   const [liveMode, setLiveMode] = useState(false)
+  const [newPlanOpen, setNewPlanOpen] = useState(false)
 
   return (
     <div className="min-h-full bg-bg-base">
@@ -121,15 +122,28 @@ export function ActionPlansListPage() {
             : `${archived.length} Dossier(s) archivé(s)`
         }
         actions={
-          <button
-            type="button"
-            onClick={() => setLiveMode(true)}
-            className="px-4 py-2 rounded-md bg-copper-500 hover:bg-copper-400 text-white text-sm font-semibold flex items-center gap-2 shadow-sm"
-          >
-            <Presentation size={16} />
-            Live CODIR Mode
-          </button>
+          <div className="flex items-center gap-2">
+            <PremiumButton
+              onClick={() => setNewPlanOpen(true)}
+              iconLeft={<Plus size={14} />}
+            >
+              Nouveau dossier
+            </PremiumButton>
+            <button
+              type="button"
+              onClick={() => setLiveMode(true)}
+              className="px-4 py-2 rounded-md bg-bg-elevated border border-border hover:border-copper-500/30 text-sm font-semibold flex items-center gap-2"
+            >
+              <Presentation size={16} />
+              Live CODIR
+            </button>
+          </div>
         }
+      />
+
+      <NewActionPlanModal
+        open={newPlanOpen}
+        onClose={() => setNewPlanOpen(false)}
       />
 
       {liveMode && <LiveCodirMode onClose={() => setLiveMode(false)} />}
@@ -602,5 +616,113 @@ function PlanArchivedRow({ p, idx }: { p: ActionPlan; idx: number }) {
         <ArrowUpRight size={14} className="text-fg-subtle group-hover:text-copper-400 transition" />
       </div>
     </Link>
+  )
+}
+
+
+/* ════════════════════════════════════════════════════════════
+   Modal "Nouveau dossier" — création standalone (sans décision)
+   ════════════════════════════════════════════════════════════ */
+
+function NewActionPlanModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
+  const [targetEndDate, setTargetEndDate] = useState('')
+
+  const create = useMutation({
+    mutationFn: () => actionPlansApi.create({
+      title: title.trim(),
+      description_md: description.trim() || undefined,
+      target_end_date: targetEndDate || undefined,
+    } as any),
+    onSuccess: () => {
+      toast.success('Dossier créé.')
+      qc.invalidateQueries({ queryKey: plansKeys.all })
+      reset()
+      onClose()
+    },
+    onError: (e: any) => {
+      const data = e?.response?.data
+      const msg = data?.detail
+        || (data && typeof data === 'object'
+          ? Object.entries(data).map(([k, v]: [string, any]) => `${k}: ${Array.isArray(v) ? v[0] : v}`).join(' · ')
+          : null)
+        || e?.message
+        || 'Erreur création dossier.'
+      toast.error(msg)
+    },
+  })
+
+  function reset() {
+    setTitle(''); setDescription(''); setTargetEndDate('')
+  }
+
+  return (
+    <Modal open={open} onClose={() => { reset(); onClose() }} title="Nouveau dossier / plan d'action" size="md">
+      <form
+        onSubmit={(e) => { e.preventDefault(); if (title.trim()) create.mutate() }}
+        className="space-y-4"
+      >
+        <p className="text-xs text-fg-muted">
+          Crée un plan d'action autonome (sans décision parente). Les tâches
+          pourront être ajoutées ensuite depuis la page du dossier.
+        </p>
+
+        <div>
+          <label htmlFor="plan-title" className="text-2xs uppercase tracking-wider text-fg-muted font-semibold block mb-1.5">
+            Titre <span className="text-danger">*</span>
+          </label>
+          <input
+            id="plan-title" name="title" type="text" required autoFocus
+            value={title} onChange={(e) => setTitle(e.target.value)}
+            placeholder="Ex : Refonte du système RH 2026"
+            className="w-full px-3 py-2 rounded-md bg-bg-elevated border border-border text-sm focus:border-copper-500/50 outline-none"
+            maxLength={250}
+          />
+        </div>
+
+        <div>
+          <label htmlFor="plan-desc" className="text-2xs uppercase tracking-wider text-fg-muted font-semibold block mb-1.5">
+            Description (Markdown)
+          </label>
+          <textarea
+            id="plan-desc" name="description"
+            value={description} onChange={(e) => setDescription(e.target.value)}
+            placeholder="Objectifs, périmètre, contraintes…"
+            className="w-full px-3 py-2 rounded-md bg-bg-elevated border border-border text-sm min-h-[100px] focus:border-copper-500/50 outline-none resize-y"
+            rows={4}
+          />
+        </div>
+
+        <div>
+          <label htmlFor="plan-end" className="text-2xs uppercase tracking-wider text-fg-muted font-semibold block mb-1.5">
+            Échéance cible
+          </label>
+          <input
+            id="plan-end" name="target_end_date" type="date"
+            value={targetEndDate} onChange={(e) => setTargetEndDate(e.target.value)}
+            className="w-full px-3 py-2 rounded-md bg-bg-elevated border border-border text-sm focus:border-copper-500/50 outline-none"
+          />
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            onClick={() => { reset(); onClose() }}
+            className="px-4 py-2 text-sm text-fg-muted hover:text-fg rounded-md"
+          >
+            Annuler
+          </button>
+          <PremiumButton
+            type="submit"
+            disabled={!title.trim() || create.isPending}
+            iconLeft={create.isPending ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+          >
+            {create.isPending ? 'Création…' : 'Créer le dossier'}
+          </PremiumButton>
+        </div>
+      </form>
+    </Modal>
   )
 }

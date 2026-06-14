@@ -27,6 +27,14 @@ export const actionPlansApi = {
   stats: async () =>
     (await apiClient.get<ActionPlanStats>('/action-plans/stats/')).data,
 
+  // ─── CRUD plan d'action ───────────────────────────────
+  create: async (payload: Partial<ActionPlan>) =>
+    (await apiClient.post<ActionPlan>('/action-plans/', payload)).data,
+  update: async (id: string, payload: Partial<ActionPlan>) =>
+    (await apiClient.patch<ActionPlan>(`/action-plans/${id}/`, payload)).data,
+  remove: async (id: string) =>
+    (await apiClient.delete(`/action-plans/${id}/`)).data,
+
   // ─── Plan tasks ───────────────────────────────────────
   listTasks: async (id: string) =>
     (await apiClient.get<ActionTask[]>(`/action-plans/${id}/tasks/`)).data,
