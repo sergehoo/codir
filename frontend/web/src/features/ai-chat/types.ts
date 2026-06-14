@@ -4,6 +4,11 @@ export type AIMessageRole = 'user' | 'assistant' | 'system' | 'tool'
 
 export type AIContextScope = 'org' | 'meeting' | 'decision' | 'dashboard' | 'document'
 
+export interface AIMessageCitations {
+  loaders_used?: string[]
+  [k: string]: unknown
+}
+
 export interface AIMessage {
   id: string
   role: AIMessageRole
@@ -11,6 +16,7 @@ export interface AIMessage {
   tokens: number
   created_at: string
   feedback: number | null
+  citations_json?: AIMessageCitations
 }
 
 export interface AIConversation {

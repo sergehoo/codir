@@ -9,7 +9,7 @@ class AIMessageSerializer(serializers.ModelSerializer):
         model = AIMessage
         fields = [
             "id", "role", "content_md", "tokens",
-            "created_at", "feedback",
+            "created_at", "feedback", "citations_json",
         ]
         read_only_fields = fields
 

@@ -123,12 +123,47 @@ def send_user_message(
     )
 
     # ─── 2. Construit le contexte + historique ───────────────
+    scope_active = page_context_scope or conversation.context_scope
     page_ctx_text = _build_page_context(
-        page_context_scope or conversation.context_scope,
+        scope_active,
         page_context_id or conversation.context_id,
         conversation.organization,
     )
-    system_prompt = SYSTEM_PROMPT_BASE.format(page_context=page_ctx_text)
+
+    # ⚡ Phase 2 : enrichissement automatique avec les données métier.
+    # Le router détecte l'intention dans le message + le scope page,
+    # puis on charge les snippets pertinents (mes tâches, overdue, etc.).
+    enriched_context = ""
+    loaders_used: list[str] = []
+    try:
+        from .context_loaders import run_loaders
+        from .intent_router import route_message
+
+        loader_names = route_message(user_message, page_scope=scope_active)
+        enriched_context, loaders_used = run_loaders(
+            loader_names,
+            user=conversation.user,
+            organization=conversation.organization,
+        )
+        if loaders_used:
+            logger.info(
+                "AI chat enrichment: loaders=%s for conv=%s",
+                loaders_used, conversation.id,
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("AI chat enrichment KO (non bloquant) : %s", exc)
+        enriched_context = ""
+
+    # Compose le contexte final (page + données métier)
+    full_context = page_ctx_text
+    if enriched_context:
+        full_context = (
+            f"{page_ctx_text}\n\n"
+            f"### DONNÉES MÉTIER ACTUELLES (utilise-les pour répondre)\n\n"
+            f"{enriched_context}"
+        )
+
+    system_prompt = SYSTEM_PROMPT_BASE.format(page_context=full_context)
 
     # Récupère les N derniers messages (en ordre chronologique)
     history = list(
@@ -174,11 +209,13 @@ def send_user_message(
         )
 
     # ─── 4. Persiste la réponse + touche la conv ─────────────
+    # citations_json est utilisé pour exposer les loaders utilisés au front.
     assistant_msg = AIMessage.unscoped.create(
         organization=conversation.organization,
         conversation=conversation,
         role="assistant",
         content_md=response_text,
+        citations_json={"loaders_used": loaders_used} if loaders_used else {},
     )
     # Touche updated_at de la conversation pour qu'elle remonte
     conversation.save(update_fields=["updated_at"])

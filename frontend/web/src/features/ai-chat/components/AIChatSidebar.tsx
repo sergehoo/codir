@@ -379,8 +379,22 @@ function EmptyConversation({
   )
 }
 
+// Labels FR des loaders backend pour affichage badge UI
+const LOADER_LABELS: Record<string, string> = {
+  my_tasks: 'Mes tâches',
+  overdue_tasks: 'Tâches en retard',
+  pending_decisions: 'Décisions à valider',
+  upcoming_meetings: 'Réunions à venir',
+  my_action_plans: 'Mes dossiers',
+  baseline: 'Chiffres clés',
+}
+
 function MessageBubble({ message }: { message: AIMessage }) {
   const isUser = message.role === 'user'
+  // Loaders utilisés (sauf "baseline" qui est toujours là, peu intéressant à afficher)
+  const loaders = (message.citations_json?.loaders_used ?? [])
+    .filter((l) => l !== 'baseline')
+
   return (
     <div className={cn(
       'flex items-start gap-3 max-w-[92%]',
@@ -399,6 +413,24 @@ function MessageBubble({ message }: { message: AIMessage }) {
           : 'bg-bg-elevated border border-border',
       )}>
         <SimpleMarkdown text={message.content_md} />
+
+        {/* Badge "données utilisées" — transparence sur les sources */}
+        {!isUser && loaders.length > 0 && (
+          <div className="mt-2.5 pt-2.5 border-t border-border/50 flex items-center gap-1.5 flex-wrap">
+            <span className="text-2xs uppercase tracking-wider text-fg-subtle font-semibold">
+              📊 Données utilisées :
+            </span>
+            {loaders.map((l) => (
+              <span
+                key={l}
+                className="text-2xs px-1.5 py-0.5 rounded bg-copper-500/10 text-copper-400 border border-copper-500/20"
+                title={`Le backend a chargé "${LOADER_LABELS[l] ?? l}" pour répondre à votre question.`}
+              >
+                {LOADER_LABELS[l] ?? l}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
