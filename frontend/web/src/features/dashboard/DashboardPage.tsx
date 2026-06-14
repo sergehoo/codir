@@ -3,13 +3,12 @@ import { Link } from '@tanstack/react-router'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { ArrowUpRight, Calendar, Diamond, Sparkles } from 'lucide-react'
-import { toast } from 'sonner'
 
 import { AtelierGauge } from '@/components/widgets/AtelierGauge'
-import { KaydanLogo } from '@/components/widgets/KaydanLogo'
 import { MasterGauge } from '@/components/widgets/MasterGauge'
 import { NeonNumber } from '@/components/widgets/NeonNumber'
 import { PremiumButton } from '@/components/widgets/PremiumButton'
+import { useAIChatStore } from '@/features/ai-chat/store'
 import { useAuthStore } from '@/stores/auth'
 import { safeFormat } from '@/utils/safeDate'
 
@@ -62,26 +61,25 @@ export function DashboardPage() {
               variant="secondary" size="md"
               iconLeft={<Sparkles size={15} />}
               onClick={() => {
-                // Placeholder : ouvrira l'Assistant IA latéral quand il sera
-                // implémenté. Pour l'instant on génère un briefing rapide à
-                // partir des KPIs déjà chargés côté frontend.
-                if (!k) {
-                  toast.info('Briefing indisponible — données pas encore chargées.')
-                  return
-                }
-                const lines = [
-                  '📋 Briefing du jour',
+                // Construit un prompt initial enrichi avec les KPIs déjà
+                // chargés côté front, et ouvre l'Assistant IA latéral.
+                const kpiContext = k ? [
+                  `Contexte numérique du jour :`,
+                  `- Réunions à venir : ${k.upcoming_meetings ?? 0}`,
+                  `- Décisions en attente : ${k.pending_decisions ?? 0}`,
+                  `- Tâches en retard : ${k.overdue_tasks ?? 0}`,
+                  `- Mes tâches actives : ${k.my_tasks_open ?? 0}`,
+                ].join('\n') : ''
+                const firstName = user?.first_name || ''
+                const prompt = [
+                  `Bonjour${firstName ? ' ' + firstName : ''}, peux-tu me préparer mon briefing exécutif du jour ?`,
                   '',
-                  `🗓 Réunions à venir : ${k.upcoming_meetings ?? 0}`,
-                  `📌 Décisions en attente : ${k.pending_decisions ?? 0}`,
-                  `⚠ Tâches en retard : ${k.overdue_tasks ?? 0}`,
-                  `✅ Mes tâches actives : ${k.my_tasks_open ?? 0}`,
-                  '',
-                  'Bientôt : Assistant IA conversationnel pour aller plus loin.',
-                ]
-                toast.message('Bonjour ' + (user?.first_name || ''), {
-                  description: lines.join('\n'),
-                  duration: 15000,
+                  'Format souhaité : court, structuré, priorités claires.',
+                  kpiContext ? '\n' + kpiContext : '',
+                ].join('\n').trim()
+                useAIChatStore.getState().open({
+                  contextScope: 'dashboard',
+                  initialPrompt: prompt,
                 })
               }}
             >

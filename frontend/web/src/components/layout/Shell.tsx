@@ -1,4 +1,5 @@
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
+import { useEffect } from 'react'
 import {
   Bell, Building2, CheckSquare, Gauge, LayoutDashboard, LogOut,
   RotateCcw, Scale, ScrollText, Search, User as UserIcon, Users,
@@ -9,6 +10,9 @@ import { useState } from 'react'
 import { CommandPalette, useCommandPaletteHotkey } from '@/components/layout/CommandPalette'
 import { KaydanLogo } from '@/components/widgets/KaydanLogo'
 import { ThemeToggle } from '@/components/widgets/ThemeToggle'
+import { AIChatSidebar } from '@/features/ai-chat/components/AIChatSidebar'
+import { AIChatToggleButton } from '@/features/ai-chat/components/AIChatToggleButton'
+import { useAIChatStore } from '@/features/ai-chat/store'
 import { notificationsApi } from '@/features/notifications/api'
 import { NotificationBell } from '@/features/notifications/NotificationBell'
 import { useAuthStore } from '@/stores/auth'
@@ -55,6 +59,25 @@ export function Shell() {
   // Command Palette ⌘K
   const [paletteOpen, setPaletteOpen] = useState(false)
   useCommandPaletteHotkey(setPaletteOpen)
+
+  // ⚡ Détection automatique du contexte de page pour l'Assistant IA.
+  // À chaque changement de pathname, on met à jour le scope/id pour que
+  // les questions posées soient toujours contextualisées.
+  const setChatContext = useAIChatStore((s) => s.setContext)
+  useEffect(() => {
+    const parts = path.split('/').filter(Boolean)
+    if (parts.length === 0 || parts[0] === '') {
+      setChatContext('dashboard', '')
+    } else if (parts[0] === 'meetings' && parts[1]) {
+      setChatContext('meeting', parts[1])
+    } else if (parts[0] === 'decisions' && parts[1]) {
+      setChatContext('decision', parts[1])
+    } else if (parts[0] === 'documents' && parts[1]) {
+      setChatContext('document', parts[1])
+    } else {
+      setChatContext('org', '')
+    }
+  }, [path, setChatContext])
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg-base text-fg">
@@ -217,6 +240,10 @@ export function Shell() {
 
       {/* Command Palette ⌘K — overlay global */}
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+
+      {/* ⚡ Assistant CODIR — sidebar latéral fixe + bouton toggle flottant */}
+      <AIChatSidebar />
+      <AIChatToggleButton />
     </div>
   )
 }

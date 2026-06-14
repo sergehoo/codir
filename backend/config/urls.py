@@ -24,6 +24,7 @@ api_v1 = [
     path("notifications/", include("apps.notifications.urls")),
     path("audit-logs/", include("apps.audit_logs.urls")),
     path("dashboard/", include("apps.dashboards.urls")),
+    path("ai-chat/", include("apps.ai_engine.urls")),
     # ── Recordings : 2 namespaces (nested sous meetings + flat /recordings/) ──
     path("", include("apps.meeting_recordings.urls")),
 ]
