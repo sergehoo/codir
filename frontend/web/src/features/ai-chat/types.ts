@@ -6,7 +6,32 @@ export type AIContextScope = 'org' | 'meeting' | 'decision' | 'dashboard' | 'doc
 
 export interface AIMessageCitations {
   loaders_used?: string[]
+  action_request_ids?: string[]
   [k: string]: unknown
+}
+
+export type AIActionType =
+  | 'create_decision_draft'
+  | 'create_action_task'
+  | 'create_action_plan'
+  | 'assign_task'
+  | 'update_task_status'
+  | 'send_notification'
+
+export type AIActionStatus = 'pending' | 'confirmed' | 'executed' | 'cancelled' | 'failed'
+
+export interface AIActionRequest {
+  id: string
+  action_type: AIActionType
+  summary: string
+  payload: Record<string, unknown>
+  status: AIActionStatus
+  confirmed_at: string | null
+  executed_at: string | null
+  error_message: string
+  result_object_type: string  // ex: "decisions.decision"
+  result_object_id: string
+  created_at: string
 }
 
 export interface AIMessage {

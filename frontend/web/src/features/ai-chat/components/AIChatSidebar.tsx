@@ -13,8 +13,8 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Bot, ChevronDown, ChevronUp, Loader2, Plus, Send, Sparkles,
-  User, X,
+  Bot, Check, ChevronDown, ChevronUp, Copy, FileText, Loader2,
+  ListTodo, Plus, Send, Sparkles, User, X,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
@@ -24,6 +24,8 @@ import { cn } from '@/utils/cn'
 import { aiChatApi, aiChatKeys } from '../api'
 import { useAIChatStore } from '../store'
 import type { AIContextScope, AIMessage } from '../types'
+
+import { AIActionConfirmationCard } from './AIActionConfirmationCard'
 
 // ─── Suggestions contextuelles ─────────────────────────────
 
@@ -267,7 +269,7 @@ export function AIChatSidebar() {
           )}
 
           {messages.map((m) => (
-            <MessageBubble key={m.id} message={m} />
+            <MessageBubble key={m.id} message={m} conversationId={activeConversationId} />
           ))}
 
           {send.isPending && (
@@ -389,11 +391,14 @@ const LOADER_LABELS: Record<string, string> = {
   baseline: 'Chiffres clés',
 }
 
-function MessageBubble({ message }: { message: AIMessage }) {
+function MessageBubble({
+  message, conversationId,
+}: { message: AIMessage; conversationId: string | null }) {
   const isUser = message.role === 'user'
   // Loaders utilisés (sauf "baseline" qui est toujours là, peu intéressant à afficher)
   const loaders = (message.citations_json?.loaders_used ?? [])
     .filter((l) => l !== 'baseline')
+  const actionIds = (message.citations_json?.action_request_ids ?? []) as string[]
 
   return (
     <div className={cn(
@@ -414,6 +419,19 @@ function MessageBubble({ message }: { message: AIMessage }) {
       )}>
         <SimpleMarkdown text={message.content_md} />
 
+        {/* Cartes d'action proposées par l'IA */}
+        {!isUser && actionIds.length > 0 && conversationId && (
+          <div className="mt-2 -mx-1">
+            {actionIds.map((id) => (
+              <AIActionConfirmationCard
+                key={id}
+                actionId={id}
+                conversationId={conversationId}
+              />
+            ))}
+          </div>
+        )}
+
         {/* Badge "données utilisées" — transparence sur les sources */}
         {!isUser && loaders.length > 0 && (
           <div className="mt-2.5 pt-2.5 border-t border-border/50 flex items-center gap-1.5 flex-wrap">
@@ -431,84 +449,267 @@ function MessageBubble({ message }: { message: AIMessage }) {
             ))}
           </div>
         )}
+
+        {/* Actions sur la réponse — uniquement messages assistant */}
+        {!isUser && <AIResponseActions message={message} />}
       </div>
     </div>
   )
 }
 
+function AIResponseActions({ message }: { message: AIMessage }) {
+  const [copied, setCopied] = useState(false)
+
+  function handleCopy() {
+    try {
+      navigator.clipboard.writeText(message.content_md)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      toast.error('Impossible de copier — votre navigateur bloque l\'accès au presse-papier.')
+    }
+  }
+
+  function handleInsertInMeeting() {
+    // Phase 4 : intégration avec un éditeur de CR de réunion ouvert.
+    // Pour l'instant : copie dans le presse-papier + toast informatif.
+    try {
+      navigator.clipboard.writeText(message.content_md)
+      toast.success('Réponse copiée — collez-la dans le compte rendu.', {
+        description: 'L\'insertion directe dans l\'éditeur de CR arrive bientôt.',
+        duration: 5000,
+      })
+    } catch {
+      toast.error('Copie impossible.')
+    }
+  }
+
+  function handleConvertToTask() {
+    // Phase 3 (actions confirmées) : enverra cette réponse au backend pour
+    // proposer la création d'une tâche. Pour l'instant : placeholder.
+    toast.info('Création de tâche depuis le chat', {
+      description: 'Pour proposer une vraie tâche, demande à l\'assistant : « Crée une tâche pour [Nom] : [titre] avant [date] ». Il te proposera une carte de confirmation.',
+      duration: 8000,
+    })
+  }
+
+  return (
+    <div className="mt-2 pt-2 border-t border-border/40 flex items-center gap-1 flex-wrap text-2xs">
+      <button
+        type="button"
+        onClick={handleCopy}
+        className="inline-flex items-center gap-1 px-2 py-1 rounded hover:bg-fg/10 text-fg-muted hover:text-fg transition"
+        title="Copier la réponse dans le presse-papier"
+      >
+        {copied
+          ? <><Check size={11} className="text-success" /> Copié</>
+          : <><Copy size={11} /> Copier</>}
+      </button>
+      <button
+        type="button"
+        onClick={handleInsertInMeeting}
+        className="inline-flex items-center gap-1 px-2 py-1 rounded hover:bg-fg/10 text-fg-muted hover:text-fg transition"
+        title="Insérer dans le compte rendu d'une réunion"
+      >
+        <FileText size={11} /> Insérer dans un CR
+      </button>
+      <button
+        type="button"
+        onClick={handleConvertToTask}
+        className="inline-flex items-center gap-1 px-2 py-1 rounded hover:bg-fg/10 text-fg-muted hover:text-fg transition"
+        title="Créer une tâche à partir de cette réponse"
+      >
+        <ListTodo size={11} /> En faire une tâche
+      </button>
+    </div>
+  )
+}
+
 /**
- * Mini renderer Markdown pour les réponses IA.
- * Couvre les cas les plus fréquents (gras, italique, listes, blocs code, titres).
- * Pour du Markdown complet on switchera vers `react-markdown` plus tard.
+ * Renderer Markdown enrichi pour les réponses IA.
+ *
+ * Supporte :
+ *   - Titres (# / ## / ### / ####)
+ *   - Listes à puces et numérotées
+ *   - Tableaux (syntaxe pipe Markdown standard)
+ *   - Gras / italique / code inline
+ *   - Blocs code triple backtick
+ *   - Blocs custom :::alert / :::decision / :::action / :::risk / :::quote
+ *   - Citations Markdown standard (lignes commençant par >)
+ *   - Séparateurs (---)
  */
 function SimpleMarkdown({ text }: { text: string }) {
   // Split en blocs (séparés par lignes vides)
   const blocks = text.split(/\n{2,}/)
   return (
     <div className="space-y-2.5">
-      {blocks.map((block, i) => {
-        const trimmed = block.trim()
+      {blocks.map((block, i) => <Block key={i} text={block.trim()} />)}
+    </div>
+  )
+}
 
-        // Titre H3+
-        if (trimmed.startsWith('### ')) {
-          return (
-            <h4 key={i} className="font-semibold text-sm">
-              {inlineFmt(trimmed.slice(4))}
-            </h4>
-          )
-        }
-        if (trimmed.startsWith('## ')) {
-          return (
-            <h3 key={i} className="font-semibold text-base text-copper-400">
-              {inlineFmt(trimmed.slice(3))}
-            </h3>
-          )
-        }
-        if (trimmed.startsWith('# ')) {
-          return (
-            <h2 key={i} className="font-semibold text-lg text-copper-400">
-              {inlineFmt(trimmed.slice(2))}
-            </h2>
-          )
-        }
+function Block({ text }: { text: string }) {
+  if (!text) return null
 
-        // Liste à puces
-        const bulletLines = trimmed.split('\n').filter(l => /^\s*[-*]\s/.test(l))
-        if (bulletLines.length > 0 && bulletLines.length === trimmed.split('\n').length) {
-          return (
-            <ul key={i} className="list-disc list-inside space-y-1">
-              {bulletLines.map((l, j) => (
-                <li key={j}>{inlineFmt(l.replace(/^\s*[-*]\s+/, ''))}</li>
+  // Séparateur
+  if (/^-{3,}$/.test(text)) {
+    return <hr className="border-border my-2" />
+  }
+
+  // Titres
+  if (text.startsWith('#### ')) {
+    return <h5 className="font-semibold text-xs uppercase tracking-wider text-fg-muted">{inlineFmt(text.slice(5))}</h5>
+  }
+  if (text.startsWith('### ')) {
+    return <h4 className="font-semibold text-sm">{inlineFmt(text.slice(4))}</h4>
+  }
+  if (text.startsWith('## ')) {
+    return <h3 className="font-semibold text-base text-copper-400">{inlineFmt(text.slice(3))}</h3>
+  }
+  if (text.startsWith('# ')) {
+    return <h2 className="font-semibold text-lg text-copper-400">{inlineFmt(text.slice(2))}</h2>
+  }
+
+  // Blocs custom :::type ... :::
+  const customMatch = text.match(/^:::(\w+)\s*\n?([\s\S]*?)\n?:::\s*$/)
+  if (customMatch) {
+    return <CustomBlock type={customMatch[1].toLowerCase()} content={customMatch[2]} />
+  }
+
+  // Tableau (au moins 2 lignes avec des | + une ligne de séparation avec --- )
+  if (text.includes('|') && /\n\s*\|?[\s:|-]+\|/.test(text)) {
+    const table = parseMarkdownTable(text)
+    if (table) return <MarkdownTable {...table} />
+  }
+
+  // Bloc code triple backtick
+  if (text.startsWith('```') && text.endsWith('```')) {
+    const code = text.replace(/^```\w*\n?/, '').replace(/\n?```$/, '')
+    return (
+      <pre className="bg-bg-base rounded p-3 overflow-x-auto text-xs font-mono">
+        <code>{code}</code>
+      </pre>
+    )
+  }
+
+  // Citation Markdown
+  if (text.split('\n').every(l => l.startsWith('>'))) {
+    return (
+      <blockquote className="border-l-2 border-copper-500/40 pl-3 italic text-fg-muted">
+        {inlineFmt(text.replace(/^> ?/gm, ''))}
+      </blockquote>
+    )
+  }
+
+  // Liste à puces
+  const lines = text.split('\n')
+  const allBullets = lines.every(l => /^\s*[-*]\s/.test(l)) && lines.length > 0
+  if (allBullets) {
+    return (
+      <ul className="list-disc list-inside space-y-1">
+        {lines.map((l, j) => (
+          <li key={j}>{inlineFmt(l.replace(/^\s*[-*]\s+/, ''))}</li>
+        ))}
+      </ul>
+    )
+  }
+
+  // Liste numérotée
+  const allNumbered = lines.every(l => /^\s*\d+\.\s/.test(l)) && lines.length > 0
+  if (allNumbered) {
+    return (
+      <ol className="list-decimal list-inside space-y-1">
+        {lines.map((l, j) => (
+          <li key={j}>{inlineFmt(l.replace(/^\s*\d+\.\s+/, ''))}</li>
+        ))}
+      </ol>
+    )
+  }
+
+  // Paragraphe par défaut
+  return <p className="whitespace-pre-wrap">{inlineFmt(text)}</p>
+}
+
+// ─── Blocs custom :::type ─────────────────────────────────────
+
+function CustomBlock({ type, content }: { type: string; content: string }) {
+  const PRESETS: Record<string, { bg: string; border: string; icon: string; label: string }> = {
+    alert:    { bg: 'bg-amber-500/10',  border: 'border-amber-500/40',  icon: '⚠',  label: 'Alerte' },
+    warning:  { bg: 'bg-amber-500/10',  border: 'border-amber-500/40',  icon: '⚠',  label: 'Attention' },
+    danger:   { bg: 'bg-red-500/10',    border: 'border-red-500/40',    icon: '🔴', label: 'Critique' },
+    decision: { bg: 'bg-copper-500/10', border: 'border-copper-500/40', icon: '✓',  label: 'Décision proposée' },
+    action:   { bg: 'bg-blue-500/10',   border: 'border-blue-500/40',   icon: '→',  label: 'Action recommandée' },
+    risk:     { bg: 'bg-orange-500/10', border: 'border-orange-500/40', icon: '⚡', label: 'Risque identifié' },
+    quote:    { bg: 'bg-fg/5',          border: 'border-fg/20',         icon: '"',  label: 'Citation' },
+    info:     { bg: 'bg-blue-500/10',   border: 'border-blue-500/40',   icon: 'ℹ',  label: 'Information' },
+    success:  { bg: 'bg-emerald-500/10', border: 'border-emerald-500/40', icon: '✓', label: 'Succès' },
+  }
+  const preset = PRESETS[type] ?? PRESETS.info
+  return (
+    <div className={cn('rounded-lg border p-3 my-2', preset.bg, preset.border)}>
+      <div className="flex items-center gap-2 text-2xs uppercase tracking-widest font-semibold mb-1.5 text-fg-muted">
+        <span className="text-sm">{preset.icon}</span> {preset.label}
+      </div>
+      <div className="text-sm space-y-1.5">
+        {content.split(/\n{2,}/).map((sub, i) => <Block key={i} text={sub.trim()} />)}
+      </div>
+    </div>
+  )
+}
+
+// ─── Tableau Markdown ─────────────────────────────────────────
+
+function parseMarkdownTable(text: string): { headers: string[]; rows: string[][] } | null {
+  const lines = text.split('\n').filter(l => l.trim())
+  if (lines.length < 2) return null
+  // Trouve la ligne de séparation (---|---)
+  const sepIdx = lines.findIndex(l => /^\|?[\s:|-]+\|/.test(l) && l.includes('-'))
+  if (sepIdx < 1) return null
+
+  const headerLine = lines[sepIdx - 1]
+  const headers = headerLine
+    .replace(/^\||\|$/g, '')
+    .split('|')
+    .map(c => c.trim())
+
+  const rows: string[][] = []
+  for (let i = sepIdx + 1; i < lines.length; i++) {
+    const cells = lines[i]
+      .replace(/^\||\|$/g, '')
+      .split('|')
+      .map(c => c.trim())
+    if (cells.length > 0) rows.push(cells)
+  }
+
+  if (headers.length === 0 || rows.length === 0) return null
+  return { headers, rows }
+}
+
+function MarkdownTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
+  return (
+    <div className="overflow-x-auto rounded-lg border border-border my-2">
+      <table className="w-full text-xs">
+        <thead className="bg-bg-subtle">
+          <tr>
+            {headers.map((h, i) => (
+              <th key={i} className="text-left px-3 py-2 font-semibold uppercase tracking-wider text-2xs">
+                {inlineFmt(h)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {rows.map((row, ri) => (
+            <tr key={ri} className="hover:bg-fg/5">
+              {row.map((cell, ci) => (
+                <td key={ci} className="px-3 py-2 align-top">
+                  {inlineFmt(cell)}
+                </td>
               ))}
-            </ul>
-          )
-        }
-
-        // Liste numérotée
-        const numberedLines = trimmed.split('\n').filter(l => /^\s*\d+\.\s/.test(l))
-        if (numberedLines.length > 0 && numberedLines.length === trimmed.split('\n').length) {
-          return (
-            <ol key={i} className="list-decimal list-inside space-y-1">
-              {numberedLines.map((l, j) => (
-                <li key={j}>{inlineFmt(l.replace(/^\s*\d+\.\s+/, ''))}</li>
-              ))}
-            </ol>
-          )
-        }
-
-        // Bloc code (triple backtick)
-        if (trimmed.startsWith('```') && trimmed.endsWith('```')) {
-          const code = trimmed.replace(/^```\w*\n?/, '').replace(/\n?```$/, '')
-          return (
-            <pre key={i} className="bg-bg-base rounded p-3 overflow-x-auto text-xs font-mono">
-              <code>{code}</code>
-            </pre>
-          )
-        }
-
-        // Paragraphe par défaut
-        return <p key={i} className="whitespace-pre-wrap">{inlineFmt(trimmed)}</p>
-      })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

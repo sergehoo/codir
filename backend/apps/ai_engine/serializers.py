@@ -1,7 +1,7 @@
 """Serializers ai_engine — chat IA MVP."""
 from rest_framework import serializers
 
-from .models import AIConversation, AIMessage
+from .models import AIActionRequest, AIConversation, AIMessage
 
 
 class AIMessageSerializer(serializers.ModelSerializer):
@@ -29,6 +29,21 @@ class AIConversationSerializer(serializers.ModelSerializer):
 
     def get_message_count(self, obj):
         return obj.messages.count()
+
+
+class AIActionRequestSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AIActionRequest
+        fields = [
+            "id", "action_type", "summary", "payload", "status",
+            "confirmed_at", "executed_at", "error_message",
+            "result_object_type", "result_object_id",
+            "created_at",
+        ]
+        read_only_fields = (
+            "id", "confirmed_at", "executed_at", "error_message",
+            "result_object_type", "result_object_id", "created_at",
+        )
 
 
 class SendMessageSerializer(serializers.Serializer):

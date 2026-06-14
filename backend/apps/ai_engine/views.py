@@ -18,9 +18,13 @@ from rest_framework.response import Response
 
 from apps.common.permissions import IsOrganizationMember
 
-from .models import AIConversation
+from django.utils import timezone
+
+from .action_executors import execute_action
+from .models import AIActionRequest, AIConversation
 from .serializers import (
-    AIConversationSerializer, AIMessageSerializer, SendMessageSerializer,
+    AIActionRequestSerializer, AIConversationSerializer,
+    AIMessageSerializer, SendMessageSerializer,
 )
 from .services import (
     get_or_create_conversation, list_conversation_messages,
@@ -127,6 +131,73 @@ def conversation_messages(request, pk):
         "conversation": AIConversationSerializer(conv).data,
         "messages": AIMessageSerializer(msgs, many=True).data,
     })
+
+
+@api_view(["GET"])
+@drf_permission_classes([IsAuthenticated, IsOrganizationMember])
+def get_action(request, pk):
+    """GET /ai-chat/actions/{id}/ — détail d'une action proposée."""
+    org = _get_org(request)
+    action = get_object_or_404(
+        AIActionRequest.unscoped,
+        id=pk, requested_by=request.user, organization=org,
+    )
+    return Response(AIActionRequestSerializer(action).data)
+
+
+@api_view(["POST"])
+@drf_permission_classes([IsAuthenticated, IsOrganizationMember])
+def confirm_action(request, pk):
+    """POST /ai-chat/actions/{id}/confirm/
+
+    Confirme une AIActionRequest et exécute l'action correspondante
+    (création de décision, tâche, plan, etc.). Retourne l'objet créé.
+    """
+    org = _get_org(request)
+    action = get_object_or_404(
+        AIActionRequest.unscoped,
+        id=pk, requested_by=request.user, organization=org,
+    )
+
+    if action.status not in ("pending",):
+        return Response(
+            {
+                "detail": f"Action déjà au statut '{action.status}' — "
+                          "confirmation impossible.",
+                "code": "invalid_state",
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Marque confirmée puis exécute
+    action.status = "confirmed"
+    action.confirmed_at = timezone.now()
+    action.save(update_fields=["status", "confirmed_at", "updated_at"])
+
+    action = execute_action(action)
+    return Response(AIActionRequestSerializer(action).data)
+
+
+@api_view(["POST"])
+@drf_permission_classes([IsAuthenticated, IsOrganizationMember])
+def cancel_action(request, pk):
+    """POST /ai-chat/actions/{id}/cancel/"""
+    org = _get_org(request)
+    action = get_object_or_404(
+        AIActionRequest.unscoped,
+        id=pk, requested_by=request.user, organization=org,
+    )
+
+    if action.status not in ("pending",):
+        return Response(
+            {"detail": "Cette action ne peut plus être annulée.",
+             "code": "invalid_state"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    action.status = "cancelled"
+    action.save(update_fields=["status", "updated_at"])
+    return Response(AIActionRequestSerializer(action).data)
 
 
 @api_view(["POST"])

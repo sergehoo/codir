@@ -2,6 +2,7 @@
 import { apiClient } from '@/api/client'
 
 import type {
+  AIActionRequest,
   AIConversation, ConversationMessagesResponse,
   SendMessagePayload, SendMessageResponse,
 } from './types'
@@ -22,10 +23,21 @@ export const aiChatApi = {
 
   archive: async (id: string) =>
     (await apiClient.post<AIConversation>(`/ai-chat/conversations/${id}/archive/`)).data,
+
+  // ─── Actions confirmées ──
+  getAction: async (id: string) =>
+    (await apiClient.get<AIActionRequest>(`/ai-chat/actions/${id}/`)).data,
+
+  confirmAction: async (id: string) =>
+    (await apiClient.post<AIActionRequest>(`/ai-chat/actions/${id}/confirm/`)).data,
+
+  cancelAction: async (id: string) =>
+    (await apiClient.post<AIActionRequest>(`/ai-chat/actions/${id}/cancel/`)).data,
 }
 
 export const aiChatKeys = {
   all: ['ai-chat'] as const,
   conversations: () => [...aiChatKeys.all, 'conversations'] as const,
   messages: (id: string) => [...aiChatKeys.all, 'messages', id] as const,
+  action: (id: string) => [...aiChatKeys.all, 'action', id] as const,
 }

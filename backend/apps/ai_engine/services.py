@@ -37,10 +37,39 @@ les réunions, décisions, plans d'action et tâches du Comité de Direction.
 Style :
 - Professionnel, administratif, clair, synthétique.
 - Phrases courtes, ton corporate français.
-- Format des réponses : Markdown (titres, listes, tableaux si pertinent).
-- Tu peux proposer des actions, mais tu n'exécutes JAMAIS d'action sensible
-  sans confirmation explicite de l'utilisateur (cette étape arrivera dans
-  une prochaine version — pour l'instant tu te limites au dialogue).
+- Format des réponses : Markdown enrichi.
+
+Format Markdown disponible :
+- Titres : # ## ### ####
+- Tableaux : syntaxe pipe standard
+- Listes à puces : - ou *
+- Listes numérotées : 1. 2. 3.
+- Gras : **texte** — Italique : *texte* — Code : `texte`
+- Citations : >  texte
+- Séparateurs : ---
+
+Blocs visuels custom (très utiles pour mettre en évidence) :
+```
+:::decision
+Description de la décision proposée.
+:::
+
+:::action
+Action recommandée à mener.
+:::
+
+:::risk
+Risque identifié à surveiller.
+:::
+
+:::alert
+Alerte ou point de vigilance.
+:::
+
+:::quote
+Citation textuelle d'un document ou d'un participant.
+:::
+```
 
 Règles strictes :
 - Reste fidèle aux informations disponibles dans le contexte fourni.
@@ -49,9 +78,12 @@ Règles strictes :
 - Si une information manque, dis-le explicitement.
 - Tu peux faire des analyses, suggestions, reformulations, brouillons.
 - Tu respectes la confidentialité des décisions marquées comme telles.
+- Pour des réponses structurées (analyses, synthèses), utilise les tableaux
+  et les blocs visuels au lieu de simples paragraphes.
 
 Contexte de la session courante :
-{page_context}"""
+{page_context}
+{action_prompt}"""
 
 
 # Nombre max de messages d'historique à inclure dans le prompt
@@ -163,7 +195,23 @@ def send_user_message(
             f"{enriched_context}"
         )
 
-    system_prompt = SYSTEM_PROMPT_BASE.format(page_context=full_context)
+    # Inclut le prompt actions si le message a l'air de demander une création
+    # (heuristique simple : keywords "crée", "ajoute", "planifie", etc.)
+    action_words_re = (
+        r"\b(cr[ée]+|ajoute|planifie|programme|assigne|attribue"
+        r"|propose|brouillon|tâche|décision)\b"
+    )
+    import re as _re
+    wants_action = bool(_re.search(action_words_re, user_message, _re.IGNORECASE))
+    action_prompt = ""
+    if wants_action:
+        from .action_parser import ACTION_PROMPT_ADDENDUM
+        action_prompt = ACTION_PROMPT_ADDENDUM
+
+    system_prompt = SYSTEM_PROMPT_BASE.format(
+        page_context=full_context,
+        action_prompt=action_prompt,
+    )
 
     # Récupère les N derniers messages (en ordre chronologique)
     history = list(
@@ -188,6 +236,10 @@ def send_user_message(
     user_prompt = f"{history_text}\n[Nouveau message]\n{user_message}"
 
     # ─── 3. Appel LLM avec fallback ──────────────────────────
+    import hashlib
+    import time as _time
+    started_at = _time.time()
+    llm_error = ""
     try:
         # Réutilise le wrapper existant qui fait Claude → DeepSeek
         from apps.meeting_recordings.services.ai_summary import run_llm_with_fallback
@@ -199,6 +251,43 @@ def send_user_message(
     except Exception as exc:  # noqa: BLE001
         logger.exception("AI chat LLM call crash : %s", exc)
         response_text = None
+        llm_error = f"{type(exc).__name__}: {exc}"[:1000]
+
+    latency_ms = int((_time.time() - started_at) * 1000)
+
+    # Audit : trace cet appel dans AIInferenceLog (best-effort, ne bloque pas)
+    try:
+        from django.conf import settings as _settings
+
+        from .models import AIInferenceLog
+
+        # Estimation grossière des tokens (4 chars ≈ 1 token en français)
+        tokens_in_est = (len(system_prompt) + len(user_prompt)) // 4
+        tokens_out_est = (len(response_text or "")) // 4
+        req_hash = hashlib.sha256(
+            (user_prompt + system_prompt).encode("utf-8"),
+        ).hexdigest()
+        provider = "anthropic" if response_text else "failed"
+        model = getattr(_settings, "ANTHROPIC_MODEL", "claude-sonnet")
+
+        AIInferenceLog.unscoped.create(
+            organization=conversation.organization,
+            capability="chat",
+            provider=provider,
+            model=model[:80],
+            actor=conversation.user,
+            request_hash=req_hash[:64],
+            tokens_in=tokens_in_est,
+            tokens_out=tokens_out_est,
+            latency_ms=latency_ms,
+            cost_usd=0,  # Estimation à brancher plus tard (tarif Claude/DeepSeek)
+            cached=False,
+            success=bool(response_text),
+            error=llm_error,
+            risk_class="low",
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("AIInferenceLog write KO (non bloquant)")
 
     if not response_text:
         # On stocke quand même une réponse fallback pour ne pas casser l'UI
@@ -208,15 +297,55 @@ def send_user_message(
             "Réessayez dans quelques minutes ou prévenez votre administrateur."
         )
 
-    # ─── 4. Persiste la réponse + touche la conv ─────────────
-    # citations_json est utilisé pour exposer les loaders utilisés au front.
+    # ─── 4. Parse les éventuelles propositions d'action ──────
+    proposed_actions: list[dict] = []
+    cleaned_response = response_text
+    try:
+        from .action_parser import extract_actions
+        cleaned_response, proposed_actions = extract_actions(response_text)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Action parser KO (non bloquant) : %s", exc)
+
+    # ─── 5. Persiste la réponse + touche la conv ─────────────
+    # citations_json expose loaders + action_request_ids pour le front.
+    citations = {}
+    if loaders_used:
+        citations["loaders_used"] = loaders_used
+
     assistant_msg = AIMessage.unscoped.create(
         organization=conversation.organization,
         conversation=conversation,
         role="assistant",
-        content_md=response_text,
-        citations_json={"loaders_used": loaders_used} if loaders_used else {},
+        content_md=cleaned_response,
+        citations_json=citations,
     )
+
+    # ─── 6. Crée les AIActionRequest correspondants ──────────
+    if proposed_actions:
+        from .models import AIActionRequest
+        created_ids: list[str] = []
+        for act in proposed_actions:
+            try:
+                ar = AIActionRequest.unscoped.create(
+                    organization=conversation.organization,
+                    conversation=conversation,
+                    source_message=assistant_msg,
+                    requested_by=conversation.user,
+                    action_type=act["action_type"],
+                    payload=act.get("payload") or {},
+                    summary=act.get("summary") or "",
+                    status="pending",
+                )
+                created_ids.append(str(ar.id))
+            except Exception:  # noqa: BLE001
+                logger.exception(
+                    "Création AIActionRequest KO pour action %s", act,
+                )
+        if created_ids:
+            citations["action_request_ids"] = created_ids
+            assistant_msg.citations_json = citations
+            assistant_msg.save(update_fields=["citations_json"])
+
     # Touche updated_at de la conversation pour qu'elle remonte
     conversation.save(update_fields=["updated_at"])
 
