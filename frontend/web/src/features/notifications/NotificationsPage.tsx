@@ -8,8 +8,47 @@ import { useState } from 'react'
 import { PremiumButton } from '@/components/widgets/PremiumButton'
 import { SectionHeader } from '@/components/widgets/SectionHeader'
 import { SkeletonList } from '@/components/widgets/Skeleton'
+import { useAuthStore } from '@/stores/auth'
+import type { Notification } from '@/types'
 
 import { notificationsApi, notificationsKeys } from './api'
+
+// Mini-avatar org pour les users multi-orgs : permet d'identifier visuellement
+// la source organisationnelle d'une notification.
+function OrgBadge({ n }: { n: Notification }) {
+  if (!n.organization_id || !n.organization_name) return null
+  const initial = n.organization_name.trim().charAt(0).toUpperCase()
+  const bg = n.organization_primary_color || '#2563eb'
+
+  if (n.organization_logo) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-fg/[0.04] border border-border/40">
+        <img
+          src={n.organization_logo}
+          alt={n.organization_name}
+          className="w-4 h-4 rounded object-cover"
+          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+        />
+        <span className="text-2xs uppercase tracking-wider text-fg-muted font-semibold">
+          {n.organization_name}
+        </span>
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded bg-fg/[0.04] border border-border/40">
+      <span
+        className="w-4 h-4 rounded grid place-items-center text-white text-[9px] font-semibold"
+        style={{ backgroundColor: bg }}
+      >
+        {initial}
+      </span>
+      <span className="text-2xs uppercase tracking-wider text-fg-muted font-semibold">
+        {n.organization_name}
+      </span>
+    </span>
+  )
+}
 
 const EVENTS = [
   { v: '',                          label: 'Tous' },
@@ -34,6 +73,8 @@ export function NotificationsPage() {
   const [event, setEvent] = useState('')
   const [channel, setChannel] = useState('')
   const [unreadOnly, setUnreadOnly] = useState(false)
+  const memberships = useAuthStore((s) => s.memberships)
+  const isMultiOrg = (memberships?.length ?? 0) > 1
 
   const params = { event: event || undefined, channel: channel || undefined, unread: unreadOnly }
   const { data, isLoading, error } = useQuery({
@@ -158,8 +199,9 @@ export function NotificationsPage() {
                   : 'dot-copper mt-2'
                 } />
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-baseline gap-3">
+                  <div className="flex items-baseline gap-3 flex-wrap">
                     <h3 className="font-medium text-sm">{n.title}</h3>
+                    {isMultiOrg && <OrgBadge n={n} />}
                     {!n.seen_at && <span className="chip-copper">Nouveau</span>}
                     <EmailStatusBadge n={n} />
                     <span className="ml-auto text-2xs uppercase tracking-wider text-fg-subtle">

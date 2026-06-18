@@ -14,7 +14,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Bot, Check, ChevronDown, ChevronUp, Copy, FileText, Loader2,
-  ListTodo, Plus, Send, Sparkles, User, X,
+  ListTodo, Maximize2, Minimize2, Plus, Send, Sparkles, User, X,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
@@ -62,10 +62,20 @@ const SUGGESTIONS: Record<AIContextScope, string[]> = {
 
 // ─── Composant principal ───────────────────────────────────
 
+// Tailwind classes par taille — utilisé par className du <aside>
+// Sur mobile (< sm) on garde toujours w-full peu importe la préférence.
+const SIZE_CLASSES = {
+  narrow:   'w-full sm:w-[420px]',
+  wide:     'w-full sm:w-[640px] lg:w-[720px]',
+  fullpage: 'w-full sm:w-[80vw] sm:max-w-[1200px]',
+} as const
+
 export function AIChatSidebar() {
   const qc = useQueryClient()
   const isOpen = useAIChatStore((s) => s.isOpen)
   const close = useAIChatStore((s) => s.close)
+  const size = useAIChatStore((s) => s.size)
+  const cycleSize = useAIChatStore((s) => s.cycleSize)
   const activeConversationId = useAIChatStore((s) => s.activeConversationId)
   const setActiveConversation = useAIChatStore((s) => s.setActiveConversation)
   const contextScope = useAIChatStore((s) => s.contextScope)
@@ -168,10 +178,11 @@ export function AIChatSidebar() {
       {/* ─── Sidebar ─── */}
       <aside
         className={cn(
-          'fixed top-0 right-0 h-screen w-full sm:w-[420px] z-50',
+          'fixed top-0 right-0 h-screen z-50',
+          SIZE_CLASSES[size],
           'bg-bg-base border-l border-border',
           'flex flex-col shadow-2xl',
-          'transition-transform duration-300 ease-out',
+          'transition-[transform,width] duration-300 ease-out',
           isOpen ? 'translate-x-0' : 'translate-x-full',
         )}
         aria-hidden={!isOpen}
@@ -209,6 +220,22 @@ export function AIChatSidebar() {
               title="Nouvelle conversation"
             >
               <Plus size={15} />
+            </button>
+            {/* ⤢ Resize — cycle narrow → wide → fullpage → narrow */}
+            <button
+              type="button"
+              onClick={cycleSize}
+              className="p-1.5 rounded hover:bg-fg/10 text-fg-muted hover:text-fg hidden sm:inline-flex"
+              title={
+                size === 'narrow'   ? 'Agrandir (mode large)'
+                : size === 'wide'   ? 'Agrandir au maximum (pleine page)'
+                                    : 'Réduire (mode compact)'
+              }
+              aria-label="Changer la taille du panneau"
+            >
+              {size === 'fullpage'
+                ? <Minimize2 size={14} />
+                : <Maximize2 size={14} />}
             </button>
             <button
               type="button"

@@ -1,7 +1,7 @@
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
 import { useEffect } from 'react'
 import {
-  Bell, Building2, CheckSquare, Gauge, LayoutDashboard, LogOut,
+  Bell, Building2, CheckSquare, Gauge, LayoutDashboard, LogOut, Palette,
   RotateCcw, Scale, ScrollText, Search, User as UserIcon, Users,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
@@ -15,7 +15,9 @@ import { AIChatToggleButton } from '@/features/ai-chat/components/AIChatToggleBu
 import { useAIChatStore } from '@/features/ai-chat/store'
 import { notificationsApi } from '@/features/notifications/api'
 import { NotificationBell } from '@/features/notifications/NotificationBell'
-import { useAuthStore } from '@/stores/auth'
+import { OrganizationSwitcher } from '@/features/organizations/components/OrganizationSwitcher'
+import { useMembershipsBootstrap } from '@/features/organizations/useMembershipsBootstrap'
+import { useAuthStore, useCurrentMembership } from '@/stores/auth'
 import { cn } from '@/utils/cn'
 
 const NAV: { to: string; label: string; icon: typeof Gauge }[] = [
@@ -28,11 +30,12 @@ const NAV: { to: string; label: string; icon: typeof Gauge }[] = [
 ]
 
 const SETTINGS_NAV: { to: string; label: string; icon: typeof Gauge; adminOnly?: boolean }[] = [
-  { to: '/settings/members',        label: 'Membres CODIR',     icon: Users },
-  { to: '/settings/subsidiaries',   label: 'Filiales',          icon: Building2 },
+  { to: '/settings/organization',   label: 'Organisation',       icon: Palette },
+  { to: '/settings/members',        label: 'Membres CODIR',      icon: Users },
+  { to: '/settings/subsidiaries',   label: 'Filiales',           icon: Building2 },
   { to: '/settings/meeting-series', label: 'Séries récurrentes', icon: RotateCcw },
   { to: '/settings/logs',           label: 'Journal d\'activité', icon: ScrollText, adminOnly: true },
-  { to: '/profile',                 label: 'Mon profil',        icon: UserIcon },
+  { to: '/profile',                 label: 'Mon profil',         icon: UserIcon },
 ]
 
 // Détection "actif" robuste : match exact OU sous-route (`/foo/bar`),
@@ -60,6 +63,10 @@ export function Shell() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   useCommandPaletteHotkey(setPaletteOpen)
 
+  // 🌐 Multi-org : charge la liste des organisations + setCurrentOrgId
+  // dès qu'on a un access token (au login OU au boot avec token persisté).
+  useMembershipsBootstrap()
+
   // ⚡ Détection automatique du contexte de page pour l'Assistant IA.
   // À chaque changement de pathname, on met à jour le scope/id pour que
   // les questions posées soient toujours contextualisées.
@@ -84,25 +91,8 @@ export function Shell() {
       {/* ─── Sidebar — papier exécutif feutré ────────────────── */}
       <aside className="w-64 shrink-0 bg-bg-subtle border-r border-border flex flex-col">
 
-        {/* Header sidebar — logo Kaydan en bannière + produit Codir en sous-titre */}
-        <div className="px-5 pt-5 pb-4 border-b border-border space-y-4">
-          {/* Logo Kaydan officiel — fond transparent */}
-          <div className="flex items-center justify-center">
-            <KaydanLogo variant="full" className="h-14 w-auto" />
-          </div>
-          {/* Produit */}
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <div className="serif text-base font-semibold leading-none">CODIR</div>
-              <div className="text-2xs uppercase tracking-widest text-fg-subtle mt-1">
-                Executive Platform
-              </div>
-            </div>
-            <span className="text-2xs font-bold text-copper-400 bg-copper-500/10 border border-copper-500/30 px-1.5 py-0.5 rounded uppercase tracking-wider">
-              Beta
-            </span>
-          </div>
-        </div>
+        {/* Header sidebar — branding dynamique selon l'organisation active */}
+        <SidebarBrandHeader />
 
         {/* Search */}
         <div className="px-4 py-4">
@@ -231,8 +221,9 @@ export function Shell() {
 
       {/* ─── Main ────────────────────────────────────────── */}
       <main className="flex-1 overflow-auto bg-bg-base relative">
-        {/* Topbar flottante — bell + raccourcis */}
-        <div className="sticky top-0 z-30 flex items-center justify-end gap-1 px-6 py-3 bg-bg-base/95 backdrop-blur-md border-b border-border shadow-sm">
+        {/* Topbar flottante — sélecteur org + bell + raccourcis */}
+        <div className="sticky top-0 z-30 flex items-center justify-end gap-3 px-6 py-3 bg-bg-base/95 backdrop-blur-md border-b border-border shadow-sm">
+          <OrganizationSwitcher />
           <NotificationBell />
         </div>
         <Outlet />
@@ -244,6 +235,56 @@ export function Shell() {
       {/* ⚡ Assistant CODIR — sidebar latéral fixe + bouton toggle flottant */}
       <AIChatSidebar />
       <AIChatToggleButton />
+    </div>
+  )
+}
+
+
+/**
+ * SidebarBrandHeader — bandeau du haut de la sidebar.
+ * Affiche dynamiquement :
+ *   - Si l'organisation active a un logo → ce logo
+ *   - Sinon → logo Kaydan par défaut (rétrocompat)
+ * Plus en-dessous : nom de l'org + rôle du user + badge "Beta".
+ */
+function SidebarBrandHeader() {
+  const current = useCurrentMembership()
+
+  return (
+    <div className="px-5 pt-5 pb-4 border-b border-border space-y-4">
+      {/* Logo dynamique : org custom si dispo, sinon fallback Kaydan */}
+      <div className="flex items-center justify-center min-h-[56px]">
+        {current?.logo ? (
+          <img
+            src={current.logo}
+            alt={current.organization_name}
+            className="h-14 max-w-full w-auto object-contain"
+            onError={(e) => {
+              // Si l'URL est cassée, on masque pour laisser place au texte
+              ;(e.currentTarget as HTMLImageElement).style.display = 'none'
+            }}
+          />
+        ) : (
+          <KaydanLogo variant="full" className="h-14 w-auto" />
+        )}
+      </div>
+
+      {/* Bandeau produit + nom org actuelle + badge Beta */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="serif text-base font-semibold leading-none truncate">
+            {current?.organization_name ?? 'CODIR'}
+          </div>
+          <div className="text-2xs uppercase tracking-widest text-fg-subtle mt-1">
+            {current
+              ? `${current.role_label} · Executive Platform`
+              : 'Executive Platform'}
+          </div>
+        </div>
+        <span className="text-2xs font-bold text-copper-400 bg-copper-500/10 border border-copper-500/30 px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0">
+          Beta
+        </span>
+      </div>
     </div>
   )
 }

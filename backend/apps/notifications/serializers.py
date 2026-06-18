@@ -9,6 +9,16 @@ class NotificationSerializer(serializers.ModelSerializer):
     direction_name = serializers.CharField(source="direction.name", read_only=True)
     is_read = serializers.SerializerMethodField()
 
+    # Multi-org : on expose le nom + logo + couleur de l'organisation
+    # propriétaire de la notification afin que le frontend puisse afficher
+    # un mini-avatar à côté de chaque notif pour les users multi-orgs.
+    organization_id = serializers.UUIDField(source="organization.id", read_only=True, allow_null=True)
+    organization_name = serializers.CharField(source="organization.name", read_only=True, allow_null=True)
+    organization_logo = serializers.CharField(source="organization.logo", read_only=True, allow_null=True)
+    organization_primary_color = serializers.CharField(
+        source="organization.primary_color", read_only=True, allow_null=True
+    )
+
     class Meta:
         model = Notification
         fields = [
@@ -19,6 +29,9 @@ class NotificationSerializer(serializers.ModelSerializer):
             "sent_at", "seen_at", "read_at", "failed_at",
             "email_sent_at", "error_message",
             "metadata", "is_read", "created_at",
+            # Branding org propriétaire (multi-org)
+            "organization_id", "organization_name",
+            "organization_logo", "organization_primary_color",
         ]
         read_only_fields = fields
 

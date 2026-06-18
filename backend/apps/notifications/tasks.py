@@ -49,22 +49,46 @@ def send_notification_email(self, notification_id: str):
     md = n.metadata or {}
     template_base = md.get("email_template", "generic")
     site_name = getattr(settings, "DEFAULT_SITE_NAME", "CODIR")
-    context = md.get("email_context", {}) | {
+
+    # ⚡ Multi-org : injection auto du branding de l'organisation propriétaire
+    # de la notification dans le contexte du template. base.html utilise
+    # `org_name`, `org_logo`, `org_primary_color`, `org_secondary_color`.
+    org = n.organization
+    org_branding = {
+        "org_name":            getattr(org, "name", "") or "",
+        "org_logo":            getattr(org, "logo", "") or "",
+        "org_primary_color":   getattr(org, "primary_color", "") or "#B8693C",
+        "org_secondary_color": getattr(org, "secondary_color", "") or "#0ea5e9",
+    }
+
+    context = org_branding | (md.get("email_context", {}) | {
         "title": n.title, "body": n.body,
         "recipient_email": n.recipient.email,
         "recipient_name": n.recipient.get_full_name() or n.recipient.email,
         "link_url": _absolute(n.action_url or n.link_url),
         "site_name": site_name,
-    }
+    })
     html, text = render_email(template_base, context)
 
-    # ─── Subject : nom destinataire en préfixe légèrement personnalisé.
-    # Aide à passer les filtres "non personnalisé = pub" + meilleur taux d'ouverture.
+    # ─── Subject : préfixe org (multi-org) + personnalisation prénom.
+    # Format final : "[Datarium] Marie, votre tâche est en retard"
+    # Aide les users multi-orgs à identifier rapidement la source de la notif
+    # ET aide à passer les filtres anti-spam (personnalisation = transactionnel).
     first_name = (n.recipient.first_name or "").strip()
     if first_name and first_name.lower() not in n.title.lower():
-        subject = f"{first_name}, {n.title[0].lower()}{n.title[1:]}" if len(n.title) > 1 else n.title
+        personalized = (
+            f"{first_name}, {n.title[0].lower()}{n.title[1:]}"
+            if len(n.title) > 1 else n.title
+        )
     else:
-        subject = n.title
+        personalized = n.title
+
+    org_name = org_branding["org_name"]
+    # Évite la duplication si le titre contient déjà le nom org
+    if org_name and f"[{org_name}]" not in personalized and org_name.lower() not in personalized.lower():
+        subject = f"[{org_name}] {personalized}"
+    else:
+        subject = personalized
 
     # Body fallback : on évite un texte trop court (signal spam). Si pas de
     # template texte rendu, on construit un fallback lisible.

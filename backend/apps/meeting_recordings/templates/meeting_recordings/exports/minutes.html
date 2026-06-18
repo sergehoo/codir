@@ -10,7 +10,7 @@
       margin: 2.2cm 2cm 2.5cm 2cm;
 
       @top-left {
-        content: "CODIR Executive — Compte rendu";
+        content: "{% if org_name %}{{ org_name }} — {% endif %}CODIR Executive — Compte rendu";
         font-size: 9pt;
         color: #a89e8e;
         font-family: 'Helvetica', sans-serif;
@@ -39,7 +39,7 @@
     /* ── Header doc ── */
     .doc-header {
       text-align: center;
-      border-bottom: 2px solid #b8693c;
+      border-bottom: 2px solid {{ org_primary_color|default:'#B8693C' }};
       padding-bottom: 16pt;
       margin-bottom: 20pt;
     }
@@ -47,7 +47,7 @@
       font-size: 9pt;
       letter-spacing: 4pt;
       text-transform: uppercase;
-      color: #b8693c;
+      color: {{ org_primary_color|default:'#B8693C' }};
       font-weight: 700;
       margin-bottom: 6pt;
     }
@@ -80,7 +80,7 @@
     .doc-body h2 {
       font-family: 'Georgia', serif;
       font-size: 13pt;
-      color: #b8693c;
+      color: {{ org_primary_color|default:'#B8693C' }};
       margin: 18pt 0 6pt 0;
       letter-spacing: 0.5pt;
       page-break-after: avoid;
@@ -143,7 +143,7 @@
     }
     .doc-footer .ai-notice {
       background: #fbf7f1;
-      border-left: 3pt solid #b8693c;
+      border-left: 3pt solid {{ org_primary_color|default:'#B8693C' }};
       padding: 6pt 10pt;
       margin: 8pt 0;
       text-align: left;
@@ -156,7 +156,13 @@
 <body>
 
   <header class="doc-header">
-    <div class="eyebrow">{{ site_name|default:"CODIR Executive" }}</div>
+    {% if org_logo %}
+      <img src="{{ org_logo }}" alt="{{ org_name }}"
+           style="max-height:48pt;max-width:180pt;margin-bottom:6pt;" />
+    {% endif %}
+    <div class="eyebrow">
+      {% if org_name %}{{ org_name }} — {% endif %}{{ site_name|default:"CODIR Executive" }}
+    </div>
     <h1>{{ meeting.title|default:"Compte rendu CODIR" }}</h1>
     <div class="meta">
       {% if meeting.scheduled_start %}

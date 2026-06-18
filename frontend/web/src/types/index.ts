@@ -217,6 +217,13 @@ export type Notification = {
   metadata?: Record<string, unknown>
   is_read?: boolean
   created_at: string
+  // Multi-org : branding de l'organisation propriétaire de la notification.
+  // Permet au frontend d'afficher un mini-avatar dans la cloche pour les users
+  // appartenant à plusieurs organisations.
+  organization_id?: ID | null
+  organization_name?: string | null
+  organization_logo?: string | null
+  organization_primary_color?: string | null
 }
 
 export type BetaDashboard = {

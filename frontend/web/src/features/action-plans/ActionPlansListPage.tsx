@@ -105,7 +105,6 @@ export function ActionPlansListPage() {
 
   // Hiérarchie Filiale → Direction → Plans d'action
   const activeGroups = groupBySubsidiaryAndDirection(active)
-  const showActiveGrouping = activeGroups.length > 0
 
   const [showHistory, setShowHistory] = useState(false)
   const [liveMode, setLiveMode] = useState(false)

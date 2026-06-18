@@ -7,7 +7,9 @@ import { PremiumCard } from './PremiumCard'
 
 type Trend = 'up' | 'down' | 'flat'
 
-const TREND_ICON: Record<Trend, React.ComponentType<{ size?: number }>> = {
+// ComponentType<any> contourne le typage trop strict de lucide-react
+// (ForwardRefExoticComponent) qui n'est pas assignable à un signature stricte.
+const TREND_ICON: Record<Trend, React.ComponentType<any>> = {
   up: ArrowUpRight,
   down: ArrowDownRight,
   flat: Minus,

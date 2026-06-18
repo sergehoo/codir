@@ -103,8 +103,25 @@ def generate_minutes_docx(recording) -> bytes:
         section.left_margin = Cm(2.2)
         section.right_margin = Cm(2.2)
 
-    # ── Header doc : titre + meta ──
+    # ── Header doc : branding org + titre + meta ──
     meeting = recording.meeting
+
+    # ⚡ Multi-org : couleur d'accent dynamique selon l'org propriétaire.
+    # Fallback Kaydan #B8693C si pas d'org / pas de couleur personnalisée.
+    org = getattr(meeting, "organization", None) or getattr(recording, "organization", None)
+    branding = _org_branding_ctx(org)
+    accent_rgb = _hex_to_rgb(branding["org_primary_color"])
+    accent_color = RGBColor(*accent_rgb)
+
+    # Eyebrow org name (uppercase letterspaced) — visible seulement si org connue
+    if branding["org_name"]:
+        org_p = doc.add_paragraph()
+        org_run = org_p.add_run(branding["org_name"].upper())
+        org_run.bold = True
+        org_run.font.size = Pt(10)
+        org_run.font.color.rgb = accent_color
+        org_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
     title_p = doc.add_paragraph()
     title_run = title_p.add_run("COMPTE RENDU CODIR")
     title_run.bold = True
@@ -115,7 +132,7 @@ def generate_minutes_docx(recording) -> bytes:
     subtitle_p = doc.add_paragraph()
     subtitle_run = subtitle_p.add_run(meeting.title or "Réunion CODIR")
     subtitle_run.font.size = Pt(13)
-    subtitle_run.font.color.rgb = RGBColor(0xB8, 0x69, 0x3C)
+    subtitle_run.font.color.rgb = accent_color
     subtitle_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     if meeting.scheduled_start:
@@ -146,7 +163,7 @@ def generate_minutes_docx(recording) -> bytes:
             p = doc.add_paragraph(style=style_name)
             run = p.add_run(block["text"])
             run.font.size = Pt({1: 18, 2: 15, 3: 13, 4: 12}.get(level, 11))
-            run.font.color.rgb = RGBColor(0xB8, 0x69, 0x3C) if level <= 2 \
+            run.font.color.rgb = accent_color if level <= 2 \
                 else RGBColor(0x3A, 0x30, 0x2A)
         elif t == "list_item":
             p = doc.add_paragraph(style="List Bullet")
@@ -219,6 +236,11 @@ def generate_minutes_pdf(recording) -> bytes:
     md = recording.ai_minutes or recording.summary or ""
     html_body = _markdown_to_html(md)
 
+    # ⚡ Multi-org : branding dynamique pour le PDF (header + accent couleur).
+    # L'org propriétaire de la réunion détermine le rendu visuel.
+    org = getattr(recording.meeting, "organization", None) or getattr(recording, "organization", None)
+    org_branding = _org_branding_ctx(org)
+
     # Render template Django
     ctx = {
         "recording": recording,
@@ -226,6 +248,7 @@ def generate_minutes_pdf(recording) -> bytes:
         "html_body": html_body,
         "site_name": getattr(settings, "DEFAULT_SITE_NAME", "CODIR Executive"),
         "generated_at": _now_french(),
+        **org_branding,
     }
     html_string = render_to_string(
         "meeting_recordings/exports/minutes.html", ctx,
@@ -300,3 +323,32 @@ def _now_french() -> str:
     """Date+heure en format FR pour le footer."""
     from datetime import datetime
     return datetime.now().strftime("%d/%m/%Y à %H:%M")
+
+
+def _org_branding_ctx(org) -> dict:
+    """Contexte branding pour les templates d'export (PDF + DOCX).
+
+    Renvoie systématiquement les 4 clés (logo, name, primary, secondary) avec
+    fallback Kaydan si l'org n'existe pas / n'a pas de branding personnalisé.
+    Les templates utilisent `org_logo`, `org_name`, `org_primary_color`,
+    `org_secondary_color` — toujours définies.
+    """
+    return {
+        "org_name": (getattr(org, "name", None) or "") if org else "",
+        "org_logo": (getattr(org, "logo", None) or "") if org else "",
+        "org_primary_color": (getattr(org, "primary_color", None) or "#B8693C") if org else "#B8693C",
+        "org_secondary_color": (getattr(org, "secondary_color", None) or "#0e0a07") if org else "#0e0a07",
+    }
+
+
+def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
+    """`#B8693C` → (184, 105, 60). Fallback (184, 105, 60) si parsing échoue."""
+    try:
+        s = (hex_color or "").lstrip("#")
+        if len(s) == 3:
+            s = "".join(c * 2 for c in s)
+        if len(s) != 6:
+            raise ValueError
+        return int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16)
+    except (ValueError, TypeError):
+        return 0xB8, 0x69, 0x3C

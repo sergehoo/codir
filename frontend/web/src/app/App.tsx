@@ -20,6 +20,7 @@ import { ProfilePage } from '@/features/profile/ProfilePage'
 import { LogsPage } from '@/features/settings/LogsPage'
 import { MeetingSeriesPage } from '@/features/settings/MeetingSeriesPage'
 import { MembersPage } from '@/features/settings/MembersPage'
+import { OrganizationPage } from '@/features/settings/OrganizationPage'
 import { SubsidiariesPage } from '@/features/settings/SubsidiariesPage'
 import { SpeakerMappingPage } from '@/features/meeting-recordings/pages/SpeakerMappingPage'
 import { RecordingSummaryPage } from '@/features/meeting-recordings/pages/RecordingSummaryPage'
@@ -75,6 +76,7 @@ const settingsMembers = createRoute({ getParentRoute: () => shellRoute, path: '/
 const settingsSubsidiaries = createRoute({ getParentRoute: () => shellRoute, path: '/settings/subsidiaries', component: SubsidiariesPage })
 const settingsMeetingSeries = createRoute({ getParentRoute: () => shellRoute, path: '/settings/meeting-series', component: MeetingSeriesPage })
 const settingsLogs = createRoute({ getParentRoute: () => shellRoute, path: '/settings/logs', component: LogsPage })
+const settingsOrg = createRoute({ getParentRoute: () => shellRoute, path: '/settings/organization', component: OrganizationPage })
 
 // ── Meeting recordings : identification voix + résumé IA ──
 const recordingSpeakers = createRoute({
@@ -94,7 +96,7 @@ const routeTree = rootRoute.addChildren([
     dashboardRoute, meetingsList, meetingNew, meetingDetail,
     decisionsList, decisionDetail, plansList, planDetail,
     myTasks, liveCodir, taskDetail, notifs, notifPrefs, documents,
-    profile, settingsMembers, settingsSubsidiaries, settingsMeetingSeries, settingsLogs,
+    profile, settingsMembers, settingsSubsidiaries, settingsMeetingSeries, settingsLogs, settingsOrg,
     recordingSpeakers, recordingSummary,
   ]),
 ])

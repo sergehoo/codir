@@ -9,7 +9,10 @@ export function EmptyState({
   action,
   className,
 }: {
-  icon?: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>
+  // ComponentType<any> évite les frictions de typage avec les icônes lucide-react
+  // (ForwardRefExoticComponent) qui ne sont pas strictement assignables à un
+  // ComponentType<{size:number}>. On accepte n'importe quel composant SVG-ish.
+  icon?: React.ComponentType<any>
   title: string
   description?: React.ReactNode
   action?: React.ReactNode

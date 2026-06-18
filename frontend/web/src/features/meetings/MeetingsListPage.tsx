@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import {
-  endOfDay, endOfWeek, isAfter, isBefore, startOfDay, startOfMonth, startOfWeek,
+  endOfDay, endOfWeek, isAfter, isBefore, startOfDay, startOfMonth,
 } from 'date-fns'
 import { ArrowUpRight, CalendarClock, Filter, MapPin, Plus, Users, Search } from 'lucide-react'
 import { useState } from 'react'
@@ -57,13 +57,27 @@ function groupByPeriod(meetings: Meeting[]): Bucket[] {
     return later.push(m)
   })
 
+  // Tri intelligent par bucket :
+  // - Futures (today/week/month/later) → ASCENDANT (la prochaine d'abord)
+  // - Passées + live → DESCENDANT (la plus récente d'abord)
+  const tsOf = (m: Meeting) => (toDate(m.scheduled_start) ?? new Date(0)).getTime()
+  const sortAsc = (a: Meeting, b: Meeting) => tsOf(a) - tsOf(b)
+  const sortDesc = (a: Meeting, b: Meeting) => tsOf(b) - tsOf(a)
+
+  inProgress.sort(sortDesc)
+  todayBucket.sort(sortAsc)
+  thisWeek.sort(sortAsc)
+  thisMonth.sort(sortAsc)
+  later.sort(sortAsc)
+  past.sort(sortDesc)
+
   return ([
     { key: 'live',      label: 'En cours',                  items: inProgress },
     { key: 'today',     label: 'Aujourd\'hui',              items: todayBucket },
     { key: 'this_week', label: 'Cette semaine',             items: thisWeek },
     { key: 'this_month',label: 'Ce mois',                   items: thisMonth },
     { key: 'later',     label: 'Plus tard',                 items: later },
-    { key: 'past',      label: 'Passées',                   items: past },
+    { key: 'past',      label: 'Passées (récentes en premier)', items: past },
   ] as Bucket[]).filter((b) => b.items.length > 0)
 }
 

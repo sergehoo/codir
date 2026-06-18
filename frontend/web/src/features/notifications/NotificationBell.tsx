@@ -9,6 +9,38 @@ import { cn } from '@/utils/cn'
 
 import { notificationsApi, notificationsKeys } from './api'
 
+// Mini-avatar org : logo si dispo, sinon initiale colorée.
+// Affiché uniquement si le user appartient à plusieurs organisations,
+// pour qu'il identifie d'un coup d'œil de quelle org provient la notif.
+function OrgMiniAvatar({ n }: { n: Notification }) {
+  if (!n.organization_id || !n.organization_name) return null
+  const initial = n.organization_name.trim().charAt(0).toUpperCase()
+  const bg = n.organization_primary_color || '#2563eb'
+
+  if (n.organization_logo) {
+    return (
+      <img
+        src={n.organization_logo}
+        alt={n.organization_name}
+        title={n.organization_name}
+        className="w-5 h-5 rounded object-cover shrink-0 border border-border/50"
+        onError={(e) => {
+          ;(e.currentTarget as HTMLImageElement).style.display = 'none'
+        }}
+      />
+    )
+  }
+  return (
+    <span
+      title={n.organization_name}
+      className="w-5 h-5 rounded grid place-items-center shrink-0 text-white text-[10px] font-semibold"
+      style={{ backgroundColor: bg }}
+    >
+      {initial}
+    </span>
+  )
+}
+
 function levelColor(level: string) {
   return {
     info: 'bg-info/15 text-info',
@@ -60,6 +92,11 @@ export function NotificationBell({ className }: { className?: string }) {
   const unread = summary?.unread ?? 0
   const items = (summary?.latest ?? []) as Notification[]
 
+  // Détecte un contexte multi-orgs pour afficher (ou non) les mini-avatars
+  // org dans le dropdown — inutile de polluer l'UI si une seule org.
+  const memberships = useAuthStore((s) => s.memberships)
+  const isMultiOrg = (memberships?.length ?? 0) > 1
+
   return (
     <div ref={ref} className={cn('relative', className)}>
       <button
@@ -107,7 +144,8 @@ export function NotificationBell({ className }: { className?: string }) {
                   !n.seen_at && 'bg-copper-500/[0.04]',
                 )}
               >
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-2">
+                  {isMultiOrg && <OrgMiniAvatar n={n} />}
                   <span className={cn(
                     'text-2xs uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 font-semibold',
                     levelColor(n.level),

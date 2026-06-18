@@ -309,23 +309,141 @@ class ChangePasswordView(APIView):
 
 
 class MyMembershipsView(APIView):
+    """GET /api/v1/auth/my-memberships/
+
+    Liste toutes les organisations où le user est membre actif, avec
+    branding (logo, couleurs) et rôle dans chacune. Utilisé par le
+    sélecteur d'organisation dans la topbar du frontend.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         qs = (
             Membership.unscoped
             .filter(user=request.user, is_active=True)
-            .select_related("organization")
+            .select_related("organization", "subsidiary")
         )
-        return Response([
-            {
-                "organization_id": str(m.organization_id),
-                "organization_name": m.organization.name,
-                "organization_slug": m.organization.slug,
-                "is_owner": m.is_owner,
-                "is_executive": m.is_executive,
-            } for m in qs
-        ])
+        # Org courante (depuis JWT claim)
+        from rest_framework_simplejwt.authentication import JWTAuthentication
+        current_org_id = None
+        try:
+            auth = JWTAuthentication()
+            validated = auth.get_validated_token(
+                auth.get_raw_token(auth.get_header(request)) or "",
+            )
+            current_org_id = validated.get("org_id")
+        except Exception:  # noqa: BLE001
+            pass
+
+        results = []
+        for m in qs:
+            org = m.organization
+            role_label = (
+                "Owner" if m.is_owner
+                else "Executive" if m.is_executive
+                else "Member"
+            )
+            results.append({
+                "organization_id":     str(org.id),
+                "organization_name":   org.name,
+                "organization_slug":   org.slug,
+                "logo":                org.logo or "",
+                "primary_color":       org.primary_color or "#2563eb",
+                "secondary_color":     org.secondary_color or "#0ea5e9",
+                "is_owner":            m.is_owner,
+                "is_executive":        m.is_executive,
+                "role_label":          role_label,
+                "subsidiary_id":       str(m.subsidiary_id) if m.subsidiary_id else None,
+                "subsidiary_name":     m.subsidiary.name if m.subsidiary_id else None,
+                "is_current":          str(org.id) == str(current_org_id) if current_org_id else False,
+            })
+        return Response(results)
+
+
+class SwitchOrganizationView(APIView):
+    """POST /api/v1/auth/switch-organization/
+
+    Body : { organization_id }
+    Réponse : { access, refresh, organization } — nouveaux tokens avec
+              org_id mis à jour pour les futures requêtes.
+
+    Vérifie que le user a bien un Membership ACTIF dans l'org cible.
+    Audit log : "user X switched to org Y".
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        from apps.organizations.models import Organization
+
+        target_id = request.data.get("organization_id")
+        if not target_id:
+            return Response(
+                {"detail": "organization_id requis.", "code": "missing_org"},
+                status=400,
+            )
+
+        # Vérifie l'appartenance active
+        m = (
+            Membership.unscoped
+            .filter(user=request.user, organization_id=target_id, is_active=True)
+            .select_related("organization")
+            .first()
+        )
+        if m is None:
+            return Response(
+                {
+                    "detail": "Vous n'êtes pas membre actif de cette organisation.",
+                    "code": "not_member",
+                },
+                status=403,
+            )
+
+        # Génère nouveaux tokens avec org_id mis à jour
+        refresh = RefreshToken.for_user(request.user)
+        refresh["org_id"] = str(m.organization_id)
+        access = refresh.access_token
+        access["org_id"] = str(m.organization_id)
+
+        # Audit log (best-effort)
+        try:
+            from apps.audit_logs.models import AuditLog
+            previous = getattr(request, "organization", None)
+            AuditLog.unscoped.create(
+                organization=m.organization,
+                actor=request.user,
+                action="custom",
+                description=(
+                    f"Changement d'organisation : "
+                    f"{previous.name if previous else '?'} → {m.organization.name}"
+                ),
+                ip=_get_ip(request),
+                user_agent=(request.META.get("HTTP_USER_AGENT") or "")[:500],
+            )
+        except Exception:  # noqa: BLE001
+            log.exception("Audit log switch-org KO (non bloquant)")
+
+        return Response({
+            "access": str(access),
+            "refresh": str(refresh),
+            "organization": {
+                "id":              str(m.organization_id),
+                "name":            m.organization.name,
+                "slug":            m.organization.slug,
+                "logo":            m.organization.logo or "",
+                "primary_color":   m.organization.primary_color or "#2563eb",
+                "secondary_color": m.organization.secondary_color or "#0ea5e9",
+                "role_label":      "Owner" if m.is_owner else "Executive" if m.is_executive else "Member",
+            },
+        })
+
+
+def _get_ip(request) -> str:
+    xff = request.META.get("HTTP_X_FORWARDED_FOR")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR", "")
 
 
 class UserViewSet(viewsets.ModelViewSet):
