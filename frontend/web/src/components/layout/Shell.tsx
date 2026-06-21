@@ -16,6 +16,7 @@ import { useAIChatStore } from '@/features/ai-chat/store'
 import { notificationsApi } from '@/features/notifications/api'
 import { NotificationBell } from '@/features/notifications/NotificationBell'
 import { OrganizationSwitcher } from '@/features/organizations/components/OrganizationSwitcher'
+import { useBrandingTheme } from '@/features/organizations/useBrandingTheme'
 import { useMembershipsBootstrap } from '@/features/organizations/useMembershipsBootstrap'
 import { useAuthStore, useCurrentMembership } from '@/stores/auth'
 import { cn } from '@/utils/cn'
@@ -66,6 +67,12 @@ export function Shell() {
   // 🌐 Multi-org : charge la liste des organisations + setCurrentOrgId
   // dès qu'on a un access token (au login OU au boot avec token persisté).
   useMembershipsBootstrap()
+
+  // 🎨 Multi-org : applique les couleurs de marque de l'organisation courante
+  // sur :root (CSS variables --copper-*). Toute l'app (boutons, chips, focus,
+  // gradients, scrollbar, selection) suit automatiquement le branding choisi
+  // dans Settings > Organisation.
+  useBrandingTheme()
 
   // ⚡ Détection automatique du contexte de page pour l'Assistant IA.
   // À chaque changement de pathname, on met à jour le scope/id pour que
