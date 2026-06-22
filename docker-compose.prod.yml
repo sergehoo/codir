@@ -230,10 +230,12 @@ services:
     env_file: [.env.prod]
     environment:
       <<: *common-env
+      HF_HOME: /var/cache/codir/hf
     volumes:
       - codir_static:/app/staticfiles:rw
       - codir_media:/var/www/media:rw
       - codir_logs:/app/logs:rw
+      - codir_hfcache:/var/cache/codir/hf:rw
     depends_on:
       codirDB:
         condition: service_healthy
@@ -383,6 +385,9 @@ services:
     environment:
       <<: *common-env
       CELERY_WORKER_MAX_MEMORY_PER_CHILD: "200000"   # 200 MB
+      HF_HOME: /var/cache/codir/hf
+    volumes:
+        - codir_hfcache:/var/cache/codir/hf:rw
     depends_on:
       codirDB:
         condition: service_healthy
@@ -504,6 +509,7 @@ volumes:
   codir_media:
   codir_logs:
   codir_minio_data:
+  codir_hfcache:
 
 networks:
   codir_network:

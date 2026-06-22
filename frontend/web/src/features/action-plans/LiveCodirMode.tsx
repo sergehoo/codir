@@ -11,14 +11,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Download, Search, Square, SquareCheck, X } from 'lucide-react'
+import { Download, Plus, Scale, Search, Square, SquareCheck, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { apiClient } from '@/api/client'
+import { decisionsApi } from '@/features/decisions/api'
 
 import { actionPlansApi, meetingsExportApi, plansKeys } from './api'
-import type { ActionTask, Paginated } from '@/types'
+import type { ActionPlan, ActionTask, Paginated } from '@/types'
 
 interface Meeting {
   id: string
@@ -75,6 +76,9 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
   const [search, setSearch]                   = useState('')
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
   const [bulkComment, setBulkComment]         = useState('')
+  // Lot Live — Quick create inline
+  const [quickTaskOpen, setQuickTaskOpen]         = useState(false)
+  const [quickDecisionOpen, setQuickDecisionOpen] = useState(false)
 
   // ── Chargement des tâches : par défaut TOUTES (toutes réunions confondues) ──
   // Si filterMeetingId est défini → restriction à ce meeting via le filterset DRF
@@ -368,6 +372,25 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
             </div>
           </div>
 
+          {/* Lot Live — Quick create : éviter de quitter la page ─────── */}
+          <button
+            type="button"
+            onClick={() => setQuickTaskOpen(true)}
+            title="Créer une tâche sans quitter le Live CODIR"
+            className="px-3 py-2 rounded-md bg-bg-base border border-border hover:border-copper-500 hover:text-copper-400 text-sm font-medium flex items-center gap-2"
+          >
+            <Plus size={15} /> Tâche
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setQuickDecisionOpen(true)}
+            title="Acter une décision sans quitter le Live CODIR"
+            className="px-3 py-2 rounded-md bg-bg-base border border-border hover:border-copper-500 hover:text-copper-400 text-sm font-medium flex items-center gap-2"
+          >
+            <Scale size={15} /> Décision
+          </button>
+
           <button
             type="button"
             onClick={() => {
@@ -497,6 +520,34 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
           </select>
         </div>
       </header>
+
+      {/* ─── Modals Quick Create (Live) ─── */}
+      {quickTaskOpen && (
+        <QuickCreateTaskModal
+          users={users || []}
+          defaultMeetingId={filterMeetingId || ''}
+          onClose={() => setQuickTaskOpen(false)}
+          onCreated={() => {
+            qc.invalidateQueries({ queryKey: ['live-codir', 'tasks'] })
+            qc.invalidateQueries({ queryKey: plansKeys.all })
+            toast.success('Tâche créée')
+            setQuickTaskOpen(false)
+          }}
+        />
+      )}
+      {quickDecisionOpen && (
+        <QuickCreateDecisionModal
+          users={users || []}
+          defaultMeetingId={filterMeetingId || ''}
+          onClose={() => setQuickDecisionOpen(false)}
+          onCreated={() => {
+            qc.invalidateQueries({ queryKey: ['live-codir', 'tasks'] })
+            qc.invalidateQueries({ queryKey: ['decisions'] })
+            toast.success('Décision créée')
+            setQuickDecisionOpen(false)
+          }}
+        />
+      )}
 
       {/* ─── Bulk action bar ─── */}
       {selectedTaskIds.size > 0 && (
@@ -889,6 +940,369 @@ function BulkActionBar({
       >
         Annuler
       </button>
+    </div>
+  )
+}
+
+
+// ─── QuickCreateTaskModal ───────────────────────────────────────────
+// Crée une tâche directement depuis le Live CODIR. Si une réunion est
+// filtrée, on récupère le plan d'action lié (decision_meeting). Sinon
+// on liste tous les plans actifs pour rattachement explicite.
+
+function QuickCreateTaskModal({
+  users, defaultMeetingId, onClose, onCreated,
+}: {
+  users: User[]
+  defaultMeetingId: string
+  onClose: () => void
+  onCreated: () => void
+}) {
+  const [title, setTitle]         = useState('')
+  const [planId, setPlanId]       = useState('')
+  const [assignee, setAssignee]   = useState('')
+  const [dueDate, setDueDate]     = useState('')
+  const [priority, setPriority]   = useState('medium')
+  const [description, setDescription] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  // Liste des plans actifs pour rattachement
+  const { data: plansRaw, isLoading: plansLoading } = useQuery({
+    queryKey: ['plans', 'active-for-live'],
+    queryFn: async () => {
+      const r = await apiClient.get<Paginated<ActionPlan> | ActionPlan[]>(
+        '/action-plans/?page_size=200',
+      )
+      return Array.isArray(r.data) ? r.data : r.data.results ?? []
+    },
+  })
+  const plans = useMemo<ActionPlan[]>(
+    () => (plansRaw || []).filter((p) => !['completed', 'cancelled'].includes(p.status as string)),
+    [plansRaw],
+  )
+
+  // Esc → fermer
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [onClose])
+
+  const createMut = useMutation({
+    mutationFn: async () => {
+      if (!planId) throw new Error('Choisissez un Dossier parent')
+      if (!title.trim()) throw new Error('Le titre est obligatoire')
+      return actionPlansApi.addTask(planId, {
+        title: title.trim(),
+        description_md: description.trim() || undefined,
+        assignee: assignee || undefined,
+        due_date: dueDate || undefined,
+        priority,
+        status: 'todo',
+      } as any)
+    },
+    onSuccess: () => onCreated(),
+    onError: (e: any) => setError(e?.response?.data?.detail || e?.message || 'Erreur de création'),
+  })
+
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center p-6"
+         onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="relative w-full max-w-xl bg-bg-elevated border border-border rounded-xl shadow-2xl overflow-hidden">
+        <header className="px-6 py-4 border-b border-border flex items-center justify-between">
+          <div>
+            <div className="text-2xs uppercase tracking-widest text-fg-muted font-semibold">
+              Nouvelle tâche
+            </div>
+            <h3 className="serif text-lg font-semibold mt-0.5">Créer une tâche d'action</h3>
+          </div>
+          <button onClick={onClose} className="p-1 text-fg-muted hover:text-fg" title="Fermer (Esc)">
+            <X size={18} />
+          </button>
+        </header>
+
+        <form
+          onSubmit={(e) => { e.preventDefault(); setError(null); createMut.mutate() }}
+          className="px-6 py-5 space-y-4"
+        >
+          <div>
+            <label className="block text-2xs uppercase tracking-wider text-fg-muted font-semibold mb-1.5">
+              Titre <span className="text-danger">*</span>
+            </label>
+            <input
+              type="text" value={title} onChange={(e) => setTitle(e.target.value)}
+              placeholder="Ex. Préparer le budget Q3"
+              autoFocus required
+              className="w-full px-3 py-2 bg-bg-base border border-border rounded-md text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-2xs uppercase tracking-wider text-fg-muted font-semibold mb-1.5">
+              Dossier parent <span className="text-danger">*</span>
+            </label>
+            <select
+              value={planId} onChange={(e) => setPlanId(e.target.value)}
+              required
+              className="w-full px-3 py-2 bg-bg-base border border-border rounded-md text-sm"
+            >
+              <option value="">
+                {plansLoading ? 'Chargement…' : '— Choisir un Dossier —'}
+              </option>
+              {plans.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.title} {p.subsidiary_name ? `(${p.subsidiary_name})` : ''}
+                </option>
+              ))}
+            </select>
+            {defaultMeetingId && (
+              <p className="text-2xs text-fg-subtle mt-1">
+                Astuce : si aucun Dossier ne correspond à votre sujet, vous pouvez en créer
+                un depuis « Suivi Projets/Dossiers » et revenir ici.
+              </p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-2xs uppercase tracking-wider text-fg-muted font-semibold mb-1.5">
+                Responsable
+              </label>
+              <select
+                value={assignee} onChange={(e) => setAssignee(e.target.value)}
+                className="w-full px-3 py-2 bg-bg-base border border-border rounded-md text-sm"
+              >
+                <option value="">— Non assigné —</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-2xs uppercase tracking-wider text-fg-muted font-semibold mb-1.5">
+                Échéance
+              </label>
+              <input
+                type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
+                className="w-full px-3 py-2 bg-bg-base border border-border rounded-md text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-2xs uppercase tracking-wider text-fg-muted font-semibold mb-1.5">
+              Priorité
+            </label>
+            <select
+              value={priority} onChange={(e) => setPriority(e.target.value)}
+              className="w-full px-3 py-2 bg-bg-base border border-border rounded-md text-sm"
+            >
+              {PRIORITY_OPTIONS.map((p) => (
+                <option key={p.value} value={p.value}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-2xs uppercase tracking-wider text-fg-muted font-semibold mb-1.5">
+              Description (optionnel)
+            </label>
+            <textarea
+              value={description} onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              placeholder="Précisions, livrables attendus, prérequis…"
+              className="w-full px-3 py-2 bg-bg-base border border-border rounded-md text-sm"
+            />
+          </div>
+
+          {error && (
+            <div className="text-xs text-danger bg-danger/10 px-3 py-2 rounded">{error}</div>
+          )}
+
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 rounded-md text-sm text-fg-muted hover:text-fg">
+              Annuler
+            </button>
+            <button type="submit" disabled={createMut.isPending}
+              className="px-4 py-2 rounded-md bg-copper-500 hover:bg-copper-400 text-white text-sm font-semibold disabled:opacity-50">
+              {createMut.isPending ? 'Création…' : 'Créer la tâche'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+
+// ─── QuickCreateDecisionModal ───────────────────────────────────────
+// Acte une décision en `proposed` (à valider plus tard). Rattachée au
+// meeting filtré si applicable, sinon décision libre.
+
+function QuickCreateDecisionModal({
+  users, defaultMeetingId, onClose, onCreated,
+}: {
+  users: User[]
+  defaultMeetingId: string
+  onClose: () => void
+  onCreated: () => void
+}) {
+  const [title, setTitle]             = useState('')
+  const [description, setDescription] = useState('')
+  const [responsible, setResponsible] = useState('')
+  const [priority, setPriority]       = useState('medium')
+  const [deadline, setDeadline]       = useState('')
+  const [isConfidential, setIsConfidential] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [onClose])
+
+  const createMut = useMutation({
+    mutationFn: async () => {
+      if (!title.trim()) throw new Error('Le titre est obligatoire')
+      const payload: any = {
+        title: title.trim(),
+        description_md: description.trim() || undefined,
+        responsible: responsible || undefined,
+        priority,
+        deadline: deadline || undefined,
+        is_confidential: isConfidential,
+        status: 'proposed',
+      }
+      if (defaultMeetingId) payload.meeting = defaultMeetingId
+      return decisionsApi.create(payload)
+    },
+    onSuccess: () => onCreated(),
+    onError: (e: any) => setError(e?.response?.data?.detail || e?.message || 'Erreur de création'),
+  })
+
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center p-6"
+         onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="relative w-full max-w-xl bg-bg-elevated border border-border rounded-xl shadow-2xl overflow-hidden">
+        <header className="px-6 py-4 border-b border-border flex items-center justify-between">
+          <div>
+            <div className="text-2xs uppercase tracking-widest text-fg-muted font-semibold">
+              Nouvelle décision
+            </div>
+            <h3 className="serif text-lg font-semibold mt-0.5">Acter une décision</h3>
+            {defaultMeetingId && (
+              <div className="text-2xs text-fg-subtle mt-1">
+                Rattachée à la réunion filtrée
+              </div>
+            )}
+          </div>
+          <button onClick={onClose} className="p-1 text-fg-muted hover:text-fg" title="Fermer (Esc)">
+            <X size={18} />
+          </button>
+        </header>
+
+        <form
+          onSubmit={(e) => { e.preventDefault(); setError(null); createMut.mutate() }}
+          className="px-6 py-5 space-y-4"
+        >
+          <div>
+            <label className="block text-2xs uppercase tracking-wider text-fg-muted font-semibold mb-1.5">
+              Titre <span className="text-danger">*</span>
+            </label>
+            <input
+              type="text" value={title} onChange={(e) => setTitle(e.target.value)}
+              placeholder="Ex. Valider le budget Q3 à 3.2M€"
+              autoFocus required
+              className="w-full px-3 py-2 bg-bg-base border border-border rounded-md text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-2xs uppercase tracking-wider text-fg-muted font-semibold mb-1.5">
+              Description / contexte (optionnel)
+            </label>
+            <textarea
+              value={description} onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              placeholder="Contexte, options envisagées, rationale…"
+              className="w-full px-3 py-2 bg-bg-base border border-border rounded-md text-sm"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-2xs uppercase tracking-wider text-fg-muted font-semibold mb-1.5">
+                Responsable
+              </label>
+              <select
+                value={responsible} onChange={(e) => setResponsible(e.target.value)}
+                className="w-full px-3 py-2 bg-bg-base border border-border rounded-md text-sm"
+              >
+                <option value="">— Non assigné —</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>{u.first_name} {u.last_name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-2xs uppercase tracking-wider text-fg-muted font-semibold mb-1.5">
+                Échéance
+              </label>
+              <input
+                type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)}
+                className="w-full px-3 py-2 bg-bg-base border border-border rounded-md text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 items-end">
+            <div>
+              <label className="block text-2xs uppercase tracking-wider text-fg-muted font-semibold mb-1.5">
+                Priorité
+              </label>
+              <select
+                value={priority} onChange={(e) => setPriority(e.target.value)}
+                className="w-full px-3 py-2 bg-bg-base border border-border rounded-md text-sm"
+              >
+                {PRIORITY_OPTIONS.map((p) => (
+                  <option key={p.value} value={p.value}>{p.label}</option>
+                ))}
+              </select>
+            </div>
+            <label className="inline-flex items-center gap-2 text-sm pb-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isConfidential}
+                onChange={(e) => setIsConfidential(e.target.checked)}
+              />
+              <span>Confidentiel</span>
+            </label>
+          </div>
+
+          <div className="text-2xs text-fg-subtle bg-fg/[0.03] px-3 py-2 rounded">
+            La décision sera créée au statut « Proposée ». Vous pourrez la valider plus tard
+            depuis la page Décisions.
+          </div>
+
+          {error && (
+            <div className="text-xs text-danger bg-danger/10 px-3 py-2 rounded">{error}</div>
+          )}
+
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 rounded-md text-sm text-fg-muted hover:text-fg">
+              Annuler
+            </button>
+            <button type="submit" disabled={createMut.isPending}
+              className="px-4 py-2 rounded-md bg-copper-500 hover:bg-copper-400 text-white text-sm font-semibold disabled:opacity-50">
+              {createMut.isPending ? 'Création…' : 'Créer la décision'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }
