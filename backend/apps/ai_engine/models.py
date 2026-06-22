@@ -163,3 +163,97 @@ class AIActionRequest(TenantAwareModel):
 
     def __str__(self):
         return f"AIAction({self.action_type}, {self.status})"
+
+
+# ─── Agent IA proactif (Lot 2) ────────────────────────────────
+
+class ProactiveAlert(TenantAwareModel):
+    """Trace une alerte proactive émise par l'agent IA.
+
+    Objectifs :
+    1. **Déduplication** : ne pas resignaler le même sujet (plan/decision)
+       au même user pendant `cooldown_days` (5 par défaut).
+    2. **Métriques** : suivi du taux d'émission, sujets les plus signalés,
+       taux d'action humaine consécutif (clic, dismiss).
+    """
+    user = models.ForeignKey(
+        "accounts.User", on_delete=models.CASCADE,
+        related_name="proactive_alerts",
+    )
+    target_kind = models.CharField(max_length=20, db_index=True)
+    target_id   = models.CharField(max_length=80, db_index=True)
+    reason      = models.CharField(max_length=300)
+    health_score_at_emit = models.PositiveSmallIntegerField(default=0)
+    ai_message = models.ForeignKey(
+        AIMessage, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="proactive_alerts",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=[("emitted", "Émis"), ("read", "Lu"), ("dismissed", "Ignoré")],
+        default="emitted",
+    )
+    read_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            # Pour la dédup : "ai-je signalé ce target à ce user récemment ?"
+            models.Index(fields=["user", "target_kind", "target_id", "-created_at"]),
+            models.Index(fields=["organization", "-created_at"]),
+        ]
+
+    def __str__(self):
+        return f"ProactiveAlert({self.target_kind}:{self.target_id} → {self.user_id})"
+
+
+# ─── Recherche sémantique universelle (Lot 3) ─────────────────
+
+class SemanticIndex(TenantAwareModel):
+    """Index sémantique cross-objets pour la recherche IA universelle.
+
+    Permet de chercher en langage naturel à travers les décisions, plans,
+    réunions, transcripts, documents en utilisant une similarité vectorielle.
+
+    Champs clés :
+      - `source_type` / `source_id` : pointer générique vers l'objet métier
+      - `text_hash` : sha256 du texte indexé — skip re-indexation si inchangé
+      - `embedding` : vecteur 384-dim (sentence-transformers multilingue)
+      - `model_version` : permet de ré-indexer sélectivement si on change de
+        modèle d'embedding
+
+    Stockage : JSONField pour MVP. Pour migrer vers pgvector quand le volume
+    grossit (>10k items), changer le champ en `pgvector.django.VectorField`
+    et ajouter `CREATE INDEX ... USING ivfflat` côté SQL.
+    """
+    SOURCE_TYPES = [
+        ("decision", "Décision"),
+        ("plan", "Plan d'action"),
+        ("meeting", "Réunion"),
+        ("transcript", "Transcript"),
+        ("document", "Document"),
+    ]
+
+    source_type = models.CharField(max_length=20, choices=SOURCE_TYPES, db_index=True)
+    source_id   = models.CharField(max_length=80, db_index=True)
+    # Copie locale du titre + texte pour rendu rapide (évite jointures)
+    title = models.CharField(max_length=300)
+    text  = models.TextField()
+    text_hash = models.CharField(max_length=64, db_index=True)
+    # Vecteur 384-dim (List[float]). Stocké JSON pour portabilité.
+    embedding = models.JSONField(default=list, blank=True)
+    # Pour invalidation : si on upgrade le modèle, ré-indexer celleux avec
+    # une `model_version` différente.
+    model_version = models.CharField(max_length=80, default="minilm-multi-v1")
+    # URL canonique pour redirection depuis les résultats de recherche
+    url = models.CharField(max_length=300, blank=True)
+
+    class Meta:
+        unique_together = [("source_type", "source_id")]
+        indexes = [
+            models.Index(fields=["organization", "source_type"]),
+            models.Index(fields=["organization", "model_version"]),
+        ]
+
+    def __str__(self):
+        return f"SemanticIndex({self.source_type}:{self.source_id})"

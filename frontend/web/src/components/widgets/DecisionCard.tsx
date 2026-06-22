@@ -2,6 +2,7 @@ import { Link } from '@tanstack/react-router'
 import { Lock } from 'lucide-react'
 
 import type { Decision } from '@/types'
+import { HealthBadge, type HealthLabel } from './HealthBadge'
 import { PriorityBadge } from './PriorityBadge'
 import { StatusBadge } from './StatusBadge'
 
@@ -20,7 +21,14 @@ export function DecisionCard({ d }: { d: Decision }) {
             confidentiel
           </span>
         )}
-        <StatusBadge status={d.status} className="ml-auto" />
+        <HealthBadge
+          score={(d as any).health_score}
+          label={(d as any).health_label as HealthLabel | undefined}
+          reasons={(d as any).health_reasons}
+          variant="chip"
+          className="ml-auto"
+        />
+        <StatusBadge status={d.status} />
       </div>
       <div className="font-semibold text-sm leading-snug">{d.title}</div>
       <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">

@@ -1,12 +1,47 @@
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import {
   ArrowRight, Bell, CheckSquare, FileText, Gauge,
-  LayoutDashboard, LogOut, Plus, Scale, Search, Users,
+  LayoutDashboard, LogOut, Plus, Scale, Search, Sparkles, Users,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import { apiClient } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { cn } from '@/utils/cn'
+
+// ── Recherche sémantique (Lot 3) ───────────────────────────
+type SemanticResult = {
+  kind: 'decision' | 'plan' | 'meeting' | 'transcript' | 'document'
+  id: string
+  title: string
+  snippet: string
+  url: string
+  similarity: number
+}
+
+const KIND_LABEL: Record<SemanticResult['kind'], string> = {
+  decision: 'Décision',
+  plan: "Plan d'action",
+  meeting: 'Réunion',
+  transcript: 'Compte rendu',
+  document: 'Document',
+}
+
+const KIND_ICON: Record<SemanticResult['kind'], typeof LayoutDashboard> = {
+  decision: Scale,
+  plan: CheckSquare,
+  meeting: Gauge,
+  transcript: FileText,
+  document: FileText,
+}
+
+async function searchSemantic(q: string): Promise<SemanticResult[]> {
+  const r = await apiClient.get<{ results: SemanticResult[] }>(
+    `/ai-chat/search/?q=${encodeURIComponent(q)}&limit=10`,
+  )
+  return r.data.results || []
+}
 
 type Action = {
   id: string
@@ -24,8 +59,24 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const navigate = useNavigate()
   const logout = useAuthStore((s) => s.logout)
   const [query, setQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
   const [selectedIdx, setSelectedIdx] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Débounce 300ms pour ne pas spammer le backend pendant la frappe
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query.trim()), 300)
+    return () => clearTimeout(t)
+  }, [query])
+
+  // Recherche sémantique : déclenchée pour requêtes de 3+ caractères
+  // (sinon trop de bruit pour le top-K et trop d'appels inutiles)
+  const { data: semanticResults = [], isFetching: searching } = useQuery({
+    queryKey: ['semantic-search', debouncedQuery],
+    queryFn: () => searchSemantic(debouncedQuery),
+    enabled: debouncedQuery.length >= 3,
+    staleTime: 30_000,
+  })
 
   // Reset au open
   useEffect(() => {
@@ -120,7 +171,17 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
 
         {/* Results */}
         <div className="max-h-[55vh] overflow-y-auto py-2">
-          {filtered.length === 0 && (
+          {/* Recherche sémantique (Lot 3) — uniquement pour requêtes ≥ 3 char */}
+          {debouncedQuery.length >= 3 && (
+            <SemanticResultsSection
+              results={semanticResults}
+              loading={searching}
+              query={debouncedQuery}
+              onSelect={(r) => { onClose(); navigate({ to: r.url as any }) }}
+            />
+          )}
+
+          {filtered.length === 0 && semanticResults.length === 0 && !searching && (
             <div className="px-5 py-12 text-center text-fg-subtle text-sm">
               Aucun résultat pour <span className="text-fg">« {query} »</span>
             </div>
@@ -171,6 +232,65 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     </div>
   )
 }
+
+/** Section "Recherche sémantique" — affichée pour les requêtes ≥ 3 caractères.
+ *
+ * Présente jusqu'à 10 résultats triés par similarity, avec snippet et badge
+ * pour le type d'objet. Cliquable → navigation directe.
+ */
+function SemanticResultsSection({
+  results, loading, query, onSelect,
+}: {
+  results: SemanticResult[]
+  loading: boolean
+  query: string
+  onSelect: (r: SemanticResult) => void
+}) {
+  if (results.length === 0 && !loading) return null
+
+  return (
+    <div className="py-1 border-b border-border">
+      <div className="px-5 py-2 text-2xs uppercase tracking-widest text-fg-subtle font-semibold flex items-center gap-2">
+        <span className="divider-accent" />
+        <Sparkles size={11} className="text-copper-400" />
+        <span>Recherche sémantique</span>
+        {loading && <span className="ml-auto text-fg-subtle normal-case tracking-normal">recherche…</span>}
+      </div>
+      {results.length === 0 && !loading && (
+        <div className="px-5 py-3 text-xs text-fg-subtle">
+          Rien trouvé pour "{query}" dans les décisions, plans et CR.
+        </div>
+      )}
+      {results.map((r) => {
+        const Icon = KIND_ICON[r.kind]
+        const pct = Math.round(r.similarity * 100)
+        return (
+          <button
+            key={`${r.kind}-${r.id}`}
+            onClick={() => onSelect(r)}
+            className="w-full flex items-start gap-3 px-5 py-2.5 text-left transition hover:bg-fg/[0.04] group"
+          >
+            <Icon size={14} strokeWidth={1.75} className="text-copper-400 mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-2xs uppercase tracking-wider text-fg-subtle font-semibold">
+                  {KIND_LABEL[r.kind]}
+                </span>
+                <span className="text-2xs text-copper-400/70 font-mono">{pct}% match</span>
+              </div>
+              <div className="text-sm font-medium text-fg truncate">{r.title}</div>
+              {r.snippet && (
+                <div className="text-2xs text-fg-muted truncate mt-0.5">{r.snippet}</div>
+              )}
+            </div>
+            <ArrowRight size={13} className="text-fg-subtle group-hover:text-copper-400 transition mt-1 shrink-0" />
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 
 /** Hook qui écoute ⌘K / Ctrl+K et toggle l'ouverture. */
 export function useCommandPaletteHotkey(setOpen: (v: boolean) => void) {

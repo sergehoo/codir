@@ -1,0 +1,45 @@
+{
+  "name": "CODIR Executive Platform",
+  "short_name": "CODIR",
+  "description": "Plateforme exécutive pour comités de direction — réunions, décisions, plans d'action et assistant IA.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#131210",
+  "theme_color": "#B8693C",
+  "lang": "fr-FR",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/kaydan-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Briefing du jour",
+      "url": "/briefing",
+      "description": "Mon briefing personnalisé"
+    },
+    {
+      "name": "Mes tâches",
+      "url": "/my-tasks",
+      "description": "Tâches assignées"
+    }
+  ]
+}

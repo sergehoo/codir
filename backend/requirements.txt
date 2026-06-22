@@ -105,3 +105,16 @@ resemblyzer==0.1.4
 librosa==0.10.2
 numpy==1.26.4
 scipy==1.13.1
+# ──────────────────────────────────────────────────────────────
+# Recherche sémantique universelle (Lot 3)
+# ──────────────────────────────────────────────────────────────
+# sentence-transformers : embeddings 384-dim multilingue, local, gratuit.
+# Modèle : paraphrase-multilingual-MiniLM-L12-v2 (~117 Mo, téléchargé au 1er run).
+sentence-transformers==3.0.1
+# ──────────────────────────────────────────────────────────────
+# Web Push notifications (Lot 6 — PWA mobile)
+# ──────────────────────────────────────────────────────────────
+# pywebpush : envoi de notifications push aux navigateurs via VAPID.
+# Génère les clés une fois (manage.py shell), pose VAPID_PUBLIC_KEY +
+# VAPID_PRIVATE_KEY dans .env.
+pywebpush==2.0.0

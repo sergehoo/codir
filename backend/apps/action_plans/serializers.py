@@ -145,6 +145,10 @@ class ActionPlanListSerializer(serializers.ModelSerializer):
     decision_ref = serializers.CharField(source="decision.ref", read_only=True)
     can_add_tasks = serializers.SerializerMethodField()
     can_modify = serializers.SerializerMethodField()
+    # Cockpit prédictif — Lot 1 : santé calculée à la volée.
+    health_score = serializers.SerializerMethodField()
+    health_label = serializers.SerializerMethodField()
+    health_reasons = serializers.SerializerMethodField()
 
     class Meta:
         model = ActionPlan
@@ -156,8 +160,27 @@ class ActionPlanListSerializer(serializers.ModelSerializer):
             "subsidiary_id", "subsidiary_name",
             "direction_id", "direction_name",
             "can_add_tasks", "can_modify",
+            "health_score", "health_label", "health_reasons",
             "created_at", "updated_at",
         ]
+
+    def _health(self, obj):
+        # Cache sur l'instance pour ne pas recalculer 3× par item
+        cached = getattr(obj, "_cached_health", None)
+        if cached is None:
+            from apps.common.health_score import compute_plan_health
+            cached = compute_plan_health(obj)
+            obj._cached_health = cached
+        return cached
+
+    def get_health_score(self, obj):
+        return self._health(obj).score
+
+    def get_health_label(self, obj):
+        return self._health(obj).label
+
+    def get_health_reasons(self, obj):
+        return self._health(obj).reasons
 
     def get_tasks_count(self, obj):
         return getattr(obj, "_tasks_count", obj.tasks.count())

@@ -184,6 +184,11 @@ class NotificationPreference(TenantAwareModel):
     decision_alerts = models.BooleanField(default=True)
     meeting_alerts = models.BooleanField(default=True)
 
+    # Agent IA proactif (Lot 2) — l'IA scrute les health_scores et envoie
+    # des messages d'alerte dans le sidebar chat. Off-by-default-no : on
+    # active par défaut pour démontrer la valeur, l'utilisateur peut couper.
+    proactive_agent_enabled = models.BooleanField(default=True)
+
     # Heures de silence
     quiet_hours_start = models.TimeField(null=True, blank=True)
     quiet_hours_end = models.TimeField(null=True, blank=True)
@@ -250,3 +255,45 @@ class TaskReminderLog(TimestampedModel):
         indexes = [
             models.Index(fields=["user", "reminder_type", "reminder_date"]),
         ]
+
+
+# ─── Push Web (Lot 6 — PWA mobile) ─────────────────────────────
+
+class PushSubscription(TenantAwareModel):
+    """Abonnement Web Push d'un user sur un device/navigateur.
+
+    Un user peut avoir plusieurs subscriptions (1 par device : iPhone + desktop
+    + tablette par exemple). On les stocke toutes, on envoie à toutes les
+    actives quand une notif `push_enabled=True` est émise.
+
+    Spec : https://www.w3.org/TR/push-api/
+    Champs requis : endpoint (URL FCM/Mozilla/WebKit), p256dh (clé pub), auth.
+    """
+    user = models.ForeignKey(
+        "accounts.User", on_delete=models.CASCADE, related_name="push_subscriptions",
+    )
+    # Endpoint unique du push service (chrome → fcm.googleapis.com, firefox →
+    # updates.push.services.mozilla.com, safari → web.push.apple.com).
+    endpoint = models.URLField(max_length=600, db_index=True)
+    p256dh = models.CharField(max_length=160)
+    auth   = models.CharField(max_length=80)
+    user_agent = models.CharField(max_length=300, blank=True)
+    # Désactive si le push échoue avec 410 (gone) — l'utilisateur a unsubscribe
+    # côté navigateur, plus la peine de tenter d'envoyer.
+    is_active = models.BooleanField(default=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    last_error  = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "endpoint"], name="uniq_user_endpoint",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["user", "is_active"]),
+        ]
+
+    def __str__(self):
+        return f"PushSub({self.user_id}, {self.endpoint[:40]}…)"

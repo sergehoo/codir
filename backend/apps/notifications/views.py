@@ -175,3 +175,86 @@ def dashboard_summary(request):
             )
 
     return Response(payload)
+
+
+# ─── Push Web (Lot 6) ────────────────────────────────────────
+
+from rest_framework.permissions import AllowAny as _AllowAny
+
+
+@api_view(["GET"])
+@permission_classes([_AllowAny])
+def push_vapid_public_key(request):
+    """GET /api/v1/notifications/push/vapid-public-key/
+
+    Clé publique VAPID pour PushManager.subscribe() côté navigateur.
+    Accessible sans auth (anonymous-readable) car nécessaire avant la
+    finalisation de l'abonnement.
+    """
+    from django.conf import settings as _s
+    return Response({"key": getattr(_s, "VAPID_PUBLIC_KEY", "")})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def push_subscribe(request):
+    """POST /api/v1/notifications/push/subscribe/
+
+    Enregistre ou rafraîchit un abonnement push pour le user courant.
+    Body : { endpoint, keys: { p256dh, auth } }
+    """
+    from .models import PushSubscription
+
+    data = request.data or {}
+    endpoint = (data.get("endpoint") or "").strip()
+    keys = data.get("keys") or {}
+    p256dh = (keys.get("p256dh") or "").strip()
+    auth_key = (keys.get("auth") or "").strip()
+    if not endpoint or not p256dh or not auth_key:
+        return Response(
+            {"detail": "endpoint, keys.p256dh, keys.auth requis."},
+            status=400,
+        )
+
+    org = getattr(request, "organization", None)
+    if org is None and hasattr(request.user, "memberships"):
+        m = request.user.memberships.filter(is_active=True).first()
+        if m:
+            org = m.organization
+    if org is None:
+        return Response({"detail": "Aucune organisation active."}, status=400)
+
+    sub, created = PushSubscription.unscoped.update_or_create(
+        user=request.user, endpoint=endpoint,
+        defaults={
+            "organization": org,
+            "p256dh": p256dh,
+            "auth": auth_key,
+            "user_agent": (request.META.get("HTTP_USER_AGENT") or "")[:300],
+            "is_active": True,
+            "last_error": "",
+        },
+    )
+    return Response(
+        {"id": str(sub.id), "created": created},
+        status=201 if created else 200,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def push_unsubscribe(request):
+    """POST /api/v1/notifications/push/unsubscribe/
+
+    Désactive l'abonnement (sans hard delete pour audit). Body : { endpoint }
+    """
+    from .models import PushSubscription
+    endpoint = ((request.data or {}).get("endpoint") or "").strip()
+    if not endpoint:
+        return Response({"detail": "endpoint requis."}, status=400)
+    updated = (
+        PushSubscription.unscoped
+        .filter(user=request.user, endpoint=endpoint)
+        .update(is_active=False)
+    )
+    return Response({"deactivated": updated})

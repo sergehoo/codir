@@ -4,6 +4,7 @@ import { apiClient } from '@/api/client'
 import { ChunkedUploader, type ChunkedUploaderOptions } from './chunkedUploader'
 import type {
   DetectedSpeaker, MeetingRecording, RecordingAIExtraction,
+  RecordingCommitment,
   RecordingStatusPayload, SpeakerMappingInput, SpeakerSegment,
 } from './types/recording.types'
 
@@ -158,6 +159,12 @@ export const recordingsApi = {
 
   extractActions: async (id: string) =>
     (await apiClient.post(`/recordings/${id}/extract-actions/`)).data,
+
+  // Lot 5 — Engagements oraux détectés
+  commitments: async (id: string) =>
+    (await apiClient.get<{ count: number; results: RecordingCommitment[] }>(
+      `/recordings/${id}/commitments/`,
+    )).data,
 
   listExtractions: async (id: string, type?: string) =>
     (await apiClient.get<RecordingAIExtraction[]>(

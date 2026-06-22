@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { cn } from '@/utils/cn'
 
 import { AISummaryPanel } from '../components/AISummaryPanel'
+import { CommitmentsPanel } from '../components/CommitmentsPanel'
 import { ExtractedActionsPanel } from '../components/ExtractedActionsPanel'
 import { ExtractedDecisionsPanel } from '../components/ExtractedDecisionsPanel'
 import { RecordingStatusBadge } from '../components/RecordingStatusBadge'
@@ -120,14 +121,18 @@ export function RecordingSummaryPage() {
       </nav>
 
       {tab === 'summary' && (
-        <AISummaryPanel
-          recordingId={recordingId}
-          summary={data.summary ?? ''}
-          minutes={data.ai_minutes}
-          onRegenerate={() => extr.regenerateSummary()}
-          onMinutesUpdated={() => rec.refetch()}
-          isRegenerating={extr.isRegenerating}
-        />
+        <div className="space-y-6">
+          <AISummaryPanel
+            recordingId={recordingId}
+            summary={data.summary ?? ''}
+            minutes={data.ai_minutes}
+            onRegenerate={() => extr.regenerateSummary()}
+            onMinutesUpdated={() => rec.refetch()}
+            isRegenerating={extr.isRegenerating}
+          />
+          {/* Lot 5 — Engagements oraux détectés */}
+          <CommitmentsPanel recordingId={recordingId} />
+        </div>
       )}
 
       {tab === 'decisions' && (

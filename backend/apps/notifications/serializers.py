@@ -52,6 +52,8 @@ class NotificationPreferenceSerializer(serializers.ModelSerializer):
             "daily_task_reminder", "manager_summary",
             "due_soon_alert", "overdue_alert",
             "decision_alerts", "meeting_alerts",
+            # Agent IA proactif (Lot 2)
+            "proactive_agent_enabled",
             # Heures de silence
             "quiet_hours_start", "quiet_hours_end",
             "locale",

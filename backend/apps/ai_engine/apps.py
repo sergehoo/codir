@@ -11,3 +11,12 @@ class AiEngineConfig(AppConfig):
             from . import signals  # noqa: F401
         except ImportError:
             pass
+        # Lot 3 — recherche sémantique : auto-index au save des objets métier
+        try:
+            from .indexing import install_signals
+            install_signals()
+        except Exception:  # noqa: BLE001
+            import logging
+            logging.getLogger(__name__).warning(
+                "Semantic indexing signals not installed (non-bloquant)"
+            )

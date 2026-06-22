@@ -10,7 +10,9 @@ from apps.action_plans.models import ActionPlan, ActionTask
 from apps.common.enums import (
     ActionPlanStatus, ActionTaskStatus, DecisionStatus, MeetingStatus,
 )
+from apps.common.health_score import build_watchlist
 from apps.common.permissions import IsOrganizationMember
+from apps.dashboards.services.briefing import generate_daily_briefing
 from apps.dashboards.services.epi_score import compute_epi_score, get_history
 from apps.decisions.models import Decision
 from apps.meetings.models import Meeting
@@ -179,6 +181,62 @@ class EpiScoreView(APIView):
             "current": result.to_dict(),
             "history": history,
             "trend": _compute_trend(history),
+        })
+
+
+class DailyBriefingView(APIView):
+    """GET /api/v1/dashboard/briefing/today/
+
+    Briefing matinal personnalisé pour l'utilisateur dans l'org courante.
+    Retourne le markdown pour affichage + une version simplifiée pour la
+    lecture vocale (Web Speech API navigateur, gratuit).
+    """
+    permission_classes = [IsAuthenticated, IsOrganizationMember]
+
+    def get(self, request):
+        org = getattr(request, "organization", None)
+        if org is None:
+            return Response(
+                {"detail": "Aucune organisation active."},
+                status=400,
+            )
+        try:
+            briefing = generate_daily_briefing(user=request.user, organization=org)
+        except Exception as exc:  # noqa: BLE001
+            import logging
+            logging.getLogger(__name__).exception("DailyBriefingView KO")
+            return Response(
+                {"detail": f"Erreur génération briefing : {exc}"},
+                status=500,
+            )
+        return Response(briefing)
+
+
+class WatchlistView(APIView):
+    """GET /api/v1/dashboard/watchlist/
+
+    Top sujets à risque (plans + décisions) de l'organisation courante.
+    Trié par criticité (priority + score). Limité à 10 items par défaut,
+    configurable via `?limit=20`.
+
+    Utilisé par le widget WatchList du cockpit et par l'agent IA proactif
+    (Lot 2) pour déterminer les sujets à signaler.
+    """
+    permission_classes = [IsAuthenticated, IsOrganizationMember]
+
+    def get(self, request):
+        org = getattr(request, "organization", None)
+        if org is None:
+            return Response({"items": [], "count": 0})
+        try:
+            limit = max(1, min(int(request.query_params.get("limit", 10)), 50))
+        except (ValueError, TypeError):
+            limit = 10
+        items = build_watchlist(organization=org, limit=limit)
+        return Response({
+            "items": items,
+            "count": len(items),
+            "generated_at": timezone.now().isoformat(),
         })
 
 

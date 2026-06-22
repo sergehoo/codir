@@ -35,6 +35,10 @@ class DecisionCommentSerializer(serializers.ModelSerializer):
 class DecisionListSerializer(serializers.ModelSerializer):
     responsible_detail = UserMiniSerializer(source="responsible", read_only=True)
     category_detail = DecisionCategorySerializer(source="category", read_only=True)
+    # Cockpit prédictif — Lot 1 : santé calculée à la volée.
+    health_score = serializers.SerializerMethodField()
+    health_label = serializers.SerializerMethodField()
+    health_reasons = serializers.SerializerMethodField()
 
     class Meta:
         model = Decision
@@ -44,8 +48,26 @@ class DecisionListSerializer(serializers.ModelSerializer):
             "category", "category_detail",
             "direction", "deadline", "is_confidential",
             "meeting", "agenda_item",
+            "health_score", "health_label", "health_reasons",
             "created_at", "updated_at",
         ]
+
+    def _health(self, obj):
+        cached = getattr(obj, "_cached_health", None)
+        if cached is None:
+            from apps.common.health_score import compute_decision_health
+            cached = compute_decision_health(obj)
+            obj._cached_health = cached
+        return cached
+
+    def get_health_score(self, obj):
+        return self._health(obj).score
+
+    def get_health_label(self, obj):
+        return self._health(obj).label
+
+    def get_health_reasons(self, obj):
+        return self._health(obj).reasons
 
 
 class DecisionDetailSerializer(DecisionListSerializer):

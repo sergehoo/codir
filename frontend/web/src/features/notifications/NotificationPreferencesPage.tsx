@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BellOff, BellRing, CheckCircle2, Mail, MessageSquare, Send, Smartphone } from 'lucide-react'
+import { BellOff, BellRing, Bot, CheckCircle2, Mail, MessageSquare, Send, Smartphone } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -8,6 +8,7 @@ import { SectionHeader } from '@/components/widgets/SectionHeader'
 import { SkeletonList } from '@/components/widgets/Skeleton'
 
 import { notificationsApi, notificationsKeys, type NotificationPreference } from './api'
+import { usePushSubscription } from './usePushSubscription'
 
 type ToggleRow = {
   key: keyof NotificationPreference
@@ -37,6 +38,7 @@ const EVENTS: ToggleRow[] = [
 
 export function NotificationPreferencesPage() {
   const qc = useQueryClient()
+  const push = usePushSubscription()
   const { data, isLoading } = useQuery({
     queryKey: notificationsKeys.preference(),
     queryFn: () => notificationsApi.preference(),
@@ -92,6 +94,69 @@ export function NotificationPreferencesPage() {
           </div>
         </div>
 
+        {/* Push Web (Lot 6) — bouton dédié car flow asynchrone */}
+        <div>
+          <div className="flex items-center gap-3 mb-4">
+            <span className="divider-accent" />
+            <h2 className="text-2xs uppercase tracking-widest text-fg-muted font-semibold">
+              Notifications push mobile
+            </h2>
+          </div>
+          <div className="card p-5">
+            {!push.supported && (
+              <div className="text-sm text-fg-muted">
+                Votre navigateur ne supporte pas les notifications push.
+                Utilisez Chrome, Edge, Safari ou Firefox récent.
+              </div>
+            )}
+            {push.supported && (
+              <div className="flex items-start gap-4 flex-wrap">
+                <div className="flex-1 min-w-[240px]">
+                  <div className="text-sm font-medium text-fg">
+                    {push.subscribed
+                      ? '✓ Notifications push activées sur cet appareil'
+                      : 'Recevez les alertes en temps réel, même app fermée'}
+                  </div>
+                  <p className="text-xs text-fg-muted mt-1 leading-relaxed">
+                    Une tâche assignée, une décision approuvée, une réunion qui démarre…
+                    chaque alerte importante s'affiche en notification système. Vous pouvez
+                    aussi installer CODIR comme une app via le menu du navigateur.
+                  </p>
+                  {push.permission === 'denied' && (
+                    <p className="text-xs text-warning mt-2">
+                      ⚠ Permission refusée dans le navigateur. Réactivez les notifications dans
+                      les paramètres du site.
+                    </p>
+                  )}
+                  {push.error && (
+                    <p className="text-xs text-danger mt-2">{push.error}</p>
+                  )}
+                </div>
+                <PremiumButton
+                  variant={push.subscribed ? 'secondary' : 'primary'}
+                  size="md"
+                  disabled={push.loading || push.permission === 'denied'}
+                  onClick={async () => {
+                    try {
+                      if (push.subscribed) await push.disable()
+                      else                  await push.enable()
+                      toast.success(push.subscribed
+                        ? 'Notifications push désactivées'
+                        : 'Notifications push activées')
+                    } catch { /* erreur déjà capturée dans le hook */ }
+                  }}
+                >
+                  {push.loading
+                    ? '...'
+                    : push.subscribed
+                      ? 'Désactiver sur cet appareil'
+                      : 'Activer les notifications push'}
+                </PremiumButton>
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Événements */}
         <div>
           <div className="flex items-center gap-3 mb-4">
@@ -107,6 +172,29 @@ export function NotificationPreferencesPage() {
                 onChange={() => toggle(r.key)}
               />
             ))}
+          </div>
+        </div>
+
+        {/* Assistant IA — Lot 2 */}
+        <div>
+          <div className="flex items-center gap-3 mb-4">
+            <span className="divider-accent" />
+            <h2 className="text-2xs uppercase tracking-widest text-fg-muted font-semibold">Assistant IA</h2>
+          </div>
+          <div className="card divide-y divide-border">
+            <ToggleLine
+              icon={<Bot size={14} />}
+              label="Agent IA proactif"
+              hint={
+                "L'IA scrute en arrière-plan les plans et décisions qui dérivent, "
+                + "et vous envoie un message d'alerte dans le sidebar chat avec une "
+                + "suggestion d'action. Ciblé : vous ne recevez que les sujets dont "
+                + "vous êtes responsable. Fréquence : toutes les 4h, max 3 alertes "
+                + "par scan, cooldown 5j par sujet."
+              }
+              checked={draft.proactive_agent_enabled ?? true}
+              onChange={() => toggle('proactive_agent_enabled')}
+            />
           </div>
         </div>
 

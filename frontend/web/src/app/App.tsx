@@ -2,6 +2,7 @@ import { RouterProvider, createRouter, createRoute, createRootRoute, Outlet, red
 
 import { Shell } from '@/components/layout/Shell'
 import { LoginPage } from '@/features/auth/LoginPage'
+import { BriefingPage } from '@/features/dashboard/BriefingPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { MeetingsListPage } from '@/features/meetings/MeetingsListPage'
 import { MeetingDetailPage } from '@/features/meetings/MeetingDetailPage'
@@ -46,6 +47,7 @@ const shellRoute = createRoute({
 })
 
 const dashboardRoute = createRoute({ getParentRoute: () => shellRoute, path: '/', component: DashboardPage })
+const briefingRoute = createRoute({ getParentRoute: () => shellRoute, path: '/briefing', component: BriefingPage })
 const meetingsList = createRoute({ getParentRoute: () => shellRoute, path: '/meetings', component: MeetingsListPage })
 const meetingNew = createRoute({ getParentRoute: () => shellRoute, path: '/meetings/new', component: MeetingCreatePage })
 const meetingDetail = createRoute({
@@ -93,7 +95,7 @@ const recordingSummary = createRoute({
 const routeTree = rootRoute.addChildren([
   loginRoute,
   shellRoute.addChildren([
-    dashboardRoute, meetingsList, meetingNew, meetingDetail,
+    dashboardRoute, briefingRoute, meetingsList, meetingNew, meetingDetail,
     decisionsList, decisionDetail, plansList, planDetail,
     myTasks, liveCodir, taskDetail, notifs, notifPrefs, documents,
     profile, settingsMembers, settingsSubsidiaries, settingsMeetingSeries, settingsLogs, settingsOrg,

@@ -200,6 +200,88 @@ def cancel_action(request, pk):
     return Response(AIActionRequestSerializer(action).data)
 
 
+@api_view(["GET"])
+@drf_permission_classes([IsAuthenticated, IsOrganizationMember])
+def proactive_count(request):
+    """GET /ai-chat/proactive-count/
+
+    Compte les alertes proactives non lues du user dans l'org courante.
+    Utilisé par le bouton chat IA pour afficher un badge.
+    """
+    from .models import ProactiveAlert
+    org = _get_org(request)
+    if org is None:
+        return Response({"count": 0})
+    count = (
+        ProactiveAlert.unscoped
+        .filter(organization=org, user=request.user, status="emitted")
+        .count()
+    )
+    return Response({"count": count})
+
+
+@api_view(["POST"])
+@drf_permission_classes([IsAuthenticated, IsOrganizationMember])
+def proactive_mark_read(request):
+    """POST /ai-chat/proactive-mark-read/
+
+    Marque toutes les alertes proactives `emitted` du user comme `read`.
+    Appelé par le frontend quand le user ouvre la conversation proactive.
+    """
+    from .models import ProactiveAlert
+    org = _get_org(request)
+    if org is None:
+        return Response({"updated": 0})
+    updated = (
+        ProactiveAlert.unscoped
+        .filter(organization=org, user=request.user, status="emitted")
+        .update(status="read", read_at=timezone.now())
+    )
+    return Response({"updated": updated})
+
+
+@api_view(["GET"])
+@drf_permission_classes([IsAuthenticated, IsOrganizationMember])
+def semantic_search(request):
+    """GET /ai-chat/search/?q=...&kinds=decision,plan&limit=20
+
+    Recherche sémantique cross-modules dans l'org courante.
+    Filtre obligatoire par tenant (sécurité multi-org).
+    """
+    from .indexing import search
+    org = _get_org(request)
+    if org is None:
+        return Response({"results": [], "count": 0, "query": ""})
+
+    query = (request.query_params.get("q") or "").strip()
+    if not query:
+        return Response({"results": [], "count": 0, "query": ""})
+
+    try:
+        limit = max(1, min(int(request.query_params.get("limit", 20)), 50))
+    except (ValueError, TypeError):
+        limit = 20
+
+    kinds_raw = request.query_params.get("kinds", "")
+    kinds = [k.strip() for k in kinds_raw.split(",") if k.strip()] or None
+
+    try:
+        results = search(
+            organization=org, query=query, limit=limit, kinds=kinds,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("semantic_search KO")
+        return Response(
+            {"detail": f"Erreur recherche : {exc}", "results": [], "count": 0},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    return Response({
+        "query": query,
+        "results": results,
+        "count": len(results),
+    })
+
+
 @api_view(["POST"])
 @drf_permission_classes([IsAuthenticated, IsOrganizationMember])
 def archive_conversation(request, pk):

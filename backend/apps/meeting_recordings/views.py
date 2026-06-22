@@ -375,6 +375,54 @@ class MeetingRecordingViewSet(viewsets.ReadOnlyModelViewSet):
         segs = rec.segments.all().order_by("start_time")
         return Response(SpeakerSegmentSerializer(segs, many=True).data)
 
+    @action(detail=True, methods=["get"], url_path="commitments")
+    def commitments(self, request, pk=None):
+        """GET /recordings/{id}/commitments/
+
+        Lot 5 — Liste les engagements oraux détectés pour ce CR.
+        Pour chaque AIActionRequest issue de ce recording, renvoie le statut
+        actuel (pending/confirmed/cancelled/executed/failed) et les détails.
+        """
+        rec = self.get_object()
+        try:
+            from apps.ai_engine.models import AIActionRequest
+            actions = (
+                AIActionRequest.unscoped
+                .filter(
+                    organization=rec.organization,
+                    action_type="create_action_task",
+                    payload__source_recording_id=str(rec.id),
+                )
+                .order_by("-created_at")
+            )
+            results = []
+            for a in actions:
+                p = a.payload or {}
+                results.append({
+                    "id":             str(a.id),
+                    "status":         a.status,
+                    "title":          p.get("title", ""),
+                    "speaker_label":  p.get("speaker_label", ""),
+                    "evidence_quote": p.get("evidence_quote", ""),
+                    "assignee_email": p.get("assignee_email", ""),
+                    "due_date":       p.get("due_date", ""),
+                    "created_at":     a.created_at.isoformat() if a.created_at else "",
+                    "confirmed_at":   a.confirmed_at.isoformat() if a.confirmed_at else "",
+                    "executed_at":    a.executed_at.isoformat() if a.executed_at else "",
+                    "result_object_id":   a.result_object_id,
+                    "result_object_type": a.result_object_type,
+                    "error_message":  a.error_message or "",
+                })
+            return Response({"count": len(results), "results": results})
+        except Exception as exc:  # noqa: BLE001
+            import logging
+            logging.getLogger(__name__).exception("commitments KO")
+            return Response(
+                {"detail": f"Erreur : {type(exc).__name__}: {exc}",
+                 "count": 0, "results": []},
+                status=500,
+            )
+
     # ─── Streaming audio (proxy depuis MinIO interne) ──────────
     # Permet au navigateur d'écouter l'audio sans dépendre que MinIO soit
     # accessible publiquement (DNS/cert/firewall). Django lit le fichier

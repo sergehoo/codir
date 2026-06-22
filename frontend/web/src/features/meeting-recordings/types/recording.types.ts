@@ -173,3 +173,22 @@ export const ACTIVE_PROCESSING_STATUSES: RecordingStatus[] = [
 export function isProcessing(status: RecordingStatus): boolean {
   return ACTIVE_PROCESSING_STATUSES.includes(status)
 }
+
+// Lot 5 — Engagement oral détecté lors d'une réunion
+export type CommitmentStatus = 'pending' | 'confirmed' | 'executed' | 'cancelled' | 'failed'
+
+export interface RecordingCommitment {
+  id: string
+  status: CommitmentStatus
+  title: string
+  speaker_label: string
+  evidence_quote: string
+  assignee_email: string
+  due_date: string
+  created_at: string
+  confirmed_at: string
+  executed_at: string
+  result_object_id: string
+  result_object_type: string
+  error_message: string
+}

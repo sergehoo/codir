@@ -369,6 +369,26 @@ def send_due_soon_alerts_task():
 
 # ─── Helpers ──────────────────────────────────────────────────
 
+@shared_task(name="apps.notifications.tasks.send_notification_push")
+def send_notification_push(notification_id: str):
+    """Lot 6 — envoi push à toutes les subscriptions actives du recipient.
+
+    Best-effort : non bloquant pour le pipeline notify(). Si VAPID non
+    configurées ou pywebpush absent, retourne silencieusement.
+    """
+    from .push_service import send_push
+    n = Notification.unscoped.filter(id=notification_id).select_related(
+        "recipient", "organization",
+    ).first()
+    if not n:
+        return
+    try:
+        return send_push(notification=n)
+    except Exception as exc:  # noqa: BLE001
+        import logging
+        logging.getLogger(__name__).exception("send_push KO: %s", exc)
+
+
 def _absolute(url: str) -> str:
     """Ajoute le domaine frontend si absent."""
     if not url:

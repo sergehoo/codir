@@ -266,6 +266,13 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.meetings.tasks.generate_recurring_meetings",
         "schedule": crontab(minute=0, hour=2),
     },
+    # ── Agent IA proactif (Lot 2) — toutes les 4h ──
+    # Scrute health_scores des plans + décisions et émet des messages d'alerte
+    # ciblés aux owners/responsibles. Idempotent via ProactiveAlert + cooldown.
+    "proactive-agent-scan": {
+        "task": "apps.ai_engine.tasks.proactive_agent_scan",
+        "schedule": crontab(minute=0, hour="*/4"),
+    },
 }
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_TIMEZONE = env("CELERY_TIMEZONE", default="Africa/Abidjan")
@@ -439,6 +446,23 @@ ASSEMBLYAI_MODEL = env("ASSEMBLYAI_MODEL", default="")
 # Claude primary, DeepSeek fallback (compat OpenAI SDK).
 RECORDING_AI_PRIMARY = env("RECORDING_AI_PRIMARY", default="anthropic")
 RECORDING_AI_FALLBACK = env("RECORDING_AI_FALLBACK", default="deepseek")
+# Lot 5 — Détection d'engagements oraux : 1 appel LLM/recording, ~0.06$ pour
+# une réunion d'1h. Désactivable si non souhaité.
+RECORDING_COMMITMENT_DETECTION_ENABLED = env.bool(
+    "RECORDING_COMMITMENT_DETECTION_ENABLED", default=True,
+)
+
+# ─── Web Push (Lot 6) ──────────────────────────────────────────
+# Clés VAPID — à générer une fois via :
+#   from py_vapid import Vapid
+#   v = Vapid()
+#   v.generate_keys()
+#   v.save_key('vapid_private.pem')
+#   print(v.public_key)  # à base64-encoder
+# Pose dans .env : VAPID_PUBLIC_KEY=Bxxxxx... VAPID_PRIVATE_KEY=... VAPID_SUBJECT=mailto:admin@example.com
+VAPID_PUBLIC_KEY  = env("VAPID_PUBLIC_KEY",  default="")
+VAPID_PRIVATE_KEY = env("VAPID_PRIVATE_KEY", default="")
+VAPID_SUBJECT     = env("VAPID_SUBJECT",     default="mailto:admin@codir.local")
 ANTHROPIC_MODEL = env("ANTHROPIC_MODEL", default="claude-sonnet-4-5-20250929")
 DEEPSEEK_API_KEY = env("DEEPSEEK_API_KEY", default="")
 DEEPSEEK_BASE_URL = env("DEEPSEEK_BASE_URL", default="https://api.deepseek.com")

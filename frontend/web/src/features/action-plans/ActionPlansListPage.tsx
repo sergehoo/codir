@@ -11,6 +11,7 @@ import { toast } from 'sonner'
 
 import { apiClient } from '@/api/client'
 import { EmptyState } from '@/components/widgets/EmptyState'
+import { HealthBadge } from '@/components/widgets/HealthBadge'
 import { Modal } from '@/components/widgets/Modal'
 import { PremiumButton } from '@/components/widgets/PremiumButton'
 import { PriorityBadge } from '@/components/widgets/PriorityBadge'
@@ -291,6 +292,13 @@ function PlanAccordion({ p, idx }: { p: ActionPlan; idx: number }) {
           <div className="flex items-baseline gap-3 mb-1 flex-wrap">
             <h3 className="text-h3 font-medium truncate">{p.title}</h3>
             <StatusBadge status={p.status} className="shrink-0" />
+            <HealthBadge
+              score={(p as any).health_score}
+              label={(p as any).health_label}
+              reasons={(p as any).health_reasons}
+              variant="chip"
+              className="shrink-0"
+            />
             {overdue > 0 && (
               <span className="chip-danger inline-flex items-center gap-1">
                 <AlertTriangle size={10} /> {overdue} en retard

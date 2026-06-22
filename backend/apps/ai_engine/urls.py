@@ -7,7 +7,8 @@ from django.urls import path
 from .views import (
     archive_conversation, cancel_action, confirm_action,
     conversation_messages, get_action,
-    list_conversations, send_message,
+    list_conversations, proactive_count, proactive_mark_read,
+    semantic_search, send_message,
 )
 
 
@@ -20,4 +21,9 @@ urlpatterns = [
     path("actions/<uuid:pk>/",         get_action,     name="ai-chat-action"),
     path("actions/<uuid:pk>/confirm/", confirm_action, name="ai-chat-action-confirm"),
     path("actions/<uuid:pk>/cancel/",  cancel_action,  name="ai-chat-action-cancel"),
+    # ── Agent proactif (Lot 2) ──
+    path("proactive-count/",      proactive_count,      name="ai-chat-proactive-count"),
+    path("proactive-mark-read/",  proactive_mark_read,  name="ai-chat-proactive-mark-read"),
+    # ── Recherche sémantique universelle (Lot 3) ──
+    path("search/",               semantic_search,      name="ai-chat-search"),
 ]

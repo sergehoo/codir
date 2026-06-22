@@ -41,10 +41,50 @@ export interface EpiScoreResponse {
   trend: EpiScoreTrend
 }
 
+export type HealthLabel = 'healthy' | 'watch' | 'at_risk' | 'critical'
+
+export interface WatchlistItem {
+  kind: 'plan' | 'decision'
+  id: string
+  title: string
+  url: string
+  score: number
+  label: HealthLabel
+  reasons: string[]
+  owner_name: string
+  priority: 'low' | 'medium' | 'high' | 'critical' | null
+  progress_percent: number | null
+}
+
+export interface WatchlistResponse {
+  items: WatchlistItem[]
+  count: number
+  generated_at: string
+}
+
 export const dashboardApi = {
   beta: async () => (await apiClient.get<BetaDashboard>('/dashboard/beta/')).data,
   epiScore: async (historyDays = 90) =>
     (await apiClient.get<EpiScoreResponse>(
       `/dashboard/epi-score/?history_days=${historyDays}`,
     )).data,
+  watchlist: async (limit = 10) =>
+    (await apiClient.get<WatchlistResponse>(
+      `/dashboard/watchlist/?limit=${limit}`,
+    )).data,
+  briefing: async () =>
+    (await apiClient.get<DailyBriefing>('/dashboard/briefing/today/')).data,
+}
+
+export interface DailyBriefing {
+  markdown: string
+  vocal_text: string
+  summary: string
+  generated_at: string
+  stats: {
+    my_tasks_today: number
+    meetings_today: number
+    decisions_pending: number
+    at_risk: number
+  }
 }

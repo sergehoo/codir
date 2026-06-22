@@ -33,6 +33,12 @@ export const aiChatApi = {
 
   cancelAction: async (id: string) =>
     (await apiClient.post<AIActionRequest>(`/ai-chat/actions/${id}/cancel/`)).data,
+
+  // ─── Agent proactif (Lot 2) ──
+  proactiveCount: async () =>
+    (await apiClient.get<{ count: number }>('/ai-chat/proactive-count/')).data,
+  proactiveMarkRead: async () =>
+    (await apiClient.post<{ updated: number }>('/ai-chat/proactive-mark-read/')).data,
 }
 
 export const aiChatKeys = {
@@ -40,4 +46,5 @@ export const aiChatKeys = {
   conversations: () => [...aiChatKeys.all, 'conversations'] as const,
   messages: (id: string) => [...aiChatKeys.all, 'messages', id] as const,
   action: (id: string) => [...aiChatKeys.all, 'action', id] as const,
+  proactiveCount: () => [...aiChatKeys.all, 'proactive-count'] as const,
 }

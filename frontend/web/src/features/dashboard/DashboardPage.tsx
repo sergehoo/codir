@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Link } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { ArrowUpRight, Calendar, Diamond, Sparkles } from 'lucide-react'
@@ -8,15 +8,16 @@ import { AtelierGauge } from '@/components/widgets/AtelierGauge'
 import { MasterGauge } from '@/components/widgets/MasterGauge'
 import { NeonNumber } from '@/components/widgets/NeonNumber'
 import { PremiumButton } from '@/components/widgets/PremiumButton'
-import { useAIChatStore } from '@/features/ai-chat/store'
 import { useAuthStore } from '@/stores/auth'
 import { safeFormat } from '@/utils/safeDate'
 
 import { dashboardApi } from './api'
+import { WatchListCard } from './WatchListCard'
 
 export function DashboardPage() {
   const user = useAuthStore((s) => s.user)
   const accessToken = useAuthStore((s) => s.accessToken)
+  const navigate = useNavigate()
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard', 'beta'],
     queryFn: () => dashboardApi.beta(),
@@ -60,28 +61,8 @@ export function DashboardPage() {
             <PremiumButton
               variant="secondary" size="md"
               iconLeft={<Sparkles size={15} />}
-              onClick={() => {
-                // Construit un prompt initial enrichi avec les KPIs déjà
-                // chargés côté front, et ouvre l'Assistant IA latéral.
-                const kpiContext = k ? [
-                  `Contexte numérique du jour :`,
-                  `- Réunions à venir : ${k.upcoming_meetings ?? 0}`,
-                  `- Décisions en attente : ${k.pending_decisions ?? 0}`,
-                  `- Tâches en retard : ${k.overdue_tasks ?? 0}`,
-                  `- Mes tâches actives : ${k.my_tasks_open ?? 0}`,
-                ].join('\n') : ''
-                const firstName = user?.first_name || ''
-                const prompt = [
-                  `Bonjour${firstName ? ' ' + firstName : ''}, peux-tu me préparer mon briefing exécutif du jour ?`,
-                  '',
-                  'Format souhaité : court, structuré, priorités claires.',
-                  kpiContext ? '\n' + kpiContext : '',
-                ].join('\n').trim()
-                useAIChatStore.getState().open({
-                  contextScope: 'dashboard',
-                  initialPrompt: prompt,
-                })
-              }}
+              onClick={() => navigate({ to: '/briefing' })}
+              title="Ouvrir mon briefing du jour (texte + lecture vocale gratuite)"
             >
               Briefing du jour
             </PremiumButton>
@@ -251,6 +232,28 @@ export function DashboardPage() {
                 <span className="text-sm">Boîte calme.</span>
               </div>
             )}
+          </div>
+        </div>
+      </section>
+
+      {/* ─── Cockpit prédictif : sujets à risque (Lot 1) ─── */}
+      <section className="px-10 py-10 border-t border-border">
+        <div className="text-2xs uppercase tracking-widest text-fg-muted font-semibold mb-6 flex items-center gap-3">
+          <span className="divider-accent" /> Cockpit prédictif
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <WatchListCard />
+          {/* Espace réservé pour une 2e visualisation prédictive future */}
+          <div className="card p-5 flex flex-col items-start">
+            <div className="text-2xs uppercase tracking-widest text-fg-muted font-semibold mb-2">
+              Bientôt
+            </div>
+            <h3 className="text-h3 font-semibold mb-2">Tendance & projection</h3>
+            <p className="text-sm text-fg-muted leading-relaxed">
+              Cette zone accueillera bientôt l'évolution de l'EPI score sur 90 jours,
+              les projections de dates de clôture des plans d'action et les
+              alertes générées par l'agent IA proactif.
+            </p>
           </div>
         </div>
       </section>

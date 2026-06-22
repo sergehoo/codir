@@ -142,6 +142,12 @@ export function AIChatSidebar() {
       // Envoie automatiquement le prompt initial fourni à l'ouverture
       send.mutate(initial)
     }
+    // Lot 2 — Agent proactif : à l'ouverture du sidebar, on considère que
+    // les alertes proactives ont été vues → marque comme lues + raffraîchit
+    // le compteur pour faire disparaître le badge.
+    aiChatApi.proactiveMarkRead()
+      .then(() => qc.invalidateQueries({ queryKey: aiChatKeys.proactiveCount() }))
+      .catch(() => {/* non-bloquant */})
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen])
 

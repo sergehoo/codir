@@ -157,6 +157,14 @@ def notify(
         from .tasks import send_notification_email
         send_notification_email.delay(str(n.id))
 
+    # Lot 6 — Push Web : envoi vers toutes les subscriptions actives du user
+    # (non-bloquant, géré par push_service.send_push qui check push_enabled).
+    try:
+        from .tasks import send_notification_push
+        send_notification_push.delay(str(n.id))
+    except Exception:  # noqa: BLE001
+        logger.exception("Push dispatch failed (non bloquant)")
+
     return n
 
 

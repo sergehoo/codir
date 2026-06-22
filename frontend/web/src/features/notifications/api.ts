@@ -17,6 +17,8 @@ export type NotificationPreference = {
   overdue_alert: boolean
   decision_alerts: boolean
   meeting_alerts: boolean
+  // Agent IA proactif (Lot 2) — default true côté backend
+  proactive_agent_enabled: boolean
   quiet_hours_start: string | null
   quiet_hours_end: string | null
   locale: string

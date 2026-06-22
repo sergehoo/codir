@@ -272,6 +272,20 @@ def generate_summary(recording: MeetingRecording) -> Optional[str]:
         raw_payload={"markdown": text},
         status=AIExtractionStatus.DRAFT,
     )
+
+    # ⚡ Lot 5 — Détection d'engagements oraux (best-effort, non-bloquant).
+    # Crée des AIActionRequest type=create_action_task pour les engagements
+    # détectés. L'utilisateur valide depuis le sidebar IA.
+    try:
+        from django.conf import settings as _settings
+        if getattr(_settings, "RECORDING_COMMITMENT_DETECTION_ENABLED", True):
+            from .commitment_detection import detect_commitments
+            summary = detect_commitments(recording)
+            logger.info("Commitments detected for recording %s: %s",
+                        recording.id, summary)
+    except Exception:  # noqa: BLE001
+        logger.exception("commitment_detection KO (non-bloquant)")
+
     return text
 
 
