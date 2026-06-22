@@ -6,6 +6,21 @@ set -e
 MODE="${1:-prod}"
 echo "[entrypoint] mode=$MODE"
 
+# ─── HF cache dir : best-effort writable check ────────────────
+# Le volume Docker `codir_hfcache` peut être créé avec ownership root.
+# Si on tourne en user non-root (app), on tente un chown si on a les droits,
+# sinon on log un warning utile.
+HF_DIR="${HF_HOME:-/var/cache/codir/hf}"
+if [ -n "$HF_DIR" ] && [ -d "$HF_DIR" ]; then
+  if ! [ -w "$HF_DIR" ]; then
+    echo "[entrypoint] WARN: HF cache $HF_DIR non-writable (uid=$(id -u))."
+    echo "[entrypoint]      Fix one-shot:"
+    echo "[entrypoint]      docker compose exec --user root <svc> chown -R app:app $HF_DIR"
+  else
+    echo "[entrypoint] HF cache $HF_DIR writable: OK"
+  fi
+fi
+
 # ─── Wait for DB (max 60s) ─────────────────────────────────────
 DB_HOST="${POSTGRES_HOST:-codirDB}"
 DB_PORT="${POSTGRES_PORT:-5432}"

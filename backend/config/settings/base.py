@@ -451,6 +451,11 @@ RECORDING_AI_FALLBACK = env("RECORDING_AI_FALLBACK", default="deepseek")
 RECORDING_COMMITMENT_DETECTION_ENABLED = env.bool(
     "RECORDING_COMMITMENT_DETECTION_ENABLED", default=True,
 )
+# Lot Briefing — tagline IA (1 phrase Claude par briefing affiché).
+# Coût négligeable (~$0.0001/briefing). Désactivable pour économiser ou si Claude KO.
+BRIEFING_TAGLINE_LLM_ENABLED = env.bool(
+    "BRIEFING_TAGLINE_LLM_ENABLED", default=True,
+)
 
 # ─── Web Push (Lot 6) ──────────────────────────────────────────
 # Clés VAPID — à générer une fois via :

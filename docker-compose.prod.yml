@@ -220,6 +220,19 @@ services:
 
   # ── API Django (Gunicorn) ─────────────────────────────────────
   # Le script docker-entrypoint.sh fait : wait DB → migrate → collectstatic → gunicorn
+  # ── Init : chown du volume HF cache pour le user app (UID 1000) ──
+  # Le volume Docker est créé en root:root par défaut. Cet init container
+  # ajuste la propriété en début de stack pour que codirweb/codirworker
+  # (qui tournent en non-root) puissent y écrire.
+  codir_hfcache_init:
+    image: busybox:1.36
+    command: ["sh", "-c", "mkdir -p /target && chown -R 1000:1000 /target && echo OK"]
+    volumes:
+      - codir_hfcache:/target
+    restart: "no"
+    profiles: []
+    networks: [codir_network]
+
   codirweb:
     build:
       context: ./backend
@@ -245,6 +258,9 @@ services:
       codirminio:
         condition: service_healthy
       codirminio_init:
+        condition: service_completed_successfully
+      # Lot 3 — volume cache HF chown avant Django (Permission denied sinon)
+      codir_hfcache_init:
         condition: service_completed_successfully
     restart: unless-stopped
     networks: [codir_network, proxy]

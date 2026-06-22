@@ -80,11 +80,20 @@ export interface DailyBriefing {
   markdown: string
   vocal_text: string
   summary: string
+  tagline?: string
   generated_at: string
   stats: {
     my_tasks_today: number
+    my_tasks_tomorrow?: number
+    my_tasks_week?: number
+    my_tasks_overdue?: number
     meetings_today: number
+    meetings_week?: number
     decisions_pending: number
     at_risk: number
+    recent_decisions?: number
+    recent_plans?: number
+    epi_score?: number | null
+    team_overdue?: number | null
   }
 }

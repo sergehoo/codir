@@ -76,9 +76,25 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
   const [search, setSearch]                   = useState('')
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
   const [bulkComment, setBulkComment]         = useState('')
-  // Lot Live — Quick create inline
+  // Lot Live — Quick create inline.
+  // `quickTaskCtx` porte le contexte hiérarchique pré-rempli quand on clique
+  // sur un bouton "+ Tâche" inline (filiale/direction/dossier). null = modal
+  // ouverte sans préremplissage (bouton global topbar).
   const [quickTaskOpen, setQuickTaskOpen]         = useState(false)
+  const [quickTaskCtx, setQuickTaskCtx]           = useState<{
+    subsidiaryId?: string
+    subsidiaryName?: string
+    directionId?: string
+    directionName?: string
+    planId?: string
+    planTitle?: string
+  } | null>(null)
   const [quickDecisionOpen, setQuickDecisionOpen] = useState(false)
+
+  const openQuickTask = (ctx: typeof quickTaskCtx = null) => {
+    setQuickTaskCtx(ctx)
+    setQuickTaskOpen(true)
+  }
 
   // ── Chargement des tâches : par défaut TOUTES (toutes réunions confondues) ──
   // Si filterMeetingId est défini → restriction à ce meeting via le filterset DRF
@@ -375,7 +391,7 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
           {/* Lot Live — Quick create : éviter de quitter la page ─────── */}
           <button
             type="button"
-            onClick={() => setQuickTaskOpen(true)}
+            onClick={() => openQuickTask(null)}
             title="Créer une tâche sans quitter le Live CODIR"
             className="px-3 py-2 rounded-md bg-bg-base border border-border hover:border-copper-500 hover:text-copper-400 text-sm font-medium flex items-center gap-2"
           >
@@ -526,12 +542,14 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
         <QuickCreateTaskModal
           users={users || []}
           defaultMeetingId={filterMeetingId || ''}
-          onClose={() => setQuickTaskOpen(false)}
+          preset={quickTaskCtx || {}}
+          onClose={() => { setQuickTaskOpen(false); setQuickTaskCtx(null) }}
           onCreated={() => {
             qc.invalidateQueries({ queryKey: ['live-codir', 'tasks'] })
             qc.invalidateQueries({ queryKey: plansKeys.all })
             toast.success('Tâche créée')
             setQuickTaskOpen(false)
+            setQuickTaskCtx(null)
           }}
         />
       )}
@@ -603,6 +621,18 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
                   0,
                 )} tâches
               </span>
+              {/* + Tâche au niveau Filiale */}
+              <button
+                type="button"
+                onClick={() => openQuickTask({
+                  subsidiaryId:   sub.subId === '__none__' ? '' : sub.subId,
+                  subsidiaryName: sub.subName,
+                })}
+                title={`Ajouter une tâche pour ${sub.subName}`}
+                className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-copper-500/30 text-copper-400 text-xs font-semibold hover:bg-copper-500/10 hover:border-copper-500/60 transition"
+              >
+                <Plus size={12} /> Tâche
+              </button>
             </header>
 
             {sub.directions.map((dir) => (
@@ -616,6 +646,20 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
                   <span className="text-2xs text-fg-subtle">
                     {dir.plans.length} Dossier{dir.plans.length > 1 ? 's' : ''}
                   </span>
+                  {/* + Tâche au niveau Direction */}
+                  <button
+                    type="button"
+                    onClick={() => openQuickTask({
+                      subsidiaryId:   sub.subId === '__none__' ? '' : sub.subId,
+                      subsidiaryName: sub.subName,
+                      directionId:    dir.dirId === '__none__' ? '' : dir.dirId,
+                      directionName:  dir.dirName,
+                    })}
+                    title={`Ajouter une tâche pour ${dir.dirName}`}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-2xs uppercase tracking-wider text-fg-muted hover:text-copper-400 hover:bg-copper-500/10 transition"
+                  >
+                    <Plus size={11} /> Tâche
+                  </button>
                 </div>
 
                 {dir.plans.map((plan) => (
@@ -632,6 +676,22 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
                       <span className="text-2xs text-fg-subtle">
                         · {plan.tasks.length} tâche{plan.tasks.length > 1 ? 's' : ''}
                       </span>
+                      {/* + Tâche au niveau Dossier (le plus utile — 1-clic) */}
+                      <button
+                        type="button"
+                        onClick={() => openQuickTask({
+                          subsidiaryId:   sub.subId === '__none__' ? '' : sub.subId,
+                          subsidiaryName: sub.subName,
+                          directionId:    dir.dirId === '__none__' ? '' : dir.dirId,
+                          directionName:  dir.dirName,
+                          planId:         plan.planId,
+                          planTitle:      plan.planTitle,
+                        })}
+                        title={`Ajouter une tâche au dossier "${plan.planTitle}"`}
+                        className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 rounded text-2xs text-copper-400 hover:bg-copper-500/10 transition"
+                      >
+                        <Plus size={11} /> Tâche ici
+                      </button>
                     </div>
 
                     {/* Niveau 4 — Tâches */}
@@ -950,23 +1010,37 @@ function BulkActionBar({
 // filtrée, on récupère le plan d'action lié (decision_meeting). Sinon
 // on liste tous les plans actifs pour rattachement explicite.
 
+interface QuickTaskPreset {
+  subsidiaryId?: string
+  subsidiaryName?: string
+  directionId?: string
+  directionName?: string
+  planId?: string
+  planTitle?: string
+}
+
 function QuickCreateTaskModal({
-  users, defaultMeetingId, onClose, onCreated,
+  users, defaultMeetingId: _defaultMeetingId, preset, onClose, onCreated,
 }: {
   users: User[]
+  /** Réservé pour usage futur (rattacher une tâche à une réunion). */
   defaultMeetingId: string
+  preset: QuickTaskPreset
   onClose: () => void
   onCreated: () => void
 }) {
   const [title, setTitle]         = useState('')
-  const [planId, setPlanId]       = useState('')
+  // planId pré-sélectionné depuis le preset si fourni (clic "+ Tâche ici" sur un dossier)
+  const [planId, setPlanId]       = useState(preset.planId || '')
   const [assignee, setAssignee]   = useState('')
   const [dueDate, setDueDate]     = useState('')
   const [priority, setPriority]   = useState('medium')
   const [description, setDescription] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  // Liste des plans actifs pour rattachement
+  // Liste des plans actifs pour rattachement. On les filtre côté front sur
+  // subsidiary/direction si un preset est fourni — UX beaucoup plus rapide
+  // en réunion (la liste passe de 50 plans à 3-5).
   const { data: plansRaw, isLoading: plansLoading } = useQuery({
     queryKey: ['plans', 'active-for-live'],
     queryFn: async () => {
@@ -976,10 +1050,26 @@ function QuickCreateTaskModal({
       return Array.isArray(r.data) ? r.data : r.data.results ?? []
     },
   })
-  const plans = useMemo<ActionPlan[]>(
-    () => (plansRaw || []).filter((p) => !['completed', 'cancelled'].includes(p.status as string)),
-    [plansRaw],
-  )
+  const plans = useMemo<ActionPlan[]>(() => {
+    let arr = (plansRaw || []).filter(
+      (p) => !['completed', 'cancelled'].includes(p.status as string),
+    )
+    // Filtre subsidiary si défini dans le preset (les plans n'ayant pas cette
+    // filiale sont cachés pour réduire le bruit)
+    if (preset.subsidiaryId) {
+      arr = arr.filter((p) =>
+        (p as any).subsidiary_id === preset.subsidiaryId
+        || (p as any).subsidiary === preset.subsidiaryId,
+      )
+    }
+    if (preset.directionId) {
+      arr = arr.filter((p) =>
+        (p as any).direction_id === preset.directionId
+        || (p as any).direction === preset.directionId,
+      )
+    }
+    return arr
+  }, [plansRaw, preset.subsidiaryId, preset.directionId])
 
   // Esc → fermer
   useEffect(() => {
@@ -1011,13 +1101,36 @@ function QuickCreateTaskModal({
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
       <div className="relative w-full max-w-xl bg-bg-elevated border border-border rounded-xl shadow-2xl overflow-hidden">
         <header className="px-6 py-4 border-b border-border flex items-center justify-between">
-          <div>
+          <div className="flex-1 min-w-0">
             <div className="text-2xs uppercase tracking-widest text-fg-muted font-semibold">
               Nouvelle tâche
             </div>
             <h3 className="serif text-lg font-semibold mt-0.5">Créer une tâche d'action</h3>
+            {/* Breadcrumb du contexte pré-rempli (cliquer "+ Tâche ici" remplit ça) */}
+            {(preset.subsidiaryName || preset.directionName || preset.planTitle) && (
+              <div className="flex items-center gap-1.5 mt-1.5 text-2xs text-copper-400 font-medium flex-wrap">
+                <span className="uppercase tracking-wider text-fg-muted">Contexte :</span>
+                {preset.subsidiaryName && (
+                  <span className="px-1.5 py-0.5 rounded bg-copper-500/10">{preset.subsidiaryName}</span>
+                )}
+                {preset.directionName && (
+                  <>
+                    <span className="text-fg-subtle">›</span>
+                    <span className="px-1.5 py-0.5 rounded bg-copper-500/10">{preset.directionName}</span>
+                  </>
+                )}
+                {preset.planTitle && (
+                  <>
+                    <span className="text-fg-subtle">›</span>
+                    <span className="px-1.5 py-0.5 rounded bg-copper-500/10 truncate max-w-[180px]" title={preset.planTitle}>
+                      {preset.planTitle}
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
           </div>
-          <button onClick={onClose} className="p-1 text-fg-muted hover:text-fg" title="Fermer (Esc)">
+          <button onClick={onClose} className="p-1 text-fg-muted hover:text-fg shrink-0" title="Fermer (Esc)">
             <X size={18} />
           </button>
         </header>
@@ -1056,10 +1169,16 @@ function QuickCreateTaskModal({
                 </option>
               ))}
             </select>
-            {defaultMeetingId && (
+            {!preset.planId && plans.length === 0 && !plansLoading && (
+              <p className="text-2xs text-warning mt-1">
+                Aucun Dossier ne correspond au contexte sélectionné. Élargissez le filtre
+                ou créez un Dossier depuis « Suivi Projets/Dossiers ».
+              </p>
+            )}
+            {preset.subsidiaryName && (
               <p className="text-2xs text-fg-subtle mt-1">
-                Astuce : si aucun Dossier ne correspond à votre sujet, vous pouvez en créer
-                un depuis « Suivi Projets/Dossiers » et revenir ici.
+                Liste filtrée sur <strong>{preset.subsidiaryName}</strong>
+                {preset.directionName && <> · <strong>{preset.directionName}</strong></>}.
               </p>
             )}
           </div>

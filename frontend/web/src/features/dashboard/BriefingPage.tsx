@@ -17,7 +17,10 @@
  * utiliser un navigateur moderne (Chrome/Edge/Safari ont speechSynthesis natif).
  */
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Calendar, Pause, Play, RefreshCw, RotateCcw, Sparkles, Square, Volume2 } from 'lucide-react'
+import {
+  AlertTriangle, Calendar, CheckSquare, Gauge, Pause, Play,
+  RefreshCw, RotateCcw, Scale, Sparkles, Square, Target, Volume2,
+} from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { PremiumButton } from '@/components/widgets/PremiumButton'
@@ -189,33 +192,24 @@ export function BriefingPage() {
         description="Votre synthèse personnalisée — à lire ou à écouter."
       />
 
-      <div className="px-10 py-8 max-w-4xl space-y-6">
+      <div className="px-10 py-8 max-w-5xl space-y-6">
 
-        {/* Sommaire + lecteur vocal */}
+        {/* Sommaire + lecteur vocal + tagline IA */}
         <div className="card p-6 bg-bg-elevated">
           <div className="flex items-start gap-4 flex-wrap">
-            <div className="flex-1 min-w-[200px]">
+            <div className="flex-1 min-w-[280px]">
               <div className="flex items-center gap-2 text-2xs uppercase tracking-widest text-fg-muted font-semibold mb-2">
                 <Sparkles size={12} className="text-copper-400" />
-                <span>Synthèse IA — {user?.first_name || ''}</span>
+                <span>Synthèse exécutive — {user?.first_name || ''}</span>
               </div>
               <p className="text-base text-fg leading-relaxed">
                 {isLoading ? 'Chargement de votre briefing…' : (data?.summary || '')}
               </p>
-              {data && (
-                <div className="flex items-center gap-4 mt-3 text-2xs uppercase tracking-wider text-fg-subtle">
-                  <span>{data.stats.my_tasks_today} tâche(s)</span>
-                  <span>•</span>
-                  <span>{data.stats.meetings_today} réunion(s)</span>
-                  <span>•</span>
-                  <span>{data.stats.decisions_pending} décision(s)</span>
-                  {data.stats.at_risk > 0 && (
-                    <>
-                      <span>•</span>
-                      <span className="text-danger">{data.stats.at_risk} alerte(s)</span>
-                    </>
-                  )}
-                </div>
+              {/* Tagline IA — phrase d'accroche contextuelle (Claude ou fallback) */}
+              {data?.tagline && (
+                <blockquote className="mt-3 pl-3 border-l-2 border-copper-500/40 text-sm text-fg-muted italic leading-relaxed">
+                  {data.tagline}
+                </blockquote>
               )}
             </div>
 
@@ -228,6 +222,62 @@ export function BriefingPage() {
               Actualiser
             </PremiumButton>
           </div>
+
+          {/* Mini cartes KPI : chiffres clés du briefing */}
+          {data && !isLoading && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 mt-5">
+              {(data.stats.my_tasks_overdue ?? 0) > 0 && (
+                <BriefingKpi
+                  icon={<AlertTriangle size={14} className="text-danger" />}
+                  label="En retard" value={data.stats.my_tasks_overdue!} tone="danger"
+                />
+              )}
+              <BriefingKpi
+                icon={<CheckSquare size={14} className="text-copper-400" />}
+                label="Aujourd'hui" value={data.stats.my_tasks_today}
+              />
+              {(data.stats.my_tasks_week ?? 0) > 0 && (
+                <BriefingKpi
+                  icon={<Target size={14} className="text-info" />}
+                  label="Cette semaine" value={data.stats.my_tasks_week!}
+                />
+              )}
+              <BriefingKpi
+                icon={<Calendar size={14} className="text-info" />}
+                label="Réunions jour" value={data.stats.meetings_today}
+              />
+              {(data.stats.meetings_week ?? 0) > 0 && (
+                <BriefingKpi
+                  icon={<Calendar size={14} className="text-fg-muted" />}
+                  label="Réunions semaine" value={data.stats.meetings_week!}
+                />
+              )}
+              {data.stats.decisions_pending > 0 && (
+                <BriefingKpi
+                  icon={<Scale size={14} className="text-warning" />}
+                  label="Décisions" value={data.stats.decisions_pending} tone="warning"
+                />
+              )}
+              {data.stats.at_risk > 0 && (
+                <BriefingKpi
+                  icon={<AlertTriangle size={14} className="text-warning" />}
+                  label="À surveiller" value={data.stats.at_risk} tone="warning"
+                />
+              )}
+              {typeof data.stats.epi_score === 'number' && data.stats.epi_score > 0 && (
+                <BriefingKpi
+                  icon={<Gauge size={14} className="text-success" />}
+                  label="EPI Score" value={data.stats.epi_score} tone="success"
+                />
+              )}
+              {(data.stats.team_overdue ?? 0) > 0 && (
+                <BriefingKpi
+                  icon={<AlertTriangle size={14} className="text-warning" />}
+                  label="Équipe (retards)" value={data.stats.team_overdue!} tone="warning"
+                />
+              )}
+            </div>
+          )}
 
           {/* Lecteur TTS */}
           {ttsSupported ? (
@@ -339,6 +389,34 @@ export function BriefingPage() {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+
+/** Mini-tuile KPI compacte affichée dans le briefing matinal. */
+function BriefingKpi({
+  icon, label, value, tone = 'neutral',
+}: {
+  icon: React.ReactNode
+  label: string
+  value: number
+  tone?: 'neutral' | 'danger' | 'warning' | 'success' | 'info'
+}) {
+  const toneBg: Record<string, string> = {
+    neutral: 'bg-fg/[0.04]',
+    danger:  'bg-danger/10',
+    warning: 'bg-warning/10',
+    success: 'bg-success/10',
+    info:    'bg-info/10',
+  }
+  return (
+    <div className={`rounded-lg p-3 ${toneBg[tone]} flex flex-col gap-1.5`}>
+      <div className="flex items-center gap-1.5 text-2xs uppercase tracking-wider text-fg-muted font-semibold">
+        {icon}
+        <span className="truncate">{label}</span>
+      </div>
+      <div className="text-2xl font-serif tabular tracking-tight text-fg">{value}</div>
     </div>
   )
 }
