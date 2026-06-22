@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import threading
 from typing import Optional
 
@@ -32,24 +33,50 @@ MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
 MODEL_VERSION_TAG = "minilm-multi-v1"
 EMBEDDING_DIM = 384
 
-# Singleton + thread lock pour éviter le double-chargement en cas d'accès
-# concurrent (gunicorn workers / Celery threads).
-_model = None
+# Cache writable : par défaut sentence-transformers + huggingface_hub écrivent
+# dans ~/.cache, mais en conteneur prod le home est read-only. On force un
+# dossier writable (idéalement un volume Docker, sinon /tmp).
+# `setdefault` : on respecte une valeur explicite via .env si l'opérateur la
+# fournit, sinon fallback /tmp/.cache/huggingface.
+_HF_CACHE = os.environ.setdefault(
+    "HF_HOME", os.environ.get("HF_HOME") or "/tmp/.cache/huggingface",
+)
+os.environ.setdefault("TRANSFORMERS_CACHE", _HF_CACHE)
+os.environ.setdefault("SENTENCE_TRANSFORMERS_HOME", _HF_CACHE)
+try:
+    os.makedirs(_HF_CACHE, exist_ok=True)
+except OSError:
+    pass  # si même /tmp est ro, le load échouera proprement via _LOAD_FAILED
+
+# Sentinel pour distinguer "pas encore tenté" (None) de "tenté et échoué".
+# Un objet dédié plutôt que `False` pour éviter le piège du falsy test sur le
+# singleton (un `False` matche `_model is not None` et était retourné comme
+# modèle valide → AttributeError au .encode()).
+_LOAD_FAILED = object()
+_model = None  # type: ignore[assignment]
 _model_lock = threading.Lock()
 
 
 def _load_model():
-    """Lazy load du modèle. Retourne None si sentence-transformers indispo."""
+    """Lazy load du modèle. Retourne None si sentence-transformers indispo ou
+    si le chargement a échoué précédemment (mémorisé, pas de retry tight loop)."""
     global _model
+    if _model is _LOAD_FAILED:
+        return None
     if _model is not None:
         return _model
     with _model_lock:
+        if _model is _LOAD_FAILED:
+            return None
         if _model is not None:
             return _model
         try:
             from sentence_transformers import SentenceTransformer
-            logger.info("Loading embedding model %s (one-time, may take 30-60s)…", MODEL_NAME)
-            _model = SentenceTransformer(MODEL_NAME)
+            logger.info(
+                "Loading embedding model %s (one-time, may take 30-60s)… "
+                "cache=%s", MODEL_NAME, _HF_CACHE,
+            )
+            _model = SentenceTransformer(MODEL_NAME, cache_folder=_HF_CACHE)
             logger.info("Embedding model loaded.")
         except ImportError:
             logger.warning(
@@ -57,11 +84,18 @@ def _load_model():
                 "Run: pip install sentence-transformers. "
                 "Semantic search will be disabled."
             )
-            _model = False  # marker "tried but failed"
+            _model = _LOAD_FAILED
         except Exception as exc:  # noqa: BLE001
             logger.exception("Failed to load embedding model: %s", exc)
-            _model = False
-    return _model if _model else None
+            _model = _LOAD_FAILED
+    return _model if _model is not _LOAD_FAILED else None
+
+
+def reset_model_cache():
+    """Réinitialise le singleton pour permettre un retry du load (debug/tests)."""
+    global _model
+    with _model_lock:
+        _model = None
 
 
 def embed_text(text: str) -> Optional[list[float]]:
