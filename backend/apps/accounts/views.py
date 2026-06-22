@@ -350,6 +350,7 @@ class MyMembershipsView(APIView):
                 "logo":                org.logo or "",
                 "primary_color":       org.primary_color or "#2563eb",
                 "secondary_color":     org.secondary_color or "#0ea5e9",
+                "surface_color":       getattr(org, "surface_color", None) or "#131210",
                 "is_owner":            m.is_owner,
                 "is_executive":        m.is_executive,
                 "role_label":          role_label,
@@ -434,6 +435,7 @@ class SwitchOrganizationView(APIView):
                 "logo":            m.organization.logo or "",
                 "primary_color":   m.organization.primary_color or "#2563eb",
                 "secondary_color": m.organization.secondary_color or "#0ea5e9",
+                "surface_color":   getattr(m.organization, "surface_color", None) or "#131210",
                 "role_label":      "Owner" if m.is_owner else "Executive" if m.is_executive else "Member",
             },
         })

@@ -10,6 +10,7 @@ export interface OrgMembership {
   logo: string
   primary_color: string
   secondary_color: string
+  surface_color: string
   is_owner: boolean
   is_executive: boolean
   role_label: string

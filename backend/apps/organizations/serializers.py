@@ -8,7 +8,8 @@ class OrganizationSerializer(serializers.ModelSerializer):
         model = Organization
         fields = [
             "id", "name", "slug", "country", "timezone", "currency",
-            "plan", "is_active", "primary_color", "secondary_color", "logo",
+            "plan", "is_active",
+            "primary_color", "secondary_color", "surface_color", "logo",
         ]
         read_only_fields = ("id", "slug", "plan", "is_active")
 

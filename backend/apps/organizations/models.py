@@ -22,8 +22,15 @@ class Organization(TimestampedModel):
     vat_number = models.CharField(max_length=40, blank=True)
 
     logo = models.URLField(blank=True)
-    primary_color = models.CharField(max_length=7, default="#2563eb")
-    secondary_color = models.CharField(max_length=7, default="#0ea5e9")
+    # Branding — utilisés partout : app web (CSS vars), emails, exports PDF/DOCX.
+    primary_color = models.CharField(max_length=7, default="#2563eb",
+        help_text="Accent — boutons, liens, focus, chips. Format #RRGGBB.")
+    secondary_color = models.CharField(max_length=7, default="#0ea5e9",
+        help_text="Accent secondaire — headers emails sombres. Format #RRGGBB.")
+    surface_color = models.CharField(max_length=7, default="#131210",
+        help_text="Ton de fond — base de la page, sidebar et surfaces. "
+                  "Une rampe d'élévation (subtle/elevated) en est dérivée "
+                  "automatiquement. Format #RRGGBB.")
 
     country = models.CharField(max_length=2, default="FR")
     timezone = models.CharField(max_length=50, default="Europe/Paris")

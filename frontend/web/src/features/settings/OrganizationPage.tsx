@@ -26,13 +26,14 @@ import {
 const HEX_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
 
 // Suggestions de palettes premium — un clic pour appliquer.
-const PALETTE_PRESETS: { name: string; primary: string; secondary: string }[] = [
-  { name: 'Kaydan',   primary: '#B8693C', secondary: '#0e0a07' },
-  { name: 'Atelier',  primary: '#1F2937', secondary: '#D97706' },
-  { name: 'Émeraude', primary: '#10B981', secondary: '#064E3B' },
-  { name: 'Saphir',   primary: '#2563EB', secondary: '#1E3A8A' },
-  { name: 'Rubis',    primary: '#DC2626', secondary: '#7F1D1D' },
-  { name: 'Améthyste',primary: '#7C3AED', secondary: '#4C1D95' },
+// Triple couleur : primary (accent), secondary (header email), surface (fonds).
+const PALETTE_PRESETS: { name: string; primary: string; secondary: string; surface: string }[] = [
+  { name: 'Kaydan',   primary: '#B8693C', secondary: '#0e0a07', surface: '#131210' },
+  { name: 'Atelier',  primary: '#1F2937', secondary: '#D97706', surface: '#111418' },
+  { name: 'Émeraude', primary: '#10B981', secondary: '#064E3B', surface: '#0F1A16' },
+  { name: 'Saphir',   primary: '#2563EB', secondary: '#1E3A8A', surface: '#0F1322' },
+  { name: 'Rubis',    primary: '#DC2626', secondary: '#7F1D1D', surface: '#1A1010' },
+  { name: 'Améthyste',primary: '#7C3AED', secondary: '#4C1D95', surface: '#160F1F' },
 ]
 
 export function OrganizationPage() {
@@ -53,6 +54,7 @@ export function OrganizationPage() {
   const [logo, setLogo] = useState('')
   const [primary, setPrimary] = useState('#B8693C')
   const [secondary, setSecondary] = useState('#0e0a07')
+  const [surface, setSurface] = useState('#131210')
   const [readOnly, setReadOnly] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
 
@@ -63,6 +65,7 @@ export function OrganizationPage() {
     setLogo(org.logo || '')
     setPrimary(org.primary_color || '#B8693C')
     setSecondary(org.secondary_color || '#0e0a07')
+    setSurface(org.surface_color || '#131210')
   }, [org])
 
   const update = useMutation({
@@ -87,8 +90,9 @@ export function OrganizationPage() {
   const nameOK = name.trim().length >= 2
   const primaryOK = HEX_RE.test(primary)
   const secondaryOK = HEX_RE.test(secondary)
+  const surfaceOK = HEX_RE.test(surface)
   const logoOK = !logo || /^https?:\/\//.test(logo)
-  const formOK = nameOK && primaryOK && secondaryOK && logoOK
+  const formOK = nameOK && primaryOK && secondaryOK && surfaceOK && logoOK
   const isDirty = useMemo(() => {
     if (!org) return false
     return (
@@ -96,8 +100,9 @@ export function OrganizationPage() {
       || logo !== (org.logo || '')
       || primary !== (org.primary_color || '#B8693C')
       || secondary !== (org.secondary_color || '#0e0a07')
+      || surface !== (org.surface_color || '#131210')
     )
-  }, [org, name, logo, primary, secondary])
+  }, [org, name, logo, primary, secondary, surface])
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -107,6 +112,7 @@ export function OrganizationPage() {
       logo: logo.trim(),
       primary_color: primary.trim(),
       secondary_color: secondary.trim(),
+      surface_color: surface.trim(),
     })
   }
 
@@ -224,6 +230,14 @@ export function OrganizationPage() {
               disabled={readOnly || update.isPending}
               valid={secondaryOK}
             />
+            <ColorField
+              label="Ton de surface"
+              hint="Teinte des fonds (page, sidebar, panels). On garde sa teinte et sa saturation, et on adapte automatiquement la luminosité selon le mode clair/sombre pour préserver la lisibilité."
+              value={surface}
+              onChange={setSurface}
+              disabled={readOnly || update.isPending}
+              valid={surfaceOK}
+            />
 
             <div>
               <div className="text-2xs uppercase tracking-wider text-fg-muted font-semibold mb-2">
@@ -234,12 +248,18 @@ export function OrganizationPage() {
                   <button
                     key={p.name}
                     type="button"
-                    onClick={() => { setPrimary(p.primary); setSecondary(p.secondary) }}
+                    onClick={() => {
+                      setPrimary(p.primary)
+                      setSecondary(p.secondary)
+                      setSurface(p.surface)
+                    }}
                     disabled={readOnly || update.isPending}
                     className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-border hover:border-copper-400/60 hover:bg-fg/[0.03] transition disabled:opacity-60"
                   >
                     <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: p.primary }} />
                     <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: p.secondary }} />
+                    <span className="w-3 h-3 rounded-sm border border-border/40"
+                          style={{ backgroundColor: p.surface }} />
                     <span className="text-xs text-fg-muted">{p.name}</span>
                   </button>
                 ))}
@@ -314,6 +334,62 @@ export function OrganizationPage() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+
+          {/* Preview page + sidebar (rendu fond + accent) */}
+          <div className="rounded-lg overflow-hidden border border-border">
+            <div className="text-2xs uppercase tracking-wider text-fg-subtle px-3 py-1.5 bg-fg/[0.03]">
+              Application — page et sidebar
+            </div>
+            <div className="flex" style={{ background: surface, minHeight: '120px' }}>
+              {/* Mini sidebar */}
+              <div
+                className="w-1/3 p-3 border-r"
+                style={{
+                  background: `color-mix(in srgb, ${surface} 92%, #fff)`,
+                  borderColor: `color-mix(in srgb, ${surface} 70%, #fff)`,
+                }}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  {logo ? (
+                    <img src={logo} alt="" className="w-5 h-5 rounded object-cover"
+                         onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+                  ) : (
+                    <div className="w-5 h-5 rounded grid place-items-center text-white text-[10px] font-semibold"
+                         style={{ backgroundColor: primary }}>
+                      {(name || 'C').trim().charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <span className="text-[10px] text-white/80 truncate">{name || 'Org'}</span>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-[9px] uppercase tracking-wider text-white/40">Menu</div>
+                  <div className="text-[10px] text-white/70 px-1.5 py-1 rounded"
+                       style={{ background: `${primary}22`, color: primary }}>
+                    Cockpit
+                  </div>
+                  <div className="text-[10px] text-white/50 px-1.5 py-1">Réunions</div>
+                  <div className="text-[10px] text-white/50 px-1.5 py-1">Décisions</div>
+                </div>
+              </div>
+              {/* Mini contenu page */}
+              <div className="flex-1 p-3">
+                <div className="text-[10px] uppercase tracking-wider mb-1.5"
+                     style={{ color: primary }}>Cockpit</div>
+                <div className="text-xs text-white/90 font-serif mb-2">
+                  Bienvenue, {name || 'CODIR'}
+                </div>
+                <div
+                  className="rounded p-1.5 text-[9px]"
+                  style={{
+                    background: `color-mix(in srgb, ${surface} 85%, #fff)`,
+                    color: 'rgba(255,255,255,0.7)',
+                  }}
+                >
+                  Carte exemple — fond élevé
+                </div>
+              </div>
             </div>
           </div>
 

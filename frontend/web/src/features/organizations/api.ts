@@ -12,6 +12,7 @@ export interface SwitchOrgResponse {
     logo: string
     primary_color: string
     secondary_color: string
+    surface_color: string
     role_label: string
   }
 }
@@ -27,11 +28,12 @@ export interface CurrentOrg {
   is_active?: boolean
   primary_color: string
   secondary_color: string
+  surface_color: string
   logo: string
 }
 
 export type UpdateOrgPayload = Partial<
-  Pick<CurrentOrg, 'name' | 'logo' | 'primary_color' | 'secondary_color'>
+  Pick<CurrentOrg, 'name' | 'logo' | 'primary_color' | 'secondary_color' | 'surface_color'>
 >
 
 export const organizationsApi = {
