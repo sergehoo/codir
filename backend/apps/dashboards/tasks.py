@@ -106,3 +106,19 @@ def send_epi_drop_alert(snapshot_id: str):
 
     logger.info("EPI drop alert sent to %s executives (org=%s)", sent, org.slug)
     return sent
+
+
+@shared_task(
+    name="apps.dashboards.tasks.send_daily_briefings",
+    autoretry_for=(Exception,),
+    retry_backoff=120,
+    retry_kwargs={"max_retries": 1},
+)
+def send_daily_briefings():
+    """Envoie le briefing matinal aux users dont l'heure préférée matche maintenant.
+
+    Configuré dans CELERY_BEAT_SCHEDULE pour tourner toutes les heures pile.
+    Idempotent : check "déjà envoyé aujourd'hui" via Notification.
+    """
+    from apps.dashboards.services.briefing_dispatcher import dispatch_for_all_users
+    return dispatch_for_all_users()

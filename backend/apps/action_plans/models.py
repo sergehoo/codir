@@ -24,6 +24,17 @@ class ActionPlan(TenantAwareModel):
         "accounts.User", null=True, blank=True,
         on_delete=models.SET_NULL, related_name="action_plans_owned",
     )
+    # Rattachement organisationnel (optionnel, cas Groupe si vide)
+    subsidiary = models.ForeignKey(
+        "organizations.Subsidiary", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="action_plans",
+        help_text="Filiale porteuse du dossier (vide = Groupe).",
+    )
+    direction = models.ForeignKey(
+        "governance.Direction", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="action_plans",
+        help_text="Direction porteuse du dossier (optionnel).",
+    )
     start_date = models.DateField(null=True, blank=True)
     target_end_date = models.DateField(null=True, blank=True)
     actual_end_date = models.DateField(null=True, blank=True)

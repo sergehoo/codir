@@ -14,6 +14,7 @@ import { SectionHeader } from '@/components/widgets/SectionHeader'
 import { SkeletonList } from '@/components/widgets/Skeleton'
 import { StatsBar } from '@/components/widgets/StatsBar'
 import { StatusBadge } from '@/components/widgets/StatusBadge'
+import { useDirections, useSubsidiaries } from '@/features/organizations/useSubsidiariesDirections'
 
 import { decisionsApi, decisionsKeys } from './api'
 
@@ -184,6 +185,11 @@ function NewDecisionModal({ open, onClose }: { open: boolean; onClose: () => voi
   const [priority, setPriority] = useState<'low' | 'medium' | 'high' | 'critical'>('medium')
   const [deadline, setDeadline] = useState('')
   const [isConfidential, setIsConfidential] = useState(false)
+  const [subsidiaryId, setSubsidiaryId] = useState('')
+  const [directionId, setDirectionId] = useState('')
+
+  const { data: subsidiaries = [] } = useSubsidiaries()
+  const { data: directions = [] } = useDirections(subsidiaryId || undefined)
 
   const create = useMutation({
     mutationFn: () => decisionsApi.create({
@@ -192,6 +198,8 @@ function NewDecisionModal({ open, onClose }: { open: boolean; onClose: () => voi
       priority,
       deadline: deadline || undefined,
       is_confidential: isConfidential,
+      subsidiary: subsidiaryId || undefined,
+      direction: directionId || undefined,
     } as any),
     onSuccess: () => {
       toast.success('Décision créée.')
@@ -214,6 +222,7 @@ function NewDecisionModal({ open, onClose }: { open: boolean; onClose: () => voi
   function reset() {
     setTitle(''); setDescription(''); setPriority('medium')
     setDeadline(''); setIsConfidential(false)
+    setSubsidiaryId(''); setDirectionId('')
   }
 
   return (
@@ -246,6 +255,42 @@ function NewDecisionModal({ open, onClose }: { open: boolean; onClose: () => voi
             className="w-full px-3 py-2 rounded-md bg-bg-elevated border border-border text-sm min-h-[100px] focus:border-copper-500/50 outline-none resize-y"
             rows={4}
           />
+        </div>
+
+        {/* Rattachement organisationnel : Filiale + Direction (dépendante) */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="dec-sub" className="text-2xs uppercase tracking-wider text-fg-muted font-semibold block mb-1.5">
+              Filiale
+            </label>
+            <select
+              id="dec-sub" name="subsidiary"
+              value={subsidiaryId}
+              onChange={(e) => { setSubsidiaryId(e.target.value); setDirectionId('') }}
+              className="w-full px-3 py-2 rounded-md bg-bg-elevated border border-border text-sm focus:border-copper-500/50 outline-none"
+            >
+              <option value="">— Groupe —</option>
+              {subsidiaries.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="dec-dir" className="text-2xs uppercase tracking-wider text-fg-muted font-semibold block mb-1.5">
+              Direction
+            </label>
+            <select
+              id="dec-dir" name="direction"
+              value={directionId} onChange={(e) => setDirectionId(e.target.value)}
+              disabled={directions.length === 0}
+              className="w-full px-3 py-2 rounded-md bg-bg-elevated border border-border text-sm focus:border-copper-500/50 outline-none disabled:opacity-50"
+            >
+              <option value="">— Aucune —</option>
+              {directions.map((d) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">

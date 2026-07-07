@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BellOff, BellRing, Bot, CheckCircle2, Mail, MessageSquare, Send, Smartphone } from 'lucide-react'
+import { BellOff, BellRing, Bot, CheckCircle2, Mail, MessageSquare, Send, Smartphone, Sunrise } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -172,6 +172,54 @@ export function NotificationPreferencesPage() {
                 onChange={() => toggle(r.key)}
               />
             ))}
+          </div>
+        </div>
+
+        {/* Briefing matinal quotidien */}
+        <div>
+          <div className="flex items-center gap-3 mb-4">
+            <span className="divider-accent" />
+            <h2 className="text-2xs uppercase tracking-widest text-fg-muted font-semibold">Briefing matinal</h2>
+          </div>
+          <div className="card p-5">
+            <div className="flex items-start gap-4 flex-wrap">
+              <div className="flex-1 min-w-[240px]">
+                <div className="flex items-center gap-2 text-sm font-medium text-fg">
+                  <Sunrise size={15} className="text-copper-400" />
+                  Recevoir mon briefing chaque matin par email + push
+                </div>
+                <p className="text-xs text-fg-muted mt-1 leading-relaxed">
+                  Synthèse personnalisée du jour (tâches, réunions, décisions, alertes IA).
+                  Vous pouvez l'écouter via la lecture vocale du navigateur depuis la page
+                  briefing. Désactivable à tout moment.
+                </p>
+              </div>
+              <div className="flex items-center gap-4 shrink-0">
+                <div className="flex items-center gap-2">
+                  <label className="text-2xs uppercase tracking-wider text-fg-muted font-semibold">
+                    Heure
+                  </label>
+                  <select
+                    value={draft.daily_briefing_hour ?? 7}
+                    onChange={(e) => setDraft((d) => ({
+                      ...d, daily_briefing_hour: parseInt(e.target.value, 10),
+                    }))}
+                    disabled={!draft.daily_briefing_enabled}
+                    className="bg-bg-base border border-border rounded-md px-2 py-1.5 text-sm tabular disabled:opacity-50"
+                  >
+                    {Array.from({ length: 24 }, (_, h) => (
+                      <option key={h} value={h}>
+                        {h.toString().padStart(2, '0')}:00
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <Switch
+                  checked={draft.daily_briefing_enabled ?? true}
+                  onChange={() => toggle('daily_briefing_enabled')}
+                />
+              </div>
+            </div>
           </div>
         </div>
 

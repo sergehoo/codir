@@ -17,6 +17,7 @@ import { toast } from 'sonner'
 
 import { apiClient } from '@/api/client'
 import { decisionsApi } from '@/features/decisions/api'
+import { useDirections, useSubsidiaries } from '@/features/organizations/useSubsidiariesDirections'
 
 import { actionPlansApi, meetingsExportApi, plansKeys } from './api'
 import type { ActionPlan, ActionTask, Paginated } from '@/types'
@@ -1271,10 +1272,15 @@ function QuickCreateDecisionModal({
   const [title, setTitle]             = useState('')
   const [description, setDescription] = useState('')
   const [responsible, setResponsible] = useState('')
+  const [subsidiaryId, setSubsidiaryId] = useState('')
+  const [directionId, setDirectionId]   = useState('')
   const [priority, setPriority]       = useState('medium')
   const [deadline, setDeadline]       = useState('')
   const [isConfidential, setIsConfidential] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const { data: subsidiaries = [] } = useSubsidiaries()
+  const { data: directions   = [] } = useDirections(subsidiaryId || undefined)
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -1289,6 +1295,8 @@ function QuickCreateDecisionModal({
         title: title.trim(),
         description_md: description.trim() || undefined,
         responsible: responsible || undefined,
+        subsidiary: subsidiaryId || undefined,
+        direction: directionId || undefined,
         priority,
         deadline: deadline || undefined,
         is_confidential: isConfidential,
@@ -1349,6 +1357,44 @@ function QuickCreateDecisionModal({
               placeholder="Contexte, options envisagées, rationale…"
               className="w-full px-3 py-2 bg-bg-base border border-border rounded-md text-sm"
             />
+          </div>
+
+          {/* Rattachement organisationnel */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-2xs uppercase tracking-wider text-fg-muted font-semibold mb-1.5">
+                Filiale
+              </label>
+              <select
+                value={subsidiaryId}
+                onChange={(e) => {
+                  setSubsidiaryId(e.target.value)
+                  setDirectionId('')  // reset direction si filiale change
+                }}
+                className="w-full px-3 py-2 bg-bg-base border border-border rounded-md text-sm"
+              >
+                <option value="">— Groupe (aucune) —</option>
+                {subsidiaries.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-2xs uppercase tracking-wider text-fg-muted font-semibold mb-1.5">
+                Direction
+              </label>
+              <select
+                value={directionId}
+                onChange={(e) => setDirectionId(e.target.value)}
+                className="w-full px-3 py-2 bg-bg-base border border-border rounded-md text-sm"
+                disabled={directions.length === 0}
+              >
+                <option value="">— Aucune —</option>
+                {directions.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">

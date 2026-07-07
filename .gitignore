@@ -57,3 +57,8 @@ docker-compose.override.yml
 
 # ─── Outputs Cowork / Claude (si dev local) ──────────
 /outputs/
+
+# ─── Markdown : docs / notes / prompts / READMEs ─────
+# Tous les .md sont exclus du repo (gardés en local uniquement).
+# Pour committer un .md spécifique : `git add -f path/to/fichier.md`
+*.md

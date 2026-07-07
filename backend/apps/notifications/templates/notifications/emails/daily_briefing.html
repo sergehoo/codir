@@ -1,0 +1,74 @@
+{% extends "notifications/emails/base.html" %}
+{% block content %}
+
+<h1 style="margin:0 0 8px 0;color:#1a1614;font-family:Georgia,serif;font-size:22px;">
+  Votre briefing du jour
+</h1>
+
+<p style="margin:0 0 8px 0;color:#6b5d4f;font-size:14px;">
+  {{ recipient_name }}, voici votre synthèse exécutive du jour.
+</p>
+
+{% if summary %}
+  <p style="margin:14px 0 0 0;color:#1a1614;font-size:15px;line-height:1.55;">
+    {{ summary }}
+  </p>
+{% endif %}
+
+{% if tagline %}
+  <blockquote style="margin:14px 0 0 0;padding:8px 14px;border-left:3px solid {{ org_primary_color|default:'#B8693C' }};
+                      color:#3a302a;font-style:italic;font-size:14px;background:#fbf7f1;">
+    {{ tagline }}
+  </blockquote>
+{% endif %}
+
+{# Mini KPIs en grille — 4 indicateurs visibles d'un coup d'œil #}
+{% if stats %}
+  <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-top:18px;">
+    <tr>
+      {% if stats.my_tasks_overdue %}
+        <td align="center" style="padding:8px;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;width:25%;">
+          <div style="color:#991b1b;font-size:11px;text-transform:uppercase;letter-spacing:1px;font-weight:600;">En retard</div>
+          <div style="color:#1a1614;font-family:Georgia,serif;font-size:26px;margin-top:4px;">{{ stats.my_tasks_overdue }}</div>
+        </td>
+      {% endif %}
+      {% if stats.my_tasks_today %}
+        <td align="center" style="padding:8px;background:#fef3c7;border:1px solid #fde68a;border-radius:4px;width:25%;">
+          <div style="color:#92400e;font-size:11px;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Aujourd'hui</div>
+          <div style="color:#1a1614;font-family:Georgia,serif;font-size:26px;margin-top:4px;">{{ stats.my_tasks_today }}</div>
+        </td>
+      {% endif %}
+      {% if stats.meetings_today %}
+        <td align="center" style="padding:8px;background:#dbeafe;border:1px solid #bfdbfe;border-radius:4px;width:25%;">
+          <div style="color:#1e40af;font-size:11px;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Réunions</div>
+          <div style="color:#1a1614;font-family:Georgia,serif;font-size:26px;margin-top:4px;">{{ stats.meetings_today }}</div>
+        </td>
+      {% endif %}
+      {% if stats.decisions_pending %}
+        <td align="center" style="padding:8px;background:#fef3c7;border:1px solid #fde68a;border-radius:4px;width:25%;">
+          <div style="color:#92400e;font-size:11px;text-transform:uppercase;letter-spacing:1px;font-weight:600;">Décisions</div>
+          <div style="color:#1a1614;font-family:Georgia,serif;font-size:26px;margin-top:4px;">{{ stats.decisions_pending }}</div>
+        </td>
+      {% endif %}
+    </tr>
+  </table>
+{% endif %}
+
+{# Markdown rendu en HTML par le service (briefing_dispatcher._markdown_to_html) #}
+{% if markdown_html %}
+  <div style="margin-top:20px;color:#1a1614;font-size:14px;line-height:1.65;">
+    {{ markdown_html|safe }}
+  </div>
+{% endif %}
+
+{# CTA principal vers la page de briefing pour écouter ou consulter en détail #}
+{% if link_url %}
+  {% include "notifications/emails/_button.html" with label="Ouvrir mon briefing complet" url=link_url %}
+{% endif %}
+
+<p style="margin-top:18px;color:#a89e8e;font-size:12px;font-style:italic;">
+  Vous recevez ce briefing chaque jour à votre heure préférée. Désactivez-le depuis
+  vos préférences notifications si vous ne le souhaitez plus.
+</p>
+
+{% endblock %}

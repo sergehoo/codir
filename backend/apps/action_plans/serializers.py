@@ -7,12 +7,36 @@ from .models import ActionComment, ActionEvidence, ActionPlan, ActionTask
 
 
 def _resolve_subsidiary(action_plan):
-    """Remonte la chaîne action_plan → decision → direction → subsidiary."""
+    """Récupère la filiale rattachée au plan.
+
+    Priorité au nouveau champ direct `action_plan.subsidiary` (Lot FIL-DIR).
+    Fallback rétrocompat sur la chaîne action_plan → decision → direction →
+    subsidiary pour les plans historiques créés avant l'ajout du champ direct.
+    """
     try:
+        # Champ direct (nouveau — après migration 0006)
+        direct = getattr(action_plan, "subsidiary", None)
+        if direct is not None:
+            return direct
+        # Fallback : héritage via la décision
         decision = action_plan.decision
         direction = getattr(decision, "direction", None)
         if direction and direction.subsidiary:
             return direction.subsidiary
+    except Exception:  # noqa: BLE001
+        return None
+    return None
+
+
+def _resolve_direction(action_plan):
+    """Récupère la direction rattachée au plan (champ direct puis fallback)."""
+    try:
+        direct = getattr(action_plan, "direction", None)
+        if direct is not None:
+            return direct
+        decision = action_plan.decision
+        if decision:
+            return getattr(decision, "direction", None)
     except Exception:  # noqa: BLE001
         return None
     return None
@@ -157,6 +181,9 @@ class ActionPlanListSerializer(serializers.ModelSerializer):
             "owner", "owner_detail",
             "start_date", "target_end_date", "actual_end_date",
             "tasks_count",
+            # FK writable directement (Lot FIL-DIR) — pour le POST create/update
+            "subsidiary", "direction",
+            # Lecture pratique (id + nom résolus, avec fallback héritage)
             "subsidiary_id", "subsidiary_name",
             "direction_id", "direction_name",
             "can_add_tasks", "can_modify",
@@ -194,13 +221,11 @@ class ActionPlanListSerializer(serializers.ModelSerializer):
         return sub.name if sub else None
 
     def get_direction_id(self, obj):
-        decision = getattr(obj, "decision", None)
-        direction = getattr(decision, "direction", None) if decision else None
+        direction = _resolve_direction(obj)
         return str(direction.id) if direction else None
 
     def get_direction_name(self, obj):
-        decision = getattr(obj, "decision", None)
-        direction = getattr(decision, "direction", None) if decision else None
+        direction = _resolve_direction(obj)
         return direction.name if direction else None
 
     def get_can_add_tasks(self, obj):

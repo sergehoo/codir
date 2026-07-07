@@ -33,6 +33,11 @@ class Decision(TenantAwareModel):
         "agendas.AgendaItem", null=True, blank=True,
         on_delete=models.SET_NULL, related_name="decisions",
     )
+    subsidiary = models.ForeignKey(
+        "organizations.Subsidiary", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="decisions",
+        help_text="Filiale concernée par la décision (optionnel, cas Groupe si vide).",
+    )
     direction = models.ForeignKey(
         "governance.Direction", null=True, blank=True,
         on_delete=models.SET_NULL, related_name="decisions",

@@ -54,6 +54,8 @@ class NotificationPreferenceSerializer(serializers.ModelSerializer):
             "decision_alerts", "meeting_alerts",
             # Agent IA proactif (Lot 2)
             "proactive_agent_enabled",
+            # Briefing matinal quotidien
+            "daily_briefing_enabled", "daily_briefing_hour",
             # Heures de silence
             "quiet_hours_start", "quiet_hours_end",
             "locale",

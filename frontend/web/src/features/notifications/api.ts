@@ -19,6 +19,9 @@ export type NotificationPreference = {
   meeting_alerts: boolean
   // Agent IA proactif (Lot 2) — default true côté backend
   proactive_agent_enabled: boolean
+  // Briefing matinal quotidien
+  daily_briefing_enabled: boolean
+  daily_briefing_hour: number
   quiet_hours_start: string | null
   quiet_hours_end: string | null
   locale: string

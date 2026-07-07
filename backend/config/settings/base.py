@@ -273,6 +273,13 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.ai_engine.tasks.proactive_agent_scan",
         "schedule": crontab(minute=0, hour="*/4"),
     },
+    # ── Briefing matinal quotidien — toutes les heures pile ──
+    # La tâche compare l'heure courante avec `daily_briefing_hour` de chaque
+    # user pour décider qui notifier. Idempotent : check "déjà envoyé aujourd'hui".
+    "send-daily-briefings": {
+        "task": "apps.dashboards.tasks.send_daily_briefings",
+        "schedule": crontab(minute=0, hour="*"),
+    },
 }
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_TIMEZONE = env("CELERY_TIMEZONE", default="Africa/Abidjan")

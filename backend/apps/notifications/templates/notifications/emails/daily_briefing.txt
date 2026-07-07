@@ -1,0 +1,23 @@
+{% load i18n %}{{ recipient_name }},
+
+VOTRE BRIEFING DU JOUR
+======================
+
+{{ summary }}
+
+{% if tagline %}> {{ tagline }}
+{% endif %}
+
+{% if stats %}Chiffres clés :
+{% if stats.my_tasks_overdue %}- En retard : {{ stats.my_tasks_overdue }}
+{% endif %}{% if stats.my_tasks_today %}- À faire aujourd'hui : {{ stats.my_tasks_today }}
+{% endif %}{% if stats.meetings_today %}- Réunions : {{ stats.meetings_today }}
+{% endif %}{% if stats.decisions_pending %}- Décisions à arbitrer : {{ stats.decisions_pending }}
+{% endif %}{% if stats.at_risk %}- Sujets à surveiller : {{ stats.at_risk }}
+{% endif %}
+{% endif %}
+
+Ouvrir le briefing complet : {{ link_url }}
+
+—
+Pour désactiver ces emails matinaux : {{ site_name|default:"CODIR" }} › Préférences notifications.

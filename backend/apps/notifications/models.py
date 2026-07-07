@@ -87,6 +87,8 @@ class NotificationEvent(models.TextChoices):
     USER_REACTIVATED = "user_reactivated", "Compte réactivé"
     # Digest hebdomadaire utilisateur (vendredi 9h)
     WEEKLY_USER_DIGEST = "weekly_user_digest", "Synthèse hebdomadaire des tâches"
+    # Briefing matinal quotidien (envoyé selon daily_briefing_hour, default 7h)
+    DAILY_BRIEFING = "daily_briefing", "Briefing matinal quotidien"
 
 
 # ─── Notification ─────────────────────────────────────────────
@@ -188,6 +190,15 @@ class NotificationPreference(TenantAwareModel):
     # des messages d'alerte dans le sidebar chat. Off-by-default-no : on
     # active par défaut pour démontrer la valeur, l'utilisateur peut couper.
     proactive_agent_enabled = models.BooleanField(default=True)
+
+    # Briefing matinal quotidien (push + email à l'heure préférée).
+    # Le service tourne toutes les heures et envoie aux users dont l'heure
+    # locale courante == briefing_hour ET briefing_enabled=True.
+    daily_briefing_enabled = models.BooleanField(default=True)
+    daily_briefing_hour = models.PositiveSmallIntegerField(
+        default=7,
+        help_text="Heure locale (0-23) d'envoi du briefing matinal.",
+    )
 
     # Heures de silence
     quiet_hours_start = models.TimeField(null=True, blank=True)

@@ -39,6 +39,9 @@ class DecisionListSerializer(serializers.ModelSerializer):
     health_score = serializers.SerializerMethodField()
     health_label = serializers.SerializerMethodField()
     health_reasons = serializers.SerializerMethodField()
+    # Rattachement organisationnel (Fil-Dir) : id + nom prêts à afficher
+    subsidiary_name = serializers.CharField(source="subsidiary.name", read_only=True, allow_null=True)
+    direction_name = serializers.CharField(source="direction.name", read_only=True, allow_null=True)
 
     class Meta:
         model = Decision
@@ -46,7 +49,9 @@ class DecisionListSerializer(serializers.ModelSerializer):
             "id", "ref", "title", "status", "priority", "impact",
             "responsible", "responsible_detail",
             "category", "category_detail",
-            "direction", "deadline", "is_confidential",
+            "subsidiary", "subsidiary_name",
+            "direction", "direction_name",
+            "deadline", "is_confidential",
             "meeting", "agenda_item",
             "health_score", "health_label", "health_reasons",
             "created_at", "updated_at",
@@ -93,7 +98,10 @@ class DecisionCreateSerializer(serializers.ModelSerializer):
         model = Decision
         fields = [
             "title", "description_md",
-            "meeting", "agenda_item", "direction", "category",
+            "meeting", "agenda_item",
+            # Rattachement organisationnel — filiale et/ou direction
+            "subsidiary", "direction",
+            "category",
             "priority", "impact", "responsible", "deadline",
             "is_confidential",
         ]

@@ -19,6 +19,7 @@ api_v1 = [
     path("agendas/", include("apps.agendas.urls")),
     path("decisions/", include("apps.decisions.urls")),
     path("action-plans/", include("apps.action_plans.urls")),
+    path("governance/", include("apps.governance.urls")),
     # ── Support ──
     path("documents/", include("apps.documents.urls")),
     path("notifications/", include("apps.notifications.urls")),
