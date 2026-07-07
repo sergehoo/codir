@@ -19,6 +19,7 @@ import { SectionHeader } from '@/components/widgets/SectionHeader'
 import { SkeletonList } from '@/components/widgets/Skeleton'
 import { StatsBar } from '@/components/widgets/StatsBar'
 import { StatusBadge } from '@/components/widgets/StatusBadge'
+import { useDirections, useSubsidiaries } from '@/features/organizations/useSubsidiariesDirections'
 import type { ActionPlan, ActionTask } from '@/types'
 
 import { AddTaskForm } from './AddTaskForm'
@@ -636,12 +637,19 @@ function NewActionPlanModal({ open, onClose }: { open: boolean; onClose: () => v
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [targetEndDate, setTargetEndDate] = useState('')
+  const [subsidiaryId, setSubsidiaryId] = useState('')
+  const [directionId, setDirectionId] = useState('')
+
+  const { data: subsidiaries = [] } = useSubsidiaries()
+  const { data: directions = [] } = useDirections(subsidiaryId || undefined)
 
   const create = useMutation({
     mutationFn: () => actionPlansApi.create({
       title: title.trim(),
       description_md: description.trim() || undefined,
       target_end_date: targetEndDate || undefined,
+      subsidiary: subsidiaryId || undefined,
+      direction: directionId || undefined,
     } as any),
     onSuccess: () => {
       toast.success('Dossier créé.')
@@ -663,6 +671,7 @@ function NewActionPlanModal({ open, onClose }: { open: boolean; onClose: () => v
 
   function reset() {
     setTitle(''); setDescription(''); setTargetEndDate('')
+    setSubsidiaryId(''); setDirectionId('')
   }
 
   return (
@@ -700,6 +709,42 @@ function NewActionPlanModal({ open, onClose }: { open: boolean; onClose: () => v
             className="w-full px-3 py-2 rounded-md bg-bg-elevated border border-border text-sm min-h-[100px] focus:border-copper-500/50 outline-none resize-y"
             rows={4}
           />
+        </div>
+
+        {/* Rattachement organisationnel : Filiale + Direction (dépendante) */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="plan-sub" className="text-2xs uppercase tracking-wider text-fg-muted font-semibold block mb-1.5">
+              Filiale
+            </label>
+            <select
+              id="plan-sub" name="subsidiary"
+              value={subsidiaryId}
+              onChange={(e) => { setSubsidiaryId(e.target.value); setDirectionId('') }}
+              className="w-full px-3 py-2 rounded-md bg-bg-elevated border border-border text-sm focus:border-copper-500/50 outline-none"
+            >
+              <option value="">— Groupe —</option>
+              {subsidiaries.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="plan-dir" className="text-2xs uppercase tracking-wider text-fg-muted font-semibold block mb-1.5">
+              Direction
+            </label>
+            <select
+              id="plan-dir" name="direction"
+              value={directionId} onChange={(e) => setDirectionId(e.target.value)}
+              disabled={directions.length === 0}
+              className="w-full px-3 py-2 rounded-md bg-bg-elevated border border-border text-sm focus:border-copper-500/50 outline-none disabled:opacity-50"
+            >
+              <option value="">— Aucune —</option>
+              {directions.map((d) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div>

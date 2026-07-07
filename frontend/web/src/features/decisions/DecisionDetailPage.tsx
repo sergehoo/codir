@@ -14,6 +14,7 @@ import { PremiumButton } from '@/components/widgets/PremiumButton'
 import { PriorityBadge } from '@/components/widgets/PriorityBadge'
 import { StatusBadge } from '@/components/widgets/StatusBadge'
 import { actionPlansApi, plansKeys } from '@/features/action-plans/api'
+import { useDirections, useSubsidiaries } from '@/features/organizations/useSubsidiariesDirections'
 import { useAuthStore } from '@/stores/auth'
 import type { ActionPlan } from '@/types'
 
@@ -613,6 +614,11 @@ function NewPlanForDecisionModal({
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [targetEndDate, setTargetEndDate] = useState('')
+  const [subsidiaryId, setSubsidiaryId] = useState('')
+  const [directionId, setDirectionId] = useState('')
+
+  const { data: subsidiaries = [] } = useSubsidiaries()
+  const { data: directions = [] } = useDirections(subsidiaryId || undefined)
 
   const create = useMutation({
     mutationFn: () => actionPlansApi.create({
@@ -620,12 +626,15 @@ function NewPlanForDecisionModal({
       description_md: description.trim() || undefined,
       target_end_date: targetEndDate || undefined,
       decision: decisionId,
+      subsidiary: subsidiaryId || undefined,
+      direction: directionId || undefined,
     } as any),
     onSuccess: () => {
       toast.success('Plan créé et rattaché à la décision.')
       qc.invalidateQueries({ queryKey: plansKeys.all })
       qc.invalidateQueries({ queryKey: decisionsKeys.detail(decisionId) })
       setTitle(''); setDescription(''); setTargetEndDate('')
+      setSubsidiaryId(''); setDirectionId('')
       onClose()
     },
     onError: (e: any) => {
@@ -670,6 +679,42 @@ function NewPlanForDecisionModal({
             rows={3}
           />
         </div>
+        {/* Rattachement organisationnel : Filiale + Direction (dépendante) */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label htmlFor="np-sub" className="text-2xs uppercase tracking-wider text-fg-muted font-semibold block mb-1.5">
+              Filiale
+            </label>
+            <select
+              id="np-sub" name="subsidiary"
+              value={subsidiaryId}
+              onChange={(e) => { setSubsidiaryId(e.target.value); setDirectionId('') }}
+              className="w-full px-3 py-2 rounded-md bg-bg-elevated border border-border text-sm focus:border-copper-500/50 outline-none"
+            >
+              <option value="">— Groupe —</option>
+              {subsidiaries.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="np-dir" className="text-2xs uppercase tracking-wider text-fg-muted font-semibold block mb-1.5">
+              Direction
+            </label>
+            <select
+              id="np-dir" name="direction"
+              value={directionId} onChange={(e) => setDirectionId(e.target.value)}
+              disabled={directions.length === 0}
+              className="w-full px-3 py-2 rounded-md bg-bg-elevated border border-border text-sm focus:border-copper-500/50 outline-none disabled:opacity-50"
+            >
+              <option value="">— Aucune —</option>
+              {directions.map((d) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         <div>
           <label htmlFor="np-end" className="text-2xs uppercase tracking-wider text-fg-muted font-semibold block mb-1.5">
             Échéance cible
