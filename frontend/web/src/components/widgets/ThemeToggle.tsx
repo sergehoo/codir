@@ -4,10 +4,10 @@ import { useEffect, useState } from 'react'
 type Theme = 'dark' | 'light'
 
 function getInitialTheme(): Theme {
-  if (typeof window === 'undefined') return 'dark'
+  if (typeof window === 'undefined') return 'light'
   const stored = localStorage.getItem('codir-theme') as Theme | null
   if (stored === 'dark' || stored === 'light') return stored
-  return 'dark'  // CODIR Atelier — dark par défaut
+  return 'light'  // Palette "soft cream" — light par défaut (matche le mockup)
 }
 
 export function ThemeToggle() {

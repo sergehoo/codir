@@ -53,20 +53,23 @@
   --info-soft:    210 35% 60% / 0.12;
 }
 
-/* ─── Tokens — LIGHT (Atelier corporate) ───────────────────── */
+/* ─── Tokens — LIGHT (Atelier corporate, palette "soft cream") ─── */
+/* Adapté au mockup Nixole : ivoire chaud légèrement pêche, cartes
+   presque blanches, bordures très douces. Le fond a une pointe de rose
+   pour l'aspect "warm paper" éditorial. */
 [data-theme="light"] {
-  --bg-base:     38 30% 96%;   /* #F8F3E9 — ivoire crème */
-  --bg-subtle:   34 25% 92%;   /* #ECE5D6 */
-  --bg-elevated: 36 35% 99%;   /* presque blanc chaud */
+  --bg-base:     32 40% 95%;   /* ivoire pêche chaud (fond principal) */
+  --bg-subtle:   30 30% 91%;   /* beige rosé (sidebar / bloc secondaire) */
+  --bg-elevated: 34 45% 98%;   /* presque blanc, très légèrement chaud */
   --bg-inverted: 30 10% 10%;
 
-  --fg:          28 18% 14%;   /* #2A2421 — encre */
-  --fg-muted:    28 10% 38%;
-  --fg-subtle:   28 8%  58%;
+  --fg:          28 20% 12%;   /* encre profonde chaude */
+  --fg-muted:    28 10% 40%;
+  --fg-subtle:   28 8%  60%;
   --fg-inverted: 36 30% 96%;
 
-  --border:        30 18% 86%;
-  --border-strong: 30 18% 74%;
+  --border:        30 25% 88%;
+  --border-strong: 30 22% 76%;
 
   --success-soft: 150 35% 45% / 0.10;
   --warning-soft: 38  70% 45% / 0.10;
@@ -132,23 +135,37 @@
     @apply btn bg-danger text-white hover:bg-danger/90;
   }
 
-  /* Cards — paper-like surfaces */
+  /* Cards — paper-like surfaces, style "soft cream" (mockup Nixole).
+     Radius 2xl (16px) et shadow douce à halo pour un rendu premium. */
   .card {
-    @apply relative bg-bg-elevated border border-border rounded-xl
+    @apply relative bg-bg-elevated border border-border rounded-2xl
            transition-all duration-300 ease-editorial;
-    box-shadow: hsl(var(--shadow-card, 20 16 12) / 0); /* placeholder var */
-    box-shadow: 0 4px 8px -2px rgba(20,16,12,0.06), 0 12px 24px -8px rgba(20,16,12,0.07);
+    box-shadow: 0 1px 2px rgba(20,16,12,0.02),
+                0 6px 14px -6px rgba(20,16,12,0.06),
+                0 20px 34px -18px rgba(20,16,12,0.08);
   }
   .card:hover {
     @apply border-border-strong;
-    box-shadow: 0 8px 20px -8px rgba(20,16,12,0.12), 0 16px 32px -12px rgba(20,16,12,0.08);
+    box-shadow: 0 1px 2px rgba(20,16,12,0.03),
+                0 10px 22px -8px rgba(20,16,12,0.10),
+                0 28px 46px -20px rgba(20,16,12,0.12);
     transform: translateY(-1px);
   }
   .card-quiet {
-    @apply relative bg-bg-elevated border border-border rounded-xl transition-all duration-300 ease-editorial;
+    @apply relative bg-bg-elevated border border-border rounded-2xl transition-all duration-300 ease-editorial;
   }
   .card-elevated {
-    @apply relative bg-bg-elevated border border-border rounded-xl shadow-raised;
+    @apply relative bg-bg-elevated border border-border rounded-2xl shadow-raised;
+  }
+
+  /* Card "hero" — grandes tuiles du mockup type "Total Volume 600.00".
+     Fond très clair, bordure quasi absente, padding généreux. Utile pour
+     les grosses KPIs éditoriales. Ajouter .card-hero en plus de .card. */
+  .card-hero {
+    @apply rounded-2xl px-6 py-5 md:px-8 md:py-6;
+    background: linear-gradient(180deg,
+      hsl(var(--bg-elevated)) 0%,
+      hsl(var(--bg-elevated) / 0.85) 100%);
   }
 
   /* Editorial divider */
@@ -228,6 +245,79 @@
   .dot-danger  { @apply dot bg-danger; }
   .dot-copper  { @apply dot bg-copper-500; }
   .dot-muted   { @apply dot bg-fg-subtle; }
+
+  /* ─── Pattern "Soft Cream" (mockup Nixole) ─────────────────
+     Classes utilitaires additionnelles pour reproduire le style
+     ivoire/pêche avec boutons pill et gros chiffres editoriaux.
+     Utilisent les CSS variables --copper-* → suivent le branding org. */
+
+  /* Bouton pill orange (CTA principal type "View all") */
+  .btn-pill {
+    @apply btn rounded-full px-5 py-2.5;
+  }
+  .btn-pill-primary {
+    @apply btn-pill bg-copper-500 text-white shadow-copper
+           hover:bg-copper-400 active:scale-[0.99];
+  }
+  .btn-pill-ghost {
+    @apply btn-pill bg-bg-subtle text-fg-muted
+           hover:bg-fg/[0.06] hover:text-fg;
+  }
+
+  /* Action button rond (icône seule, style "search/menu") */
+  .btn-icon-round {
+    @apply inline-flex items-center justify-center rounded-full
+           w-10 h-10 bg-bg-subtle text-fg-muted
+           hover:bg-fg/[0.08] hover:text-fg transition-all;
+  }
+
+  /* KPI Hero — chiffre display XL en serif tabulaire */
+  .kpi-hero {
+    @apply serif tabular font-medium tracking-tight leading-none text-fg;
+    font-size: clamp(1.75rem, 3vw, 2.75rem);
+  }
+  .kpi-hero-label {
+    @apply text-xs text-fg-muted font-medium mb-2 block;
+    letter-spacing: 0.01em;
+  }
+  .kpi-hero-caption {
+    @apply flex items-center justify-between text-xs text-fg-subtle mt-3;
+  }
+
+  /* Wallet / card visuel gradient (comme les cards Native Wallet du mockup) */
+  .wallet-card {
+    @apply relative rounded-2xl p-5 overflow-hidden
+           transition-transform duration-300 ease-editorial;
+    background: linear-gradient(135deg,
+      hsl(var(--bg-subtle)) 0%,
+      hsl(var(--bg-elevated)) 100%);
+    box-shadow: 0 8px 20px -10px rgba(20,16,12,0.15);
+  }
+  .wallet-card:hover {
+    transform: translateY(-2px);
+  }
+
+  /* Row transaction — hover halo et alignement clean (transactions list) */
+  .tx-row {
+    @apply flex items-center gap-4 px-4 py-3.5 rounded-xl
+           transition-colors duration-200
+           hover:bg-fg/[0.03];
+  }
+  .tx-avatar {
+    @apply w-10 h-10 rounded-full bg-bg-subtle grid place-items-center
+           text-fg-muted shrink-0;
+  }
+
+  /* Sidebar item (mockup Nixole) — icône colorée + label,
+     état actif avec fond doux plutôt que trait. */
+  .sidebar-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm
+           text-fg-muted transition-colors duration-200
+           hover:bg-fg/[0.04] hover:text-fg;
+  }
+  .sidebar-item-active {
+    @apply sidebar-item bg-fg/[0.06] text-fg font-medium;
+  }
 }
 
 /* ─── Smart Meeting Editor (Tiptap) ────────────────── */

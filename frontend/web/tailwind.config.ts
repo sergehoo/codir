@@ -81,14 +81,16 @@ export default {
       },
       letterSpacing: { wide: '0.04em', wider: '0.08em', widest: '0.18em' },
       borderRadius: {
-        DEFAULT: '0.5rem',
+        // Palette "soft cream" : radius plus prononcés qu'en défaut Tailwind.
+        // Cards → rounded-2xl (16px), boutons pill → rounded-full.
+        DEFAULT: '0.625rem',   // 10px (avant 8px)
         xs: '0.25rem',
         sm: '0.375rem',
         md: '0.5rem',
-        lg: '0.625rem',
-        xl: '0.75rem',
-        '2xl': '1rem',
-        '3xl': '1.25rem',
+        lg: '0.75rem',         // 12px (avant 10px)
+        xl: '0.875rem',        // 14px (avant 12px)
+        '2xl': '1.125rem',     // 18px (avant 16px)
+        '3xl': '1.5rem',       // 24px (avant 20px)
       },
       spacing: {
         '4.5': '1.125rem', '5.5': '1.375rem', '7.5': '1.875rem',
