@@ -8,7 +8,7 @@ import { useState } from 'react'
 import { PremiumButton } from '@/components/widgets/PremiumButton'
 import { SectionHeader } from '@/components/widgets/SectionHeader'
 import { SkeletonList } from '@/components/widgets/Skeleton'
-import { useAuthStore } from '@/stores/auth'
+import { useMemberships } from '@/stores/auth'
 import type { Notification } from '@/types'
 
 import { notificationsApi, notificationsKeys } from './api'
@@ -73,7 +73,7 @@ export function NotificationsPage() {
   const [event, setEvent] = useState('')
   const [channel, setChannel] = useState('')
   const [unreadOnly, setUnreadOnly] = useState(false)
-  const memberships = useAuthStore((s) => s.memberships)
+  const memberships = useMemberships()
   const isMultiOrg = (memberships?.length ?? 0) > 1
 
   const params = { event: event || undefined, channel: channel || undefined, unread: unreadOnly }

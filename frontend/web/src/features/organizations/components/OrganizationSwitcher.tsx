@@ -10,14 +10,15 @@
 import { Building2, Check, ChevronDown, Loader2, Search } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { useAuthStore, useCurrentMembership } from '@/stores/auth'
+import { useCurrentMembership, useMemberships } from '@/stores/auth'
 import { cn } from '@/utils/cn'
 
 import { useOrganizationSwitch } from '../useOrganizationSwitch'
 import { OrganizationAvatar } from './OrganizationAvatar'
 
 export function OrganizationSwitcher() {
-  const memberships = useAuthStore((s) => s.memberships)
+  // useMemberships garantit un tableau même si l'état persisté est corrompu.
+  const memberships = useMemberships()
   const current = useCurrentMembership()
   const switchOrg = useOrganizationSwitch()
   const [open, setOpen] = useState(false)

@@ -37,9 +37,22 @@ export type UpdateOrgPayload = Partial<
 >
 
 export const organizationsApi = {
-  /** Liste toutes les organisations où le user est membre actif. */
-  myMemberships: async () =>
-    (await apiClient.get<OrgMembership[]>('/auth/my-memberships/')).data,
+  /**
+   * Liste toutes les organisations où le user est membre actif.
+   *
+   * Normalise à la source : l'endpoint renvoie une liste nue aujourd'hui,
+   * mais si la pagination DRF venait à être activée globalement il
+   * renverrait `{count, results}`. On garantit ici un tableau, sans quoi
+   * tous les `.find` / `.some` en aval cassent le Shell entier.
+   */
+  myMemberships: async (): Promise<OrgMembership[]> => {
+    const { data } = await apiClient.get<
+      OrgMembership[] | { results?: OrgMembership[] }
+    >('/auth/my-memberships/')
+    if (Array.isArray(data)) return data
+    if (data && Array.isArray(data.results)) return data.results
+    return []
+  },
 
   /** Change l'organisation active — retourne de nouveaux tokens. */
   switchOrganization: async (organization_id: string) =>

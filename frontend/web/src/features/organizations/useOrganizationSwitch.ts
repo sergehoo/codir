@@ -12,7 +12,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
 import { useAIChatStore } from '@/features/ai-chat/store'
-import { useAuthStore, type OrgMembership } from '@/stores/auth'
+import { useAuthStore, useMemberships, type OrgMembership } from '@/stores/auth'
 
 import { organizationsApi, organizationsKeys } from './api'
 
@@ -21,7 +21,7 @@ export function useOrganizationSwitch() {
   const setTokens = useAuthStore((s) => s.setTokens)
   const setMemberships = useAuthStore((s) => s.setMemberships)
   const setCurrentOrganizationId = useAuthStore((s) => s.setCurrentOrganizationId)
-  const memberships = useAuthStore((s) => s.memberships)
+  const memberships = useMemberships()
 
   return useMutation({
     mutationFn: async (target: OrgMembership | string) => {

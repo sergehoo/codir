@@ -3,7 +3,7 @@ import { Link } from '@tanstack/react-router'
 import { Bell, Check, CheckCheck } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
-import { useAuthStore } from '@/stores/auth'
+import { useAuthStore, useMemberships } from '@/stores/auth'
 import type { Notification } from '@/types'
 import { cn } from '@/utils/cn'
 
@@ -94,7 +94,7 @@ export function NotificationBell({ className }: { className?: string }) {
 
   // Détecte un contexte multi-orgs pour afficher (ou non) les mini-avatars
   // org dans le dropdown — inutile de polluer l'UI si une seule org.
-  const memberships = useAuthStore((s) => s.memberships)
+  const memberships = useMemberships()
   const isMultiOrg = (memberships?.length ?? 0) > 1
 
   return (

@@ -25,14 +25,23 @@ export function useMembershipsBootstrap() {
 
   useEffect(() => {
     if (!isSuccess || !data) return
-    setMemberships(data)
+
+    // ⚠ Ne jamais présumer que la réponse est un tableau : une pagination
+    // DRF activée globalement renverrait {count, results}, et une erreur
+    // réseau interceptée pourrait renvoyer autre chose. Sans ce garde-fou,
+    // `data.some(...)` casse tout le Shell au boot.
+    const list = Array.isArray(data) ? data : []
+    setMemberships(list)
+
+    if (list.length === 0) return
+
     // Si aucune org courante setée ou si la courante n'existe plus dans la liste,
     // on bascule sur celle marquée is_current (depuis le JWT) ou la 1ère.
-    const isStillValid = data.some(
+    const isStillValid = list.some(
       (m) => m.organization_id === currentOrganizationId,
     )
     if (!currentOrganizationId || !isStillValid) {
-      const current = data.find((m) => m.is_current) ?? data[0]
+      const current = list.find((m) => m.is_current) ?? list[0]
       if (current) {
         setCurrentOrganizationId(current.organization_id)
       }
