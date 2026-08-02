@@ -69,8 +69,11 @@ interface StatusResponse {
   uploaded_count: number
 }
 
-const DEFAULT_CHUNK_SIZE = 50 * 1024 * 1024  // 50 Mo
-const DEFAULT_MAX_PARALLEL = 4
+const DEFAULT_CHUNK_SIZE = 25 * 1024 * 1024  // 25 Mo (réduit pour empreinte RAM backend)
+// ⚠ Sérialisé (1 seul chunk à la fois) : quand plusieurs chunks 25-50 Mo arrivent en
+// même temps sur le container codirweb (mem_limit 1 Go), le worker gunicorn OOM
+// et Traefik renvoie 502. Un upload séquentiel est plus lent mais fiable.
+const DEFAULT_MAX_PARALLEL = 1
 const DEFAULT_MAX_RETRIES = 3
 
 /** Sleep avec support AbortSignal. */
