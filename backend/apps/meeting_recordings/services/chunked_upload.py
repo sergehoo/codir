@@ -223,12 +223,32 @@ def finalize_chunked_upload(
         )
 
     # Concatène en streaming dans un fichier temporaire local (rapide).
+    #
+    # ⚠ On NE peut PAS utiliser /tmp par défaut : en prod le container a un
+    # tmpfs de 128 Mo sur /tmp, un fichier reconstitué de 100+ Mo provoque
+    # ENOSPC ("No space left on device") → 500 puis crash worker → 502.
+    # On spool donc dans MEDIA_ROOT/chunked_uploads_tmp qui est sur un vrai
+    # volume disque. Configurable via CHUNKED_UPLOAD_TEMP_DIR.
     import tempfile
+    media_root = getattr(settings, "MEDIA_ROOT", None) or "/var/www/media"
+    spool_dir = getattr(settings, "CHUNKED_UPLOAD_TEMP_DIR", None) or os.path.join(
+        media_root, "chunked_uploads_tmp"
+    )
+    try:
+        os.makedirs(spool_dir, exist_ok=True)
+    except OSError as _mk_exc:
+        log.warning(
+            "finalize: impossible de créer spool_dir=%s (%s), fallback sur tempfile default",
+            spool_dir, _mk_exc,
+        )
+        spool_dir = None  # → tempfile utilisera le default système
+
     tmp_path = None
     total_bytes = 0
     try:
         with tempfile.NamedTemporaryFile(
             delete=False, prefix="codir_rec_", suffix=".bin",
+            dir=spool_dir,  # spool sur volume disque, pas tmpfs
         ) as tmp:
             tmp_path = tmp.name
             for c in chunks:
