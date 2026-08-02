@@ -1,7 +1,7 @@
 // Page Résumé IA + Transcription finale + Validation décisions / actions.
 import { Link, useParams } from '@tanstack/react-router'
 import { ChevronLeft, FileText, ListChecks, Loader2, Mic, Scale } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { cn } from '@/utils/cn'
 
@@ -27,6 +27,33 @@ export function RecordingSummaryPage() {
   const extr = useRecordingExtraction(recordingId)
 
   const [tab, setTab] = useState<Tab>('summary')
+
+  // ⚠ Lot HIST — refetch du CR quand le pipeline se termine.
+  //
+  // La génération/régénération est asynchrone (Celery). Le polling /status/
+  // s'arrête dès que le statut devient terminal, mais la query `detail` (qui
+  // porte summary + ai_minutes) reste sur son cache : l'utilisateur voyait
+  // l'ancien compte rendu jusqu'à un rechargement manuel de la page.
+  // On détecte la transition "en cours → terminé" et on refetch.
+  const wasProcessingRef = useRef(false)
+  const liveStatus = status.data?.status
+  useEffect(() => {
+    if (!liveStatus) return
+    const processing = [
+      'summarizing', 'extracting_actions',
+      'generating_final_transcript', 'transcribing',
+    ].includes(liveStatus)
+
+    if (processing) {
+      wasProcessingRef.current = true
+    } else if (wasProcessingRef.current) {
+      // Transition terminée → on récupère le CR fraîchement généré.
+      wasProcessingRef.current = false
+      rec.refetch()
+      extractions.refetch()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveStatus])
 
   if (rec.isLoading) {
     return (
@@ -124,6 +151,7 @@ export function RecordingSummaryPage() {
         <div className="space-y-6">
           <AISummaryPanel
             recordingId={recordingId}
+            meetingId={meetingId}
             summary={data.summary ?? ''}
             minutes={data.ai_minutes}
             onRegenerate={() => extr.regenerateSummary()}

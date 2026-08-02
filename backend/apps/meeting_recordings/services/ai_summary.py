@@ -253,6 +253,26 @@ def generate_summary(recording: MeetingRecording) -> Optional[str]:
     if not text:
         return None
 
+    # ⚠ Lot HIST — avant d'écraser le CR existant, on l'archive en version.
+    # Sans ça, une régénération détruit définitivement le CR précédent (et
+    # toute correction manuelle qu'il contenait).
+    had_previous = bool((recording.ai_minutes or "").strip()
+                        or (recording.summary or "").strip())
+    if had_previous:
+        try:
+            from .minutes_versioning import snapshot_current_minutes
+            from ..models import MinutesVersionOrigin
+            snapshot_current_minutes(
+                recording=recording,
+                origin=MinutesVersionOrigin.AI_REGENERATED,
+                label="Avant régénération IA",
+            )
+        except Exception:  # noqa: BLE001
+            # Best-effort : ne jamais bloquer la génération sur l'historisation.
+            logger.exception(
+                "generate_summary: snapshot version KO (rec=%s)", recording.id,
+            )
+
     # On stocke le tout dans summary + ai_minutes (même contenu structuré
     # markdown — on peut les séparer plus tard).
     recording.ai_minutes = text
@@ -260,6 +280,20 @@ def generate_summary(recording: MeetingRecording) -> Optional[str]:
     short = _extract_section(text, "Résumé exécutif")
     recording.summary = short or text[:1000]
     recording.save(update_fields=["summary", "ai_minutes", "updated_at"])
+
+    # Trace la nouvelle version produite (première génération ou régénération).
+    try:
+        from .minutes_versioning import snapshot_current_minutes
+        from ..models import MinutesVersionOrigin
+        snapshot_current_minutes(
+            recording=recording,
+            origin=(MinutesVersionOrigin.AI_REGENERATED if had_previous
+                    else MinutesVersionOrigin.AI_GENERATED),
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "generate_summary: snapshot post-génération KO (rec=%s)", recording.id,
+        )
 
     # Enregistre aussi un brouillon SUMMARY dans RecordingAIExtraction
     RecordingAIExtraction.unscoped.filter(

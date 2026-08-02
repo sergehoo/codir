@@ -4,7 +4,8 @@ import { Link, useParams } from '@tanstack/react-router'
 import { safeFormat } from '@/utils/safeDate'
 import {
   ArrowLeft, CalendarClock, CheckCircle2, ClipboardList, Gavel,
-  GripVertical, MapPin, Pencil, PlayCircle, Plus, Trash2, Users, Video, XCircle,
+  GripVertical, History, MapPin, Mic, Pencil, PlayCircle, Plus,
+  Trash2, Users, Video, XCircle,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -18,6 +19,7 @@ import { agendasApi, agendasKeys } from '@/features/agendas/api'
 import { decisionsApi, decisionsKeys } from '@/features/decisions/api'
 
 import { MeetingRecorderButton } from '@/features/meeting-recordings/components/MeetingRecorderButton'
+import { RecordingsHistoryList } from '@/features/meeting-recordings/components/RecordingsHistoryList'
 import { recordingsApi } from '@/features/meeting-recordings/api'
 
 import { meetingsApi, meetingsKeys } from './api'
@@ -195,7 +197,11 @@ export function MeetingDetailPage() {
    Section enregistrement audio IA — encart dans le détail réunion
    ═══════════════════════════════════════════════════════════════════ */
 
+type RecordingTab = 'capture' | 'history'
+
 function MeetingRecordingSection({ meetingId }: { meetingId: string }) {
+  const [tab, setTab] = useState<RecordingTab>('capture')
+
   // Récupère le recording le plus récent (s'il existe) pour reprendre l'état.
   const { data: recordings } = useQuery({
     queryKey: ['recordings', 'list', meetingId],
@@ -204,16 +210,61 @@ function MeetingRecordingSection({ meetingId }: { meetingId: string }) {
   })
   const latest = recordings?.[0] ?? null
 
+  // ⚠ Le badge doit refléter ce que l'onglet Historique affiche par défaut
+  // (archivés masqués). L'endpoint nested `listForMeeting` ne filtre pas
+  // `is_archived` — on compte donc en excluant les archivés côté client,
+  // sinon "Historique & CR 3" pour une liste qui n'en montre qu'un.
+  const totalCount = (recordings ?? []).filter((r: any) => !r.is_archived).length
+
+  const tabs: { id: RecordingTab; label: string; icon: any; count?: number }[] = [
+    { id: 'capture', label: 'Enregistrer', icon: Mic },
+    { id: 'history', label: 'Historique & CR', icon: History, count: totalCount },
+  ]
+
   return (
     <section className="px-10 py-8 border-t border-border bg-bg-subtle/30">
       <div className="text-2xs uppercase tracking-widest text-fg-muted font-semibold mb-5 flex items-center gap-3">
         <span className="divider-accent" /> Enregistrement & compte rendu IA
       </div>
+
       <div className="max-w-3xl">
-        <MeetingRecorderButton
-          meetingId={meetingId}
-          existingRecording={latest as any}
-        />
+        {/* Onglets Capture / Historique */}
+        <div className="flex items-center gap-1 mb-4 border-b border-border">
+          {tabs.map((t) => {
+            const Icon = t.icon
+            const active = tab === t.id
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setTab(t.id)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 -mb-px transition',
+                  active
+                    ? 'border-copper-500 text-copper-500'
+                    : 'border-transparent text-fg-muted hover:text-fg',
+                )}
+              >
+                <Icon size={13} />
+                {t.label}
+                {t.count != null && t.count > 0 && (
+                  <span className="px-1.5 rounded bg-fg/10 text-2xs tabular-nums">
+                    {t.count}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+
+        {tab === 'capture' ? (
+          <MeetingRecorderButton
+            meetingId={meetingId}
+            existingRecording={latest as any}
+          />
+        ) : (
+          <RecordingsHistoryList meetingId={meetingId} />
+        )}
       </div>
     </section>
   )

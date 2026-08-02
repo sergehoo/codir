@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import logging
 
+from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404
-from rest_framework import status, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
@@ -269,8 +270,9 @@ class MeetingRecordingNestedViewSet(viewsets.ViewSet):
 
 # ─── Flat : /recordings/{id}/... ─────────────────────────────────
 
-class MeetingRecordingViewSet(viewsets.ReadOnlyModelViewSet):
-    """retrieve + update partiel + actions custom sur 1 recording.
+class MeetingRecordingViewSet(mixins.DestroyModelMixin,
+                              viewsets.ReadOnlyModelViewSet):
+    """retrieve + destroy + actions custom sur 1 recording.
 
     ⚠️ IMPORTANT : on définit `get_queryset()` au lieu de `queryset = ...`.
 
@@ -291,7 +293,8 @@ class MeetingRecordingViewSet(viewsets.ReadOnlyModelViewSet):
         return (
             MeetingRecording.objects
             .select_related("meeting", "recorded_by", "organization")
-            .prefetch_related("speakers", "segments", "extractions")
+            .prefetch_related("speakers", "segments", "extractions",
+                              "minutes_versions")
         )
 
     def get_serializer_class(self):
@@ -300,14 +303,37 @@ class MeetingRecordingViewSet(viewsets.ReadOnlyModelViewSet):
         return MeetingRecordingDetailSerializer
 
     def list(self, request, *args, **kwargs):
-        # /recordings/?meeting=<id> — utile pour les widgets dashboard.
+        """GET /recordings/?meeting=<id>&include_archived=1&has_summary=1
+
+        Sert à la fois les widgets dashboard et l'onglet d'historique par
+        réunion (lot HIST). Par défaut les enregistrements archivés sont
+        masqués — passer ``include_archived=1`` pour les inclure.
+        """
         qs = self.get_queryset().order_by("-created_at")
+
         meeting_id = request.query_params.get("meeting")
         if meeting_id:
             qs = qs.filter(meeting_id=meeting_id)
+
+        # Archivés masqués par défaut.
+        include_archived = request.query_params.get("include_archived") in (
+            "1", "true", "True", "yes",
+        )
+        if not include_archived:
+            qs = qs.filter(is_archived=False)
+
+        # Filtre optionnel : uniquement ceux qui portent un compte rendu.
+        if request.query_params.get("has_summary") in ("1", "true", "True", "yes"):
+            qs = qs.exclude(ai_minutes="", summary="")
+
+        try:
+            limit = min(int(request.query_params.get("limit", 50)), 200)
+        except (TypeError, ValueError):
+            limit = 50
+
         return Response(
             MeetingRecordingListSerializer(
-                qs[:50], many=True, context={"request": request},
+                qs[:limit], many=True, context={"request": request},
             ).data,
         )
 
@@ -701,6 +727,20 @@ class MeetingRecordingViewSet(viewsets.ReadOnlyModelViewSet):
         # Vérifie écriture (CanAccessMeetingRecording.has_object_permission)
         # — la classe permission est déjà appliquée via get_permissions.
 
+        # ⚠ Lot HIST — archive l'état courant AVANT de l'écraser, pour que
+        # l'utilisateur puisse revenir en arrière depuis l'historique.
+        try:
+            from .services.minutes_versioning import snapshot_current_minutes
+            from .models import MinutesVersionOrigin
+            snapshot_current_minutes(
+                recording=rec,
+                origin=MinutesVersionOrigin.MANUAL_EDIT,
+                created_by=request.user,
+                label="Avant édition manuelle",
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("update_minutes: snapshot version KO (rec=%s)", rec.id)
+
         update_fields = []
         if "summary" in request.data:
             new_summary = (request.data.get("summary") or "")[:50000]
@@ -720,6 +760,18 @@ class MeetingRecordingViewSet(viewsets.ReadOnlyModelViewSet):
         update_fields.append("updated_at")
         rec.save(update_fields=update_fields)
 
+        # Trace la version résultant de cette édition.
+        try:
+            from .services.minutes_versioning import snapshot_current_minutes
+            from .models import MinutesVersionOrigin
+            snapshot_current_minutes(
+                recording=rec,
+                origin=MinutesVersionOrigin.MANUAL_EDIT,
+                created_by=request.user,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("update_minutes: snapshot post-édition KO (rec=%s)", rec.id)
+
         # Audit log
         try:
             from apps.audit_logs.services import log as audit_log
@@ -733,6 +785,217 @@ class MeetingRecordingViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(MeetingRecordingDetailSerializer(
             rec, context={"request": request},
         ).data)
+
+    # ─── Historisation du compte rendu (lot HIST) ────────────
+
+    @action(detail=True, methods=["get"], url_path="minutes/versions")
+    def minutes_versions(self, request, pk=None):
+        """GET /recordings/{id}/minutes/versions/ — historique des CR.
+
+        Retourne la liste ordonnée (plus récente d'abord), sans le contenu
+        complet. Pour lire une version entière : ?full=1 ou l'endpoint
+        /minutes/versions/{version_id}/.
+        """
+        from .serializers import (
+            MinutesVersionDetailSerializer, MinutesVersionListSerializer,
+        )
+        from .services.minutes_versioning import list_versions
+
+        rec = self.get_object()
+        versions = list_versions(rec)
+
+        full = request.query_params.get("full") in ("1", "true", "True", "yes")
+        ser_cls = MinutesVersionDetailSerializer if full else MinutesVersionListSerializer
+        return Response({
+            "recording_id": str(rec.id),
+            "count": versions.count(),
+            "versions": ser_cls(
+                versions, many=True, context={"request": request},
+            ).data,
+        })
+
+    @action(
+        detail=True, methods=["get"],
+        url_path=r"minutes/versions/(?P<version_id>[^/.]+)",
+    )
+    def minutes_version_detail(self, request, pk=None, version_id=None):
+        """GET /recordings/{id}/minutes/versions/{version_id}/ — contenu complet."""
+        from .models import RecordingMinutesVersion
+        from .serializers import MinutesVersionDetailSerializer
+
+        rec = self.get_object()
+        try:
+            version = RecordingMinutesVersion.unscoped.get(
+                id=version_id, recording=rec,
+            )
+        except (RecordingMinutesVersion.DoesNotExist, ValueError, ValidationError):
+            return Response({"detail": "Version introuvable."}, status=404)
+
+        return Response(MinutesVersionDetailSerializer(
+            version, context={"request": request},
+        ).data)
+
+    @action(
+        detail=True, methods=["post"],
+        url_path=r"minutes/versions/(?P<version_id>[^/.]+)/restore",
+    )
+    def restore_minutes_version(self, request, pk=None, version_id=None):
+        """POST /recordings/{id}/minutes/versions/{version_id}/restore/
+
+        Réinstalle cette version comme CR courant. L'état actuel est
+        automatiquement archivé avant l'écrasement — rien n'est perdu.
+        """
+        from .models import RecordingMinutesVersion
+        from .services.minutes_versioning import restore_version
+
+        rec = self.get_object()
+        try:
+            version = RecordingMinutesVersion.unscoped.get(
+                id=version_id, recording=rec,
+            )
+        except (RecordingMinutesVersion.DoesNotExist, ValueError, ValidationError):
+            return Response({"detail": "Version introuvable."}, status=404)
+
+        try:
+            restore_version(recording=rec, version=version, user=request.user)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("restore_minutes_version KO (rec=%s)", rec.id)
+            return Response(
+                {"detail": f"Restauration impossible : {exc}"}, status=500,
+            )
+
+        try:
+            from apps.audit_logs.services import log as audit_log
+            audit_log(
+                action="updated", target=rec,
+                description=(
+                    f"Compte rendu restauré à la version "
+                    f"v{version.version_number} par {request.user}"
+                ),
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+        rec.refresh_from_db()
+        return Response(MeetingRecordingDetailSerializer(
+            rec, context={"request": request},
+        ).data)
+
+    # ─── Métadonnées : renommer / annoter ────────────────────
+
+    @action(detail=True, methods=["patch"], url_path="meta")
+    def update_meta(self, request, pk=None):
+        """PATCH /recordings/{id}/meta/ — renomme et/ou annote l'enregistrement.
+
+        Body : { "title": "...", "internal_note": "..." } (les 2 optionnels)
+        """
+        from .serializers import UpdateRecordingMetaSerializer
+
+        rec = self.get_object()
+        ser = UpdateRecordingMetaSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+
+        update_fields = []
+        if "title" in ser.validated_data:
+            rec.title = ser.validated_data["title"]
+            update_fields.append("title")
+        if "internal_note" in ser.validated_data:
+            rec.internal_note = ser.validated_data["internal_note"]
+            update_fields.append("internal_note")
+
+        if not update_fields:
+            return Response(
+                {"detail": "Aucun champ à mettre à jour (title ou internal_note)."},
+                status=400,
+            )
+
+        update_fields.append("updated_at")
+        rec.save(update_fields=update_fields)
+
+        try:
+            from apps.audit_logs.services import log as audit_log
+            audit_log(
+                action="updated", target=rec,
+                description=f"Métadonnées enregistrement modifiées par {request.user}",
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+        return Response(MeetingRecordingDetailSerializer(
+            rec, context={"request": request},
+        ).data)
+
+    # ─── Archivage / suppression ─────────────────────────────
+
+    @action(detail=True, methods=["post"], url_path="archive")
+    def archive(self, request, pk=None):
+        """POST /recordings/{id}/archive/ — archive (masque) l'enregistrement.
+
+        Body optionnel : { "archived": false } pour désarchiver.
+        Non destructif : le CR, l'audio et l'historique restent intacts.
+        """
+        from django.utils import timezone as _tz
+
+        rec = self.get_object()
+        archived = request.data.get("archived", True)
+        if isinstance(archived, str):
+            archived = archived.lower() in ("1", "true", "yes")
+
+        rec.is_archived = bool(archived)
+        rec.archived_at = _tz.now() if rec.is_archived else None
+        rec.save(update_fields=["is_archived", "archived_at", "updated_at"])
+
+        try:
+            from apps.audit_logs.services import log as audit_log
+            audit_log(
+                action="updated", target=rec,
+                description=(
+                    f"Enregistrement {'archivé' if rec.is_archived else 'désarchivé'} "
+                    f"par {request.user}"
+                ),
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+        return Response(MeetingRecordingListSerializer(
+            rec, context={"request": request},
+        ).data)
+
+    def destroy(self, request, pk=None, *args, **kwargs):
+        """DELETE /recordings/{id}/ — supprime définitivement l'enregistrement.
+
+        Détruit l'audio, les transcripts, le CR et tout l'historique de
+        versions (cascade). Irréversible : réservé au nettoyage des takes
+        ratés. Préférer /archive/ dans le doute.
+        """
+        rec = self.get_object()
+        rec_id, meeting_id = str(rec.id), str(rec.meeting_id)
+
+        # Purge le fichier audio du storage avant de perdre la référence.
+        for field_name in ("audio_file", "audio_normalized"):
+            f = getattr(rec, field_name, None)
+            if f:
+                try:
+                    f.delete(save=False)
+                except Exception:  # noqa: BLE001
+                    logger.warning(
+                        "destroy: purge %s KO (rec=%s)", field_name, rec_id,
+                    )
+
+        try:
+            from apps.audit_logs.services import log as audit_log
+            audit_log(
+                action="deleted", target=rec,
+                description=f"Enregistrement supprimé définitivement par {request.user}",
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+        rec.delete()
+        logger.info("Recording %s supprimé (meeting=%s)", rec_id, meeting_id)
+        return Response(status=204)
 
     # ─── Exports DOCX / PDF ──────────────────────────────────
 

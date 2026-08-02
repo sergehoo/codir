@@ -199,12 +199,31 @@ class MeetingRecording(TenantAwareModel):
         ),
     )
 
+    # ── Historisation / archivage (lot HIST) ──
+    is_archived = models.BooleanField(
+        default=False, db_index=True,
+        help_text=(
+            "Si True : l'enregistrement est masqué de la vue principale sans être "
+            "détruit. Sert à écarter les takes ratés (uploads échoués) tout en "
+            "conservant la traçabilité."
+        ),
+    )
+    archived_at = models.DateTimeField(null=True, blank=True)
+    internal_note = models.TextField(
+        blank=True,
+        help_text="Note libre interne sur cet enregistrement (contexte, qualité audio…).",
+    )
+
     class Meta:
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["organization", "meeting", "-created_at"]),
             models.Index(fields=["organization", "status"]),
             models.Index(fields=["organization", "recorded_by"]),
+            models.Index(
+                fields=["organization", "meeting", "is_archived"],
+                name="meeting_rec_organiz_a1f3d2_idx",
+            ),
         ]
 
     def __str__(self):
@@ -422,6 +441,87 @@ class RecordingAIExtraction(TenantAwareModel):
 
     def __str__(self):
         return f"{self.extraction_type} #{self.id} ({self.status})"
+
+
+# ─── RecordingMinutesVersion : historique du compte rendu ─────
+
+class MinutesVersionOrigin(models.TextChoices):
+    """D'où provient une version de compte rendu."""
+
+    AI_GENERATED = "ai_generated", "Génération IA"
+    AI_REGENERATED = "ai_regenerated", "Régénération IA"
+    MANUAL_EDIT = "manual_edit", "Édition manuelle"
+    RESTORED = "restored", "Restauration d'une version"
+
+
+class RecordingMinutesVersion(TenantAwareModel):
+    """Snapshot immuable d'un compte rendu à un instant T.
+
+    Chaque fois que ``MeetingRecording.summary`` / ``ai_minutes`` est sur le
+    point d'être écrasé (régénération IA ou édition manuelle), on archive
+    l'état courant ici. L'utilisateur peut ainsi consulter l'historique et
+    restaurer n'importe quelle version antérieure.
+
+    Append-only : on ne modifie jamais une version existante. Une
+    restauration crée une nouvelle version (origin=RESTORED) plutôt que de
+    supprimer les suivantes — l'historique reste linéaire et auditables.
+    """
+
+    recording = models.ForeignKey(
+        MeetingRecording, on_delete=models.CASCADE, related_name="minutes_versions",
+    )
+    version_number = models.PositiveIntegerField(
+        help_text="Incrément par recording, commence à 1.",
+    )
+
+    # Contenu snapshoté
+    summary = models.TextField(blank=True, help_text="Résumé exécutif à cet instant.")
+    ai_minutes = models.TextField(blank=True, help_text="CR complet Markdown à cet instant.")
+
+    origin = models.CharField(
+        max_length=20, choices=MinutesVersionOrigin.choices,
+        default=MinutesVersionOrigin.AI_GENERATED, db_index=True,
+    )
+    created_by = models.ForeignKey(
+        "accounts.User", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="minutes_versions_created",
+        help_text="Auteur de l'action ayant produit cette version (null si automate).",
+    )
+    label = models.CharField(
+        max_length=200, blank=True,
+        help_text="Libellé optionnel (ex. « Avant correction chiffres »).",
+    )
+    # Si cette version est née d'une restauration, on trace la source.
+    restored_from = models.ForeignKey(
+        "self", null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="restorations",
+    )
+
+    class Meta:
+        ordering = ["-version_number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["recording", "version_number"],
+                name="uniq_minutes_version_per_recording",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["recording", "-version_number"],
+                name="mr_minutes_ver_rec_idx",
+            ),
+            models.Index(
+                fields=["organization", "-created_at"],
+                name="mr_minutes_ver_org_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"CR v{self.version_number} — rec {self.recording_id} ({self.origin})"
+
+    @property
+    def char_count(self) -> int:
+        return len(self.ai_minutes or self.summary or "")
 
 
 # ─── VoiceProfile : mémoire des voix par user ────────────────

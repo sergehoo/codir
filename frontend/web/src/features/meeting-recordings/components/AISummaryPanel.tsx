@@ -1,17 +1,25 @@
 // Affichage du résumé Markdown généré par Claude / DeepSeek.
 // Pas de lib markdown lourde — rendu Markdown léger en pure CSS via classes.
-import { Check, Download, Edit3, FileText, Loader2, RefreshCw, Sparkles, X } from 'lucide-react'
+import {
+  Check, Download, Edit3, FileText, History, Loader2,
+  RefreshCw, Sparkles, X,
+} from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { cn } from '@/utils/cn'
 
 import { recordingsApi } from '../api'
+import { useMinutesVersions } from '../hooks/useRecordingHistory'
+
+import { MinutesVersionHistory } from './MinutesVersionHistory'
 
 interface Props {
   summary: string
   minutes?: string
   recordingId: string
+  /** Réunion parente — permet d'invalider les listes après restauration. */
+  meetingId?: string | null
   onRegenerate?: () => void
   onMinutesUpdated?: (newMinutes: string) => void
   isRegenerating?: boolean
@@ -80,7 +88,7 @@ function bold(s: string): string {
 }
 
 export function AISummaryPanel({
-  summary, minutes, recordingId,
+  summary, minutes, recordingId, meetingId,
   onRegenerate, onMinutesUpdated,
   isRegenerating, editable = true,
 }: Props) {
@@ -91,6 +99,14 @@ export function AISummaryPanel({
   const [draft, setDraft] = useState('')
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState<'docx' | 'pdf' | null>(null)
+
+  // ─── Historique des versions (lot HIST) ───────────────────
+  const [showHistory, setShowHistory] = useState(false)
+  // On ne charge l'historique que si le panneau est ouvert (évite un appel
+  // API sur chaque affichage de CR), mais on récupère le compteur en amont
+  // pour afficher le badge sur le bouton.
+  const versionsQuery = useMinutesVersions(recordingId)
+  const versionsCount = versionsQuery.data?.count ?? 0
 
   const startEditing = () => {
     setDraft(content)
@@ -184,6 +200,25 @@ export function AISummaryPanel({
                 Régénérer
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => setShowHistory((s) => !s)}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition',
+                showHistory
+                  ? 'bg-copper-500/10 text-copper-500'
+                  : 'text-fg-muted hover:text-fg hover:bg-fg/5',
+              )}
+              title="Voir l'historique des versions du compte rendu"
+            >
+              <History size={12} />
+              Historique
+              {versionsCount > 0 && (
+                <span className="px-1 rounded bg-fg/10 text-2xs tabular-nums">
+                  {versionsCount}
+                </span>
+              )}
+            </button>
             <span className="w-px h-4 bg-border" />
             <button
               type="button"
@@ -251,13 +286,26 @@ export function AISummaryPanel({
           />
           <p className="text-2xs text-fg-muted">
             Les modifications seront utilisées pour les exports Word/PDF.
-            Régénérer écrasera vos changements.
+            La version actuelle est archivée avant enregistrement — vous
+            pourrez toujours y revenir depuis l'historique.
           </p>
         </div>
       ) : content ? (
         <div>{renderMd(content)}</div>
       ) : (
         <p className="text-sm text-fg-muted">Aucun résumé généré pour le moment.</p>
+      )}
+
+      {/* ─── Historique des versions ─── */}
+      {showHistory && !editing && (
+        <div className="mt-4 pt-4 border-t border-border">
+          <MinutesVersionHistory
+            recordingId={recordingId}
+            meetingId={meetingId}
+            canRestore={editable}
+            onRestored={() => onMinutesUpdated?.('')}
+          />
+        </div>
       )}
     </div>
   )

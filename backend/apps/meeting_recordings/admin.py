@@ -5,7 +5,7 @@ from core.admin import TenantAwareAdmin
 
 from .models import (
     DetectedSpeaker, MeetingRecording, RecordingAIExtraction, RecordingChunk,
-    SpeakerParticipantMapping, SpeakerSegment,
+    RecordingMinutesVersion, SpeakerParticipantMapping, SpeakerSegment,
 )
 
 
@@ -13,15 +13,46 @@ from .models import (
 class MeetingRecordingAdmin(TenantAwareAdmin):
     list_display = (
         "id", "meeting", "status", "recorded_by",
-        "duration_seconds", "file_size", "created_at",
+        "duration_seconds", "file_size", "is_archived", "created_at",
     )
-    list_filter = ("status", "created_at")
+    list_filter = ("status", "is_archived", "created_at")
     search_fields = ("id", "meeting__title", "recorded_by__email")
     readonly_fields = (
         "id", "created_at", "updated_at", "uploaded_at",
-        "processing_started_at", "processing_finished_at",
+        "processing_started_at", "processing_finished_at", "archived_at",
     )
     ordering = ("-created_at",)
+
+
+@admin.register(RecordingMinutesVersion)
+class RecordingMinutesVersionAdmin(TenantAwareAdmin):
+    """Historique des comptes rendus — lecture seule (append-only)."""
+
+    list_display = (
+        "version_number", "recording", "origin", "created_by",
+        "char_count", "created_at",
+    )
+    list_filter = ("origin", "created_at")
+    search_fields = ("recording__id", "label", "created_by__email")
+    readonly_fields = (
+        "id", "recording", "version_number", "summary", "ai_minutes",
+        "origin", "created_by", "label", "restored_from",
+        "created_at", "updated_at",
+    )
+    ordering = ("-created_at",)
+
+    def has_add_permission(self, request):
+        # Les versions sont créées par le pipeline, jamais à la main.
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        # Append-only : l'historique ne doit pas pouvoir être trafiqué.
+        # Les versions disparaissent uniquement en cascade avec leur
+        # recording parent (suppression volontaire d'un enregistrement).
+        return False
 
 
 @admin.register(RecordingChunk)

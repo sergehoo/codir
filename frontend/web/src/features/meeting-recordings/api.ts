@@ -3,7 +3,8 @@ import { apiClient } from '@/api/client'
 
 import { ChunkedUploader, type ChunkedUploaderOptions } from './chunkedUploader'
 import type {
-  DetectedSpeaker, MeetingRecording, RecordingAIExtraction,
+  DetectedSpeaker, MeetingRecording, MinutesVersion,
+  MinutesVersionsResponse, RecordingAIExtraction,
   RecordingCommitment,
   RecordingStatusPayload, SpeakerMappingInput, SpeakerSegment,
 } from './types/recording.types'
@@ -23,6 +24,25 @@ export const recordingsApi = {
   // ─── Nested under meeting ────────────────────────────────
   listForMeeting: async (meetingId: string) =>
     (await apiClient.get<MeetingRecording[]>(`/meetings/${meetingId}/recordings/`)).data,
+
+  /**
+   * Historique complet des enregistrements d'une réunion (lot HIST).
+   *
+   * Contrairement à `listForMeeting`, passe par /recordings/?meeting=... et
+   * renvoie le serializer enrichi (aperçu CR, nb versions, archivage).
+   */
+  listHistoryForMeeting: async (
+    meetingId: string,
+    opts: { includeArchived?: boolean; onlyWithSummary?: boolean; limit?: number } = {},
+  ) =>
+    (await apiClient.get<MeetingRecording[]>('/recordings/', {
+      params: {
+        meeting: meetingId,
+        ...(opts.includeArchived ? { include_archived: 1 } : {}),
+        ...(opts.onlyWithSummary ? { has_summary: 1 } : {}),
+        ...(opts.limit ? { limit: opts.limit } : {}),
+      },
+    })).data,
 
   start: async (meetingId: string, payload: { title?: string; consent_acknowledged?: boolean }) =>
     (await apiClient.post<MeetingRecording>(
@@ -186,6 +206,49 @@ export const recordingsApi = {
     (await apiClient.patch<MeetingRecording>(
       `/recordings/${id}/minutes/`, payload,
     )).data,
+
+  // ─── Lot HIST : versions, archivage, métadonnées ─────────
+
+  /** Historique des versions du CR (léger par défaut, `full` pour le Markdown). */
+  minutesVersions: async (id: string, full = false) =>
+    (await apiClient.get<MinutesVersionsResponse>(
+      `/recordings/${id}/minutes/versions/`,
+      { params: full ? { full: 1 } : {} },
+    )).data,
+
+  /** Contenu intégral d'une version précise. */
+  minutesVersionDetail: async (id: string, versionId: string) =>
+    (await apiClient.get<MinutesVersion>(
+      `/recordings/${id}/minutes/versions/${versionId}/`,
+    )).data,
+
+  /**
+   * Restaure une version antérieure comme CR courant.
+   * L'état actuel est archivé automatiquement côté serveur — rien n'est perdu.
+   */
+  restoreMinutesVersion: async (id: string, versionId: string) =>
+    (await apiClient.post<MeetingRecording>(
+      `/recordings/${id}/minutes/versions/${versionId}/restore/`,
+    )).data,
+
+  /** Renomme et/ou annote un enregistrement. */
+  updateMeta: async (
+    id: string, payload: { title?: string; internal_note?: string },
+  ) =>
+    (await apiClient.patch<MeetingRecording>(
+      `/recordings/${id}/meta/`, payload,
+    )).data,
+
+  /** Archive (masque) ou désarchive un enregistrement. Non destructif. */
+  archive: async (id: string, archived = true) =>
+    (await apiClient.post<MeetingRecording>(
+      `/recordings/${id}/archive/`, { archived },
+    )).data,
+
+  /** Suppression définitive (audio + transcript + CR + historique). */
+  remove: async (id: string) => {
+    await apiClient.delete(`/recordings/${id}/`)
+  },
 
   /** Téléchargement DOCX (déclenche directement le download navigateur). */
   exportDocxUrl: (id: string) => `/api/v1/recordings/${id}/export/docx/`,

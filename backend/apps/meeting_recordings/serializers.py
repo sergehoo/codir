@@ -13,7 +13,8 @@ from rest_framework import serializers
 from .models import (
     AIExtractionStatus, AIExtractionType,
     DetectedSpeaker, MeetingRecording, RecordingAIExtraction,
-    RecordingChunk, SpeakerParticipantMapping, SpeakerSegment,
+    RecordingChunk, RecordingMinutesVersion,
+    SpeakerParticipantMapping, SpeakerSegment,
 )
 
 
@@ -119,10 +120,19 @@ class RecordingAIExtractionSerializer(serializers.ModelSerializer):
 # ─── MeetingRecording — list / detail / upload ─────────────────
 
 class MeetingRecordingListSerializer(serializers.ModelSerializer):
-    """Version légère utilisée pour la liste + le polling de statut."""
+    """Version légère utilisée pour la liste + le polling de statut.
+
+    Lot HIST : expose de quoi construire une liste d'historique riche
+    (aperçu du CR, nb de versions, état d'archivage) sans avoir à faire
+    un appel /detail/ par enregistrement.
+    """
 
     recorded_by = _UserMiniSerializer(read_only=True)
     audio_url = serializers.SerializerMethodField()
+    has_summary = serializers.SerializerMethodField()
+    summary_preview = serializers.SerializerMethodField()
+    versions_count = serializers.SerializerMethodField()
+    has_audio = serializers.SerializerMethodField()
 
     class Meta:
         model = MeetingRecording
@@ -132,7 +142,37 @@ class MeetingRecordingListSerializer(serializers.ModelSerializer):
             "started_at", "stopped_at", "uploaded_at",
             "processing_started_at", "processing_finished_at",
             "error_message", "created_at", "updated_at",
+            # ── Lot HIST ──
+            "has_summary", "summary_preview", "versions_count", "has_audio",
+            "is_archived", "archived_at", "internal_note",
         )
+
+    def get_has_summary(self, obj) -> bool:
+        return bool((obj.ai_minutes or "").strip() or (obj.summary or "").strip())
+
+    def get_summary_preview(self, obj) -> str:
+        """Premiers caractères du CR, nettoyés du Markdown le plus bruyant."""
+        raw = (obj.summary or obj.ai_minutes or "").strip()
+        if not raw:
+            return ""
+        # Retire les titres Markdown et les puces pour un aperçu lisible.
+        lines = [
+            ln.strip().lstrip("#").lstrip("*-").strip()
+            for ln in raw.splitlines()
+            if ln.strip() and not ln.strip().startswith("---")
+        ]
+        text = " ".join(lines)
+        return text[:220] + ("…" if len(text) > 220 else "")
+
+    def get_versions_count(self, obj) -> int:
+        # Utilise le prefetch si présent, sinon compte (liste bornée à 50).
+        cached = getattr(obj, "_prefetched_objects_cache", {}) or {}
+        if "minutes_versions" in cached:
+            return len(cached["minutes_versions"])
+        return obj.minutes_versions.count()
+
+    def get_has_audio(self, obj) -> bool:
+        return bool(obj.audio_file) and obj.deleted_audio_at is None
 
     def get_audio_url(self, obj):
         """URL de stream Django avec token signé éphémère (?token=...).
@@ -171,6 +211,61 @@ class MeetingRecordingDetailSerializer(MeetingRecordingListSerializer):
 
     def get_segments_count(self, obj):
         return obj.segments.count()
+
+
+# ─── Historisation du compte rendu (lot HIST) ──────────────────
+
+class MinutesVersionListSerializer(serializers.ModelSerializer):
+    """Entrée d'historique — sans le contenu complet (payload léger)."""
+
+    created_by = _UserMiniSerializer(read_only=True)
+    origin_display = serializers.CharField(source="get_origin_display", read_only=True)
+    char_count = serializers.IntegerField(read_only=True)
+    restored_from_version = serializers.SerializerMethodField()
+    preview = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RecordingMinutesVersion
+        fields = (
+            "id", "version_number", "origin", "origin_display", "label",
+            "created_by", "created_at", "char_count",
+            "restored_from_version", "preview",
+        )
+        read_only_fields = fields
+
+    def get_restored_from_version(self, obj):
+        return obj.restored_from.version_number if obj.restored_from_id else None
+
+    def get_preview(self, obj) -> str:
+        raw = (obj.summary or obj.ai_minutes or "").strip()
+        lines = [
+            ln.strip().lstrip("#").lstrip("*-").strip()
+            for ln in raw.splitlines()
+            if ln.strip() and not ln.strip().startswith("---")
+        ]
+        text = " ".join(lines)
+        return text[:180] + ("…" if len(text) > 180 else "")
+
+
+class MinutesVersionDetailSerializer(MinutesVersionListSerializer):
+    """Version complète — inclut le Markdown intégral pour consultation."""
+
+    class Meta(MinutesVersionListSerializer.Meta):
+        fields = MinutesVersionListSerializer.Meta.fields + (
+            "summary", "ai_minutes",
+        )
+        read_only_fields = fields
+
+
+class UpdateRecordingMetaSerializer(serializers.Serializer):
+    """PATCH /recordings/{id}/meta/ — renommer / annoter un enregistrement."""
+
+    title = serializers.CharField(
+        max_length=250, required=False, allow_blank=True,
+    )
+    internal_note = serializers.CharField(
+        max_length=5000, required=False, allow_blank=True,
+    )
 
 
 class StartRecordingSerializer(serializers.Serializer):

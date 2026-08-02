@@ -41,7 +41,15 @@ export function useRecordingExtraction(recordingId: string) {
   const regenerateSummary = useMutation({
     mutationFn: () => recordingsApi.generateSummary(recordingId),
     onSuccess: () => {
+      // ⚠ La génération est asynchrone (Celery) : au moment où cette mutation
+      // répond, le nouveau CR n'existe pas encore. On invalide quand même le
+      // detail pour ne pas rester sur un cache figé — et le composant
+      // RecordingSummaryPage refetch en plus quand le statut redevient
+      // terminal (voir useEffect sur status). Sans cette double sécurité,
+      // l'utilisateur voyait l'ancien CR jusqu'à un rechargement manuel.
       qc.invalidateQueries({ queryKey: ['recording', 'status', recordingId] })
+      qc.invalidateQueries({ queryKey: ['recording', 'detail', recordingId] })
+      qc.invalidateQueries({ queryKey: ['recording', 'minutes-versions', recordingId] })
     },
   })
 

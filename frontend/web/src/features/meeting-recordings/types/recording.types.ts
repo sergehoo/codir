@@ -104,6 +104,19 @@ export interface MeetingRecording {
   created_at: string
   updated_at: string
 
+  // ── Lot HIST : historisation / archivage ──
+  /** true si un compte rendu (summary ou ai_minutes) existe. */
+  has_summary?: boolean
+  /** Extrait ~220 car. du CR, Markdown nettoyé — pour les listes. */
+  summary_preview?: string
+  /** Nombre de versions archivées du CR. */
+  versions_count?: number
+  /** true si un fichier audio est disponible et non purgé. */
+  has_audio?: boolean
+  is_archived?: boolean
+  archived_at?: string | null
+  internal_note?: string
+
   // Detail-only
   transcript_raw?: string
   transcript_with_speakers?: Array<{
@@ -120,6 +133,39 @@ export interface MeetingRecording {
   extractions?: RecordingAIExtraction[]
   segments_count?: number
   consent_acknowledged_at?: string | null
+}
+
+// ─── Lot HIST : versions de compte rendu ──────────────────────
+
+export type MinutesVersionOrigin =
+  | 'ai_generated'
+  | 'ai_regenerated'
+  | 'manual_edit'
+  | 'restored'
+
+/** Entrée d'historique (payload léger, sans le Markdown complet). */
+export interface MinutesVersion {
+  id: string
+  version_number: number
+  origin: MinutesVersionOrigin
+  origin_display: string
+  label: string
+  created_by: UserMini | null
+  created_at: string
+  char_count: number
+  /** Numéro de la version restaurée, si origin === 'restored'. */
+  restored_from_version: number | null
+  preview: string
+
+  // Présents uniquement sur le detail (?full=1 ou /versions/{id}/)
+  summary?: string
+  ai_minutes?: string
+}
+
+export interface MinutesVersionsResponse {
+  recording_id: string
+  count: number
+  versions: MinutesVersion[]
 }
 
 export interface RecordingStatusPayload {
