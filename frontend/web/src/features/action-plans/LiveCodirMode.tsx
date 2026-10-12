@@ -21,6 +21,7 @@ import { useDirections, useSubsidiaries } from '@/features/organizations/useSubs
 
 import { actionPlansApi, meetingsExportApi, plansKeys } from './api'
 import type { ActionPlan, ActionTask, Paginated } from '@/types'
+import { apiError } from '@/utils/apiError'
 
 interface Meeting {
   id: string
@@ -299,7 +300,7 @@ export function LiveCodirMode({ onClose }: { onClose: () => void }) {
       qc.invalidateQueries({ queryKey: ['live-codir', 'tasks'] })
       qc.invalidateQueries({ queryKey: plansKeys.all })
     },
-    onError: (e: any) => toast.error(e?.response?.data?.detail || 'Erreur de sauvegarde'),
+    onError: (e: unknown) => toast.error(apiError(e, 'Erreur de sauvegarde')),
   })
 
   const delegateMut = useMutation({
@@ -1093,7 +1094,7 @@ function QuickCreateTaskModal({
       } as any)
     },
     onSuccess: () => onCreated(),
-    onError: (e: any) => setError(e?.response?.data?.detail || e?.message || 'Erreur de création'),
+    onError: (e: unknown) => setError(apiError(e, 'Erreur de création')),
   })
 
   return (
@@ -1306,7 +1307,7 @@ function QuickCreateDecisionModal({
       return decisionsApi.create(payload)
     },
     onSuccess: () => onCreated(),
-    onError: (e: any) => setError(e?.response?.data?.detail || e?.message || 'Erreur de création'),
+    onError: (e: unknown) => setError(apiError(e, 'Erreur de création')),
   })
 
   return (

@@ -58,7 +58,8 @@ class ActionCommentSerializer(serializers.ModelSerializer):
         request = self.context.get("request") if hasattr(self, "context") else None
         if request is None or not request.user.is_authenticated:
             return False
-        if request.user.is_staff or getattr(request.user, "is_executive", False):
+        from apps.common.permissions import is_org_executive
+        if is_org_executive(request.user, getattr(request, "organization", None)):
             return True
         return obj.author_id == request.user.id
 

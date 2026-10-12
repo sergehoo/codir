@@ -22,10 +22,15 @@ logger = logging.getLogger(__name__)
 
 
 def _user_can_create_decision(user, organization) -> bool:
-    """Permissions création décision : staff ou is_executive."""
+    """Permissions création décision : staff ou Executive de l'organisation.
+
+    Le rôle est résolu sur le Membership de `organization` (et non sur le
+    flag global `User.is_executive`), cf. apps.common.permissions.
+    """
     if not user or not user.is_authenticated:
         return False
-    if user.is_staff or getattr(user, "is_executive", False):
+    from apps.common.permissions import is_org_executive
+    if is_org_executive(user, organization):
         return True
     # Tout membre actif peut proposer une décision (status=proposed)
     try:

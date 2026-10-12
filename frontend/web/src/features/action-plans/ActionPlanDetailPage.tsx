@@ -13,6 +13,7 @@ import { Modal } from '@/components/widgets/Modal'
 import { PremiumButton } from '@/components/widgets/PremiumButton'
 import { PriorityBadge } from '@/components/widgets/PriorityBadge'
 import { StatusBadge } from '@/components/widgets/StatusBadge'
+import { apiError } from '@/utils/apiError'
 
 import { AddTaskForm } from './AddTaskForm'
 import { actionPlansApi, plansKeys } from './api'
@@ -51,7 +52,7 @@ export function ActionPlanDetailPage() {
       navigate({ to: '/action-plans' })
     },
     onError: (e: any) => {
-      const msg = e?.response?.data?.detail || 'Suppression impossible'
+      const msg = apiError(e, 'Suppression impossible')
       toast.error(msg)
     },
   })
@@ -325,7 +326,7 @@ function EditPlanForm({
       }),
     onSuccess: () => onSaved(),
     onError: (e: any) => {
-      const msg = e?.response?.data?.detail || 'Échec de la sauvegarde'
+      const msg = apiError(e, 'Échec de la sauvegarde')
       toast.error(msg)
     },
   })

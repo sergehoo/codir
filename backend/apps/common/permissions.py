@@ -2,6 +2,76 @@
 from rest_framework.permissions import BasePermission, SAFE_METHODS
 
 
+# ─── Résolution des rôles par organisation ────────────────────
+#
+# ⚠ Piège : `is_executive` existe sur DEUX modèles.
+#
+#   - `User.is_executive`       → flag global, hérité du mono-tenant.
+#   - `Membership.is_executive` → rôle réel dans UNE organisation donnée.
+#
+# Toute l'application (libellé de rôle dans la sidebar, page Membres CODIR,
+# /auth/my-memberships/, création d'utilisateur) pilote le rôle via le
+# Membership. Les permissions, elles, lisaient `user.is_executive` : un
+# utilisateur affiché « EXECUTIVE » dans l'interface se voyait refuser
+# l'action, parce que son flag global était resté à False.
+#
+# On centralise ici la résolution correcte : rôle du membership dans
+# l'organisation courante, le flag global ne servant plus que de
+# surclassement (admin plateforme).
+
+
+def is_org_executive(user, organization=None) -> bool:
+    """True si `user` a le rôle Executive ou Owner dans `organization`.
+
+    Le flag global `User.is_executive` reste accepté comme surclassement
+    (compte d'administration transverse), mais il n'est plus requis.
+
+    ⚠ `organization=None` renvoie False et non « n'importe quelle org » :
+    accorder le rôle sur la base d'un membership dans une AUTRE
+    organisation serait une escalade cross-tenant. Les appelants doivent
+    fournir le tenant courant.
+
+    Le résultat est mémoïsé sur l'instance `user` : ce prédicat est
+    appelé une à deux fois par ligne dans les serializers de liste
+    (can_modify, can_add_tasks), soit plusieurs centaines de requêtes sur
+    une page de 50 éléments sans cache.
+    """
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(user, "is_staff", False) or getattr(user, "is_superuser", False):
+        return True
+    # Surclassement global (héritage mono-tenant, encore utilisé par du seed).
+    if getattr(user, "is_executive", False):
+        return True
+    if organization is None:
+        return False
+
+    org_id = getattr(organization, "id", organization)
+    cache = getattr(user, "_org_exec_cache", None)
+    if cache is None:
+        cache = {}
+        try:
+            user._org_exec_cache = cache
+        except Exception:  # noqa: BLE001 — user exotique (AnonymousUser figé)
+            cache = {}
+    if org_id in cache:
+        return cache[org_id]
+
+    from django.db.models import Q
+    from apps.accounts.models import Membership
+    result = Membership.unscoped.filter(
+        Q(is_executive=True) | Q(is_owner=True),
+        user=user, organization=organization, is_active=True,
+    ).exists()
+    cache[org_id] = result
+    return result
+
+
+def request_organization(request):
+    """Organisation courante de la requête (posée par la middleware tenant)."""
+    return getattr(request, "organization", None)
+
+
 class IsOrganizationMember(BasePermission):
     """Empêche tout accès si l'utilisateur n'appartient pas au tenant courant."""
 
@@ -111,7 +181,8 @@ class CanModifyActionPlan(BasePermission):
         user = request.user
         if not user or not user.is_authenticated:
             return False
-        if user.is_staff or getattr(user, "is_executive", False):
+        # Rôle résolu sur le membership de l'org courante (cf. is_org_executive).
+        if is_org_executive(user, request_organization(request)):
             return True
         if obj is not None:
             # Owner du plan
@@ -124,9 +195,26 @@ class CanModifyActionPlan(BasePermission):
         return False
 
     def has_permission(self, request, view):
+        """Filtre de niveau vue, AVANT que l'objet ne soit chargé.
+
+        ⚠ DRF appelle cette méthode avec `obj=None`. Refuser ici un
+        utilisateur non-executive revenait à ne jamais évaluer la branche
+        « owner du plan » de `has_object_permission` : le propriétaire d'un
+        plan se prenait un 403 sur ses propres plans.
+
+        On laisse donc passer tout membre authentifié sur les requêtes
+        portant sur un objet précis (detail) — `has_object_permission`
+        tranchera avec l'objet en main. Seule la création d'un plan
+        « nu » (POST sur la collection) reste réservée aux rôles habilités.
+        """
         if request.method in SAFE_METHODS:
             return True
-        # Pour les méthodes write (create) : staff/exec uniquement
+        if not request.user or not request.user.is_authenticated:
+            return False
+        # Routes detail (pk présent) → on diffère à has_object_permission,
+        # seul endroit où owner / créateur de décision sont connaissables.
+        if getattr(view, "detail", False) or (view.kwargs or {}).get("pk"):
+            return True
         return self._user_can_modify(request)
 
     def has_object_permission(self, request, view, obj):
@@ -156,7 +244,7 @@ class CanModifyTask(BasePermission):
         user = request.user
         if not user or not user.is_authenticated:
             return False
-        if user.is_staff or getattr(user, "is_executive", False):
+        if is_org_executive(user, request_organization(request)):
             return True
         if obj is None:
             return False
@@ -180,9 +268,17 @@ class CanModifyTask(BasePermission):
         return False
 
     def has_permission(self, request, view):
+        """Même correctif que CanModifyActionPlan : sur une route detail,
+        on diffère à `has_object_permission`, sinon assignee / co-assignee /
+        owner du plan ne sont jamais évalués et se prennent un 403 sur
+        leur propre tâche.
+        """
         if request.method in SAFE_METHODS:
             return True
-        # Pour les méthodes write (create) : staff/exec uniquement
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if getattr(view, "detail", False) or (view.kwargs or {}).get("pk"):
+            return True
         return self._user_can_modify(request)
 
     def has_object_permission(self, request, view, obj):
@@ -207,7 +303,7 @@ class CanModifyOwnComment(BasePermission):
         user = request.user
         if not user or not user.is_authenticated:
             return False
-        if user.is_staff or getattr(user, "is_executive", False):
+        if is_org_executive(user, request_organization(request)):
             return True
         return getattr(obj, "author_id", None) == user.id
 
@@ -244,8 +340,8 @@ class CanModifyTaskInSubsidiary(BasePermission):
         if not user or not user.is_authenticated:
             return False
 
-        # Staff Django et users `is_executive` du tenant ont accès total
-        if user.is_staff or getattr(user, "is_executive", False):
+        # Staff Django et Executives du tenant ont accès total
+        if is_org_executive(user, request_organization(request)):
             return True
 
         # Si la tâche est assignée à l'utilisateur, il peut toujours la modifier

@@ -21,6 +21,7 @@ import { StatsBar } from '@/components/widgets/StatsBar'
 import { StatusBadge } from '@/components/widgets/StatusBadge'
 import { useDirections, useSubsidiaries } from '@/features/organizations/useSubsidiariesDirections'
 import type { ActionPlan, ActionTask } from '@/types'
+import { apiError } from '@/utils/apiError'
 
 import { AddTaskForm } from './AddTaskForm'
 import { LiveCodirMode } from './LiveCodirMode'
@@ -271,7 +272,7 @@ function PlanAccordion({ p, idx }: { p: ActionPlan; idx: number }) {
       qc.invalidateQueries({ queryKey: plansKeys.all })
     },
     onError: (e: any) => {
-      toast.error(e?.response?.data?.detail || 'Suppression impossible')
+      toast.error(apiError(e, 'Suppression impossible'))
     },
   })
 
@@ -473,7 +474,7 @@ function QuickEditPlanForm({
       }),
     onSuccess: () => onSaved(),
     onError: (e: any) => {
-      toast.error(e?.response?.data?.detail || 'Échec de la sauvegarde')
+      toast.error(apiError(e, 'Échec de la sauvegarde'))
     },
   })
 

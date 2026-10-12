@@ -479,6 +479,18 @@ ANTHROPIC_MODEL = env("ANTHROPIC_MODEL", default="claude-sonnet-4-5-20250929")
 DEEPSEEK_API_KEY = env("DEEPSEEK_API_KEY", default="")
 DEEPSEEK_BASE_URL = env("DEEPSEEK_BASE_URL", default="https://api.deepseek.com")
 DEEPSEEK_MODEL = env("DEEPSEEK_MODEL", default="deepseek-chat")
+# ─── Cloisonnement des plans d'action par filiale ─────────────
+# True  : un membre ne peut créer des tâches que sur les plans de sa
+#         filiale (les plans Groupe et les rôles transverses restent
+#         ouverts à tous ; Executives, owner du plan et créateur de la
+#         décision passent toujours).
+# False : tous les membres de l'organisation peuvent créer partout —
+#         correspond au comportement réellement observé avant le
+#         correctif, la résolution de filiale étant alors défaillante.
+ACTION_PLAN_SUBSIDIARY_PARTITIONING = env.bool(
+    "ACTION_PLAN_SUBSIDIARY_PARTITIONING", default=True,
+)
+
 # Bucket dédié recordings (séparé du bucket documents pour quota + IAM).
 RECORDING_S3_BUCKET = env("RECORDING_S3_BUCKET", default="codir-recordings-dev")
 # Limite upload : 4h x 256 kbps Opus webm ≈ 460 Mo. On laisse 600 Mo de marge.

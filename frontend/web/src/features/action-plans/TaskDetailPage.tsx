@@ -14,6 +14,7 @@ import { PremiumButton } from '@/components/widgets/PremiumButton'
 import { PriorityBadge } from '@/components/widgets/PriorityBadge'
 import { SectionHeader } from '@/components/widgets/SectionHeader'
 import { StatusBadge } from '@/components/widgets/StatusBadge'
+import { apiError } from '@/utils/apiError'
 
 import { actionPlansApi, plansKeys } from './api'
 import { DelegateButton } from './DelegateTaskModal'
@@ -64,7 +65,7 @@ export function TaskDetailPage() {
       }
     },
     onError: (e: any) => {
-      toast.error(e?.response?.data?.detail || 'Suppression impossible')
+      toast.error(apiError(e, 'Suppression impossible'))
     },
   })
 
@@ -325,7 +326,7 @@ function CommentRow({ comment, taskId }: { comment: any; taskId: string }) {
       setEditing(false)
       toast.success('Commentaire modifié')
     },
-    onError: (e: any) => toast.error(e?.response?.data?.detail || 'Échec'),
+    onError: (e: unknown) => toast.error(apiError(e, 'Échec')),
   })
 
   const deleteMut = useMutation({
@@ -334,7 +335,7 @@ function CommentRow({ comment, taskId }: { comment: any; taskId: string }) {
       qc.invalidateQueries({ queryKey: ['action-tasks', 'detail', taskId] })
       toast.success('Commentaire supprimé')
     },
-    onError: (e: any) => toast.error(e?.response?.data?.detail || 'Échec'),
+    onError: (e: unknown) => toast.error(apiError(e, 'Échec')),
   })
 
   return (
@@ -447,7 +448,7 @@ function EditTaskForm({
     } as any),
     onSuccess: () => onSaved(),
     onError: (e: any) => {
-      const msg = e?.response?.data?.detail || 'Échec de la sauvegarde'
+      const msg = apiError(e, 'Échec de la sauvegarde')
       toast.error(msg)
     },
   })

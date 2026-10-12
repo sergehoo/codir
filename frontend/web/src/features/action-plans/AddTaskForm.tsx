@@ -4,8 +4,12 @@ import { toast } from 'sonner'
 
 import { PremiumButton } from '@/components/widgets/PremiumButton'
 import { UserSelect } from '@/components/widgets/UserSelect'
+import { apiError } from '@/utils/apiError'
 
 import { actionPlansApi, plansKeys } from './api'
+
+/** Aligné sur ActionTask.title (CharField max_length=300) côté Django. */
+const TITLE_MAX = 300
 
 export function AddTaskForm({
   planId,
@@ -54,23 +58,43 @@ export function AddTaskForm({
       toast.success('Tâche créée')
       onCreated?.()
     },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.detail || 'Échec de la création'
-      toast.error(msg)
+    onError: (err: unknown) => {
+      // Affiche l'erreur réelle (champ en faute, message de permission)
+      // au lieu d'un « Échec de la création » qui masquait la cause.
+      toast.error(apiError(err, 'Échec de la création'))
     },
   })
 
   return (
     <div className="space-y-4">
       <div>
-        <label className="label">Titre *</label>
+        <div className="flex items-baseline justify-between gap-2">
+          <label className="label">Titre *</label>
+          {title.length > TITLE_MAX * 0.8 && (
+            <span
+              className={
+                title.length > TITLE_MAX
+                  ? 'text-2xs text-rose-500 tabular-nums'
+                  : 'text-2xs text-fg-subtle tabular-nums'
+              }
+            >
+              {title.length} / {TITLE_MAX}
+            </span>
+          )}
+        </div>
         <input
           className="input"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
+          maxLength={TITLE_MAX}
           autoFocus
           placeholder="Ex. Préparer la note de cadrage"
         />
+        {title.length >= TITLE_MAX && (
+          <p className="mt-1 text-2xs text-rose-500">
+            Longueur maximale atteinte. Déplacez le détail dans la description.
+          </p>
+        )}
       </div>
       <div>
         <label className="label">Description</label>

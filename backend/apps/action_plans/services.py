@@ -297,48 +297,132 @@ def get_manager_branch_tasks_summary(*, manager, organization=None, subsidiary=N
 
 
 def resolve_plan_subsidiary(plan: ActionPlan):
-    """Retourne la filiale d'un plan via la chaîne plan → decision → direction → subsidiary."""
+    """Retourne la filiale d'un plan, ou None pour un plan Groupe.
+
+    Ordre de résolution :
+      1. `plan.subsidiary` — champ direct, posé par le formulaire de
+         création depuis le lot FIL-DIR. Il était ignoré ici, si bien que
+         tout plan rattaché explicitement à une filiale était traité comme
+         un plan Groupe.
+      2. `plan.direction.subsidiary` — filiale portée par la direction.
+      3. `plan.decision.direction.subsidiary` — héritage via la décision.
+    """
+    direct = getattr(plan, "subsidiary", None)
+    if direct is not None:
+        return direct
+
+    direction = getattr(plan, "direction", None)
+    if direction is not None and getattr(direction, "subsidiary_id", None):
+        return direction.subsidiary
+
     try:
-        d = plan.decision
-        direction = getattr(d, "direction", None)
-        if direction and direction.subsidiary_id:
-            return direction.subsidiary
+        decision = plan.decision
+        d_direction = getattr(decision, "direction", None) if decision else None
+        if d_direction is not None and getattr(d_direction, "subsidiary_id", None):
+            return d_direction.subsidiary
     except Exception:  # noqa: BLE001
         return None
     return None
 
 
 def user_subsidiary_ids(user, organization=None) -> set:
-    """Set des subsidiary_id auxquels appartient `user` (via memberships → directions)."""
+    """Set des subsidiary_id auxquels appartient `user`.
+
+    Deux rattachements possibles, il faut considérer les deux :
+      - `Membership.subsidiary` — filiale principale du collaborateur.
+      - `Membership.directions[].subsidiary` — filiales via ses directions.
+
+    Ne regarder que les directions (comportement précédent) renvoyait un
+    set vide pour tout membre rattaché à une filiale sans direction. Tant
+    que `resolve_plan_subsidiary` renvoyait toujours None, l'oubli était
+    invisible ; maintenant qu'elle résout réellement les filiales, il
+    aurait bloqué ces membres.
+    """
+    # Mémoïsation sur l'instance user : appelé une fois par ligne dans
+    # ActionPlanListSerializer.get_can_add_tasks (50 lignes par page).
+    org_key = getattr(organization, "id", organization)
+    cache = getattr(user, "_subsidiary_ids_cache", None)
+    if cache is None:
+        cache = {}
+        try:
+            user._subsidiary_ids_cache = cache
+        except Exception:  # noqa: BLE001
+            cache = {}
+    if org_key in cache:
+        return cache[org_key]
+
     from apps.accounts.models import Membership
     qs = Membership.unscoped.filter(user=user, is_active=True)
     if organization is not None:
         qs = qs.filter(organization=organization)
     ids: set = set()
     for m in qs.prefetch_related("directions"):
+        if m.subsidiary_id:
+            ids.add(m.subsidiary_id)
         for d in m.directions.all():
             if d.subsidiary_id:
                 ids.add(d.subsidiary_id)
+    cache[org_key] = ids
     return ids
 
 
 def user_can_add_tasks_to_plan(user, plan: ActionPlan) -> bool:
     """Un user peut ajouter des tâches à un plan si :
+
+    - il est superuser / staff / Executive de l'organisation, OU
     - il est owner du plan, OU
-    - il appartient à la même filiale que le plan, OU
-    - le plan n'a pas de filiale rattachée (cas Groupe).
-    Les superusers passent toujours.
+    - il a créé la décision dont le plan découle, OU
+    - le plan n'a pas de filiale rattachée (cas Groupe), OU
+    - il n'a lui-même aucune filiale (rôle transverse Groupe), OU
+    - il appartient à la même filiale que le plan.
+
+    ⚠ Cette fonction est la source de vérité unique : elle décide à la
+    fois de l'autorisation réelle (vue) et de l'affichage du bouton
+    « Nouvelle tâche » (serializer `can_add_tasks`). Les deux ne doivent
+    jamais diverger, sous peine de montrer un bouton qui renvoie un 403.
     """
     if not user or not user.is_authenticated:
         return False
-    if getattr(user, "is_superuser", False):
+    if getattr(user, "is_superuser", False) or getattr(user, "is_staff", False):
         return True
+
+    from apps.common.permissions import is_org_executive
+    if is_org_executive(user, getattr(plan, "organization", None)):
+        return True
+
     if plan.owner_id and plan.owner_id == user.id:
         return True
+
+    decision = getattr(plan, "decision", None)
+    if decision is not None and getattr(decision, "created_by_id", None) == user.id:
+        return True
+
+    # ⚠ Interrupteur de cloisonnement — à lire avant de modifier.
+    #
+    # Jusqu'ici `resolve_plan_subsidiary` ne regardait que la chaîne
+    # decision → direction → subsidiary, et renvoyait donc None dans la
+    # quasi-totalité des cas : le cloisonnement par filiale était écrit
+    # mais inopérant, tout le monde pouvait écrire partout. Maintenant
+    # qu'elle résout aussi `plan.subsidiary` (champ du formulaire) et
+    # `plan.direction`, la règle s'applique réellement.
+    #
+    # Comme c'est un changement de comportement visible pour les
+    # utilisateurs, il est désactivable sans redéploiement :
+    #   ACTION_PLAN_SUBSIDIARY_PARTITIONING=False  dans l'environnement
+    from django.conf import settings
+    if not getattr(settings, "ACTION_PLAN_SUBSIDIARY_PARTITIONING", True):
+        return True
+
     sub = resolve_plan_subsidiary(plan)
     if sub is None:
         return True  # plan Groupe : tous les membres peuvent
-    return sub.id in user_subsidiary_ids(user, organization=plan.organization)
+
+    user_subs = user_subsidiary_ids(user, organization=plan.organization)
+    if not user_subs:
+        # Rôle transverse (aucune filiale rattachée) : périmètre Groupe,
+        # cf. Membership.subsidiary « null pour les rôles transverses ».
+        return True
+    return sub.id in user_subs
 
 
 def _recompute_plan_status(plan: ActionPlan):

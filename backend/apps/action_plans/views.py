@@ -7,6 +7,7 @@ from rest_framework.response import Response
 
 from apps.common.permissions import (
     CanModifyActionPlan, CanModifyTask, IsOrganizationMember,
+    is_org_executive,
 )
 
 from . import services
@@ -44,6 +45,25 @@ class ActionPlanViewSet(viewsets.ModelViewSet):
                 qs = qs.filter(decision__isnull=False)
         return qs
 
+    def get_permissions(self):
+        """`tasks` et `comments` ont leur propre règle d'accès.
+
+        Ces deux actions ajoutent du contenu DANS un plan ; elles ne
+        modifient pas le plan lui-même. Les soumettre à
+        `CanModifyActionPlan` revenait à exiger le rôle Executive pour
+        créer une simple tâche — alors que la vue applique déjà
+        `user_can_add_tasks_to_plan` (owner, ou membre de la filiale du
+        plan, ou plan Groupe), qui est aussi la règle utilisée par le
+        serializer pour AFFICHER le bouton « Nouvelle tâche ».
+
+        Résultat de l'incohérence : le bouton s'affichait, puis le POST
+        renvoyait 403. On retire donc la permission de niveau plan sur ces
+        actions et on laisse la garde dédiée trancher.
+        """
+        if getattr(self, "action", None) in {"tasks", "comments"}:
+            return [IsOrganizationMember()]
+        return super().get_permissions()
+
     def get_serializer_class(self):
         return ActionPlanListSerializer if self.action == "list" else ActionPlanDetailSerializer
 
@@ -66,7 +86,11 @@ class ActionPlanViewSet(viewsets.ModelViewSet):
         plan = self.get_object()
         if request.method == "GET":
             qs = plan.tasks.select_related("assignee").all()
-            return Response(ActionTaskListSerializer(qs, many=True).data)
+            # context obligatoire : sans `request`, get_can_modify renvoie
+            # False sur chaque ligne et l'UI masque toutes les actions.
+            return Response(ActionTaskListSerializer(
+                qs, many=True, context={"request": request},
+            ).data)
         # ─── Création : on vérifie l'appartenance filiale ───
         if not services.user_can_add_tasks_to_plan(request.user, plan):
             return Response(
@@ -81,14 +105,39 @@ class ActionPlanViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get", "post"])
     def comments(self, request, pk=None):
+        """Commentaires d'un plan.
+
+        Commenter n'altère pas le plan : ouvert à tout membre actif de
+        l'organisation (le plan vient de `get_object()`, donc déjà borné
+        au tenant courant). On valide tout de même le contenu — l'action
+        n'étant plus couverte par `CanModifyActionPlan`, rien d'autre ne
+        filtrait les corps vides ou démesurés.
+        """
         plan = self.get_object()
         if request.method == "GET":
-            return Response(ActionCommentSerializer(plan.comments.all(), many=True).data)
+            return Response(
+                ActionCommentSerializer(
+                    plan.comments.select_related("author").all(),
+                    many=True, context={"request": request},
+                ).data
+            )
+
+        body = (request.data.get("body_md") or "").strip()
+        if not body:
+            return Response({"body_md": ["Le commentaire ne peut pas être vide."]},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if len(body) > 10000:
+            return Response({"body_md": ["Commentaire trop long (10 000 caractères max)."]},
+                            status=status.HTTP_400_BAD_REQUEST)
+
         c = ActionComment.objects.create(
             organization=request.organization, action_plan=plan,
-            author=request.user, body_md=request.data.get("body_md", ""),
+            author=request.user, body_md=body,
         )
-        return Response(ActionCommentSerializer(c).data, status=201)
+        return Response(
+            ActionCommentSerializer(c, context={"request": request}).data,
+            status=201,
+        )
 
     @action(detail=False, methods=["get"])
     def stats(self, request):
@@ -121,6 +170,19 @@ class ActionTaskViewSet(viewsets.ModelViewSet):
     # Tri par défaut : order intra-plan, puis échéance, puis création.
     ordering = ["action_plan", "order", "due_date", "created_at"]
     ordering_fields = ["order", "due_date", "priority", "status", "created_at"]
+
+    def get_permissions(self):
+        """`manage_comment` applique sa propre règle (auteur du commentaire).
+
+        C'est une route `detail=False` (son identifiant est `comment_id`,
+        pas `pk`), donc `CanModifyTask.has_permission` la traitait comme
+        une écriture de collection et exigeait le rôle Executive : l'auteur
+        d'un commentaire ne pouvait pas modifier le sien, et le contrôle
+        `CanModifyOwnComment` en aval n'était jamais atteint.
+        """
+        if getattr(self, "action", None) == "manage_comment":
+            return [IsOrganizationMember()]
+        return super().get_permissions()
 
     def get_queryset(self):
         return (
@@ -157,8 +219,8 @@ class ActionTaskViewSet(viewsets.ModelViewSet):
             str(request.query_params.get("force", "")).lower() in {"1", "true", "yes"}
             or bool(request.data.get("force"))
         )
-        force = force_param and (
-            request.user.is_staff or getattr(request.user, "is_executive", False)
+        force = force_param and is_org_executive(
+            request.user, getattr(request, "organization", None),
         )
         try:
             task = services.complete_task(
@@ -330,7 +392,9 @@ class ActionTaskViewSet(viewsets.ModelViewSet):
             status__in=["done", "cancelled"]
         )
         page = self.paginate_queryset(qs)
-        ser = ActionTaskListSerializer(page or qs, many=True)
+        ser = ActionTaskListSerializer(
+            page or qs, many=True, context={"request": request},
+        )
         return self.get_paginated_response(ser.data) if page is not None else Response(ser.data)
 
     # ─── Liste TOUTES les tâches — Live CODIR Mode ─────────────
@@ -343,7 +407,9 @@ class ActionTaskViewSet(viewsets.ModelViewSet):
         """
         qs = self.filter_queryset(self.get_queryset())
         page = self.paginate_queryset(qs)
-        ser = ActionTaskListSerializer(page or qs, many=True)
+        ser = ActionTaskListSerializer(
+            page or qs, many=True, context={"request": request},
+        )
         return self.get_paginated_response(ser.data) if page is not None else Response(ser.data)
 
     # ─── Bulk update — Live CODIR Mode ────────────────────────
